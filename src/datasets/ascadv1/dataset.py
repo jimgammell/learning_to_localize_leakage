@@ -7,6 +7,10 @@ from torch.utils.data import Dataset
 
 from utils.aes import *
 
+BYTE_ORDER = np.array([15, 12, 13, 1, 8, 10, 0, 3, 7, 6, 9, 5, 11, 2, 4, 14])
+# The order in which the SBox operation is applied to the different key bytes.
+#  Useful for computing S_{prev} and the security load, as suggested by Egger (2021).
+
 @jit(nopython=True)
 def to_key_preds(int_var_preds, plaintext, constants=None):
     return int_var_preds[AES_SBOX[np.arange(256, dtype=np.uint8) ^ plaintext]]
@@ -27,6 +31,8 @@ class ASCADv1(Dataset):
         self.root = root
         self.train = train
         self.target_byte = np.arange(16) if target_byte == 'all' else np.array([target_byte]) if not hasattr(target_byte, '__len__') else target_byte
+        assert self.target_byte == 2
+        self.prev_byte = np.array([11]) # TODO: should make this more general in case people want to check other bytes
         self.target_values = [target_values] if isinstance(target_values, str) else target_values
         self.desync = desync
         self.variable_keys = variable_keys
@@ -47,7 +53,7 @@ class ASCADv1(Dataset):
             else:
                 self.data_indices = np.arange(0, 100000)
         else:
-            self.data_path = os.path.join(self.root, f'ascadv1f_d{self.desync}.h5')
+            self.data_path = os.path.join(self.root, 'ASCAD_data', 'ASCAD_databases', 'ASCAD' + (f'desync{self.desync}' if self.desync != 0 else '') + '.h5')
             if self.train:
                 self.data_indices = np.arange(0, 50000)
             else:
@@ -71,8 +77,8 @@ class ASCADv1(Dataset):
             else:
                 traces = traces[:, np.newaxis, :].astype(np.float32)
             metadata = {
-                'plaintext': np.array(database_file['metadata']['plaintext'][indices, self.target_byte], dtype=np.uint8),
-                'key': np.array(database_file['metadata']['key'][indices, self.target_byte], dtype=np.uint8),
+                'plaintext': np.array(database_file['metadata']['plaintext'][indices, :], dtype=np.uint8),
+                'key': np.array(database_file['metadata']['key'][indices, :], dtype=np.uint8),
                 'masks': np.array(database_file['metadata']['masks'][indices], dtype=np.uint8)
             }
         return traces, metadata
@@ -86,54 +92,54 @@ class ASCADv1(Dataset):
         return self._load_datapoints_from_ram(indices)
     
     def compute_target(self, metadata):
-        key = metadata['key']
-        plaintext = metadata['plaintext']
+        key = metadata['key'][..., self.target_byte]
+        plaintext = metadata['plaintext'][..., self.target_byte]
+        key_prev = metadata['key'][..., self.prev_byte]
+        plaintext_prev = metadata['plaintext'][..., self.prev_byte]
         masks = metadata['masks']
-        if key.ndim > 0:
+        if key.ndim > 1:
             batch_size = key.shape[0]
-            assert plaintext.shape[0] == batch_size
-            assert masks.shape[0] == batch_size
         else:
             batch_size = 1
             key = np.array([key])
             plaintext = np.array([plaintext])
+            key_prev = np.array([key_prev])
+            plaintext_prev = np.array([plaintext_prev])
             masks = masks[np.newaxis, :]
-        assert all((key.shape[0] == batch_size, plaintext.shape[0] == batch_size, masks.shape[0] == batch_size))
-        r_in = masks[:, -2, np.newaxis].squeeze()
-        r_out = masks[:, -1, np.newaxis].squeeze()
+        assert batch_size == key.shape[0] == plaintext.shape[0] == masks.shape[0] == key_prev.shape[0] == plaintext_prev.shape[0]
+        r_in = masks[:, -2].squeeze()[..., np.newaxis]
+        r_out = masks[:, -1].squeeze()[..., np.newaxis]
         if not self.variable_keys:
-            r = np.concatenate([np.zeros((batch_size, 2), dtype=np.uint8), masks[:, :-2]], axis=1)[..., self.target_byte].squeeze()
+            rr = np.concatenate([np.zeros((batch_size, 2), dtype=np.uint8), masks[:, :-2]], axis=1)
         else:
-            r = masks[:, :-2][..., self.target_byte].squeeze()
-        aux_metadata = {
-            'subbytes': AES_SBOX[key ^ plaintext],
-            'subbytes__r_in': AES_SBOX[key ^ plaintext] ^ r_in,
-            'subbytes__r': AES_SBOX[key ^ plaintext] ^ r,
-            'subbytes__r_out': AES_SBOX[key ^ plaintext] ^ r_out,
+            rr = masks[:, :-2]
+        r = rr[..., self.target_byte].squeeze()[..., np.newaxis]
+        r_prev = rr[..., self.prev_byte].squeeze()[..., np.newaxis]
+        subbytes = AES_SBOX[key ^ plaintext]
+        subbytes__r = subbytes ^ r
+        subbytes__r_out = subbytes ^ r_out
+        p__k__r_in = plaintext ^ key ^ r_in
+        S_prev = AES_SBOX[key_prev ^ plaintext_prev] ^ r_prev
+        S_prev__subbytes__r_out = S_prev ^ subbytes ^ r_out
+        security_load = AES_SBOX[S_prev ^ r_in] ^ r_out
+        aux_metadata = { # the latter were identified as the 'leaky' random shares by Egger (2021)
+            'subbytes': subbytes,
             'r_in': r_in,
-            'r_out': r_out,
             'r': r,
-            'k__p__r_in': key ^ plaintext ^ r_in
+            'r_out': r_out,
+            'plaintext__key__r_in': p__k__r_in,
+            'subbytes__r': subbytes__r,
+            'subbytes__r_out': subbytes__r_out,
+            's_prev__subbytes__r_out': S_prev__subbytes__r_out,
+            'security_load': security_load,
+            'key': key.squeeze(),
+            'plaintext': plaintext.squeeze(),
+            'key_prev': key_prev.squeeze(),
+            'plaintext_prev': plaintext_prev.squeeze()
         }
         targets = []
         for target_val in self.target_values:
-            if target_val == 'subbytes':
-                target = aux_metadata['subbytes']
-            elif target_val == 'subbytes__r':
-                target = aux_metadata['subbytes__r']
-            elif target_val == 'subbytes__r_out':
-                target = aux_metadata['subbytes__r_out']
-            elif target_val == 'subbytes__r_in':
-                target = aux_metadata['subbytes__r_in']
-            elif target_val == 'r_in':
-                target = aux_metadata['r_in']
-            elif target_val == 'r_out':
-                target = aux_metadata['r_out']
-            elif target_val == 'r':
-                target = aux_metadata['r']
-            else:
-                assert False
-            targets.append(target.squeeze())
+            targets.append(aux_metadata[target_val].squeeze())
         if batch_size > 1:
             targets = np.stack(targets, axis=1)
         else:
@@ -143,8 +149,7 @@ class ASCADv1(Dataset):
     def __getitem__(self, indices):
         indices = self.data_indices[indices]
         trace, metadata = self.load_datapoints(indices)
-        target, aux_metadata = self.compute_target(metadata)
-        metadata.update(aux_metadata)
+        target, metadata = self.compute_target(metadata)
         metadata.update({'label': target})
         if self.transform is not None:
             trace = self.transform(trace)

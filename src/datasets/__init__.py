@@ -1,13 +1,17 @@
-from . import mnist, synthetic_aes, simple_gaussian, dpav4, aes_hd, aes_rd, ascadv1
+import os
+
+from common import *
+from . import synthetic_aes, simple_gaussian, dpav4, aes_hd, ascadv1, ed25519_wolfssl, one_truth_prevails
 
 _DATASET_MODULES = {
-    'mnist': mnist,
     'synthetic-aes': synthetic_aes.module,
     'simple-gaussian': simple_gaussian,
     'dpav4': dpav4.module,
     'aes-hd': aes_hd.module,
-    'aes-rd': aes_rd.module,
-    'ascadv1f': ascadv1.module
+    'ascadv1-fixed': ascadv1.module,
+    'ascadv1-variable': ascadv1.module,
+    'otiait': ed25519_wolfssl.module,
+    'otp': one_truth_prevails.module
 }
 AVAILABLE_DATASETS = list(_DATASET_MODULES.keys())
 
@@ -17,7 +21,7 @@ def _check_name(name):
 
 def download(name, **kwargs):
     _check_name(name)
-    _DATASET_MODULES[name].download(**kwargs)
+    _DATASET_MODULES[name].download(root=os.path.join(RESOURCE_DIR, name), **kwargs)
 
 def load(name, **kwargs):
     _check_name(name)

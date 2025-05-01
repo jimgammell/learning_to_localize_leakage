@@ -1,5 +1,6 @@
 from typing import *
 import os
+import shutil
 import numpy as np
 import torch
 from torch.utils.data import Dataset, DataLoader, Subset
@@ -9,6 +10,25 @@ import lightning as L
 from common import *
 from .dataset import AES_HD
 from utils.calculate_dataset_stats import calculate_dataset_stats
+from utils.download_unzip import download as _download, unzip, verify_sha256
+
+# Downloading the Zaid version, since the official version appears to no longer be available.
+DOWNLOAD_URL = r'https://github.com/gabzai/Methodology-for-efficient-CNN-architectures-in-SCA/raw/refs/heads/master/AES_HD/AES_HD_dataset.zip'
+DOWNLOAD_SHA256 = r'00a3d02f01bae8c4fcefda33e3d1adb57bed0509ded3cdcf586e213b3d87e41b'
+def download(root: str):
+    dest_filename = DOWNLOAD_URL.split('/')[-1]
+    dest_path = os.path.join(root, dest_filename)
+    if os.path.exists(dest_path) and not(verify_sha256(dest_path, DOWNLOAD_SHA256)):
+        print(f'Download already exists at `{dest_path}`, but its SHA256 hash is incorrect. Deleting and re-downloading.')
+        os.remove(dest_path)
+    if not os.path.exists(dest_path):
+        _download(DOWNLOAD_URL, dest_path, verbose=True)
+        force_reextract = True
+    else:
+        print(f'Download already exists at `{dest_path}`.')
+        force_reextract = False
+    assert verify_sha256(dest_path, DOWNLOAD_SHA256), 'Finished download, but the SHA256 hash is incorrect!'
+    unzip(dest_filename, root, overwrite=force_reextract)
 
 class DataModule(L.LightningDataModule):
     def __init__(self,

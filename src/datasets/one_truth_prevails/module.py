@@ -1,13 +1,41 @@
 import os
 from copy import copy
+
 import numpy as np
 import torch
 from torch.utils.data import Subset, DataLoader
 from torchvision import transforms
 import lightning as L
+import gdown
 
 from .dataset import OneTruthPrevails
 from utils.calculate_dataset_stats import calculate_dataset_stats
+from utils.download_unzip import download as _download, unzip, verify_sha256
+
+URLS = [
+    r'https://github.com/ECSIS-lab/one_truth_prevails/raw/refs/heads/main/1024/a_labels.npy',
+    r'https://github.com/ECSIS-lab/one_truth_prevails/raw/refs/heads/main/1024/key_for_partial_key_exposure.txt'
+]
+SHA256_HASHES = [
+    r'4f3e11982dd0ccc2b878e94eadaf8eb4deed93f5d83f162b62122a998ccb9837',
+    r'ad20d9cba52572d6fb476ddb3df13f9fad3abed3e80b38c133185cf3f92f3610',
+    r'de7ba30dc95d0d7872491afbe76b200447cf6731aa17763508848941eeeba8d0',
+    r'...',
+    r'...'
+]
+def download(root: str):
+    assert False, 'TODO'
+    print(
+        'WARNING: Some of the files associated with this dataset are hosted on Google Drive and are not amenable to auto-downloading.'
+        ' Please download the files at the following URL: `https://drive.google.com/drive/folders/19ulxDZmvY5LMbwtzwp1jyGbrP3JHr4vr`.'
+        f' Then extract them into `{root}` with the following structure: `1024/(p_labels.txt, p.npy, a.npy)`.'
+    )
+    os.makedirs(os.path.join(root, '1024'), exist_ok=True)
+    for url in URLS:
+        _download(url, dest=os.path.join(root, '1024', url.split('/')[-1]), verbose=True)
+    filenames = [url.split('/')[-1] for url in URLS] + ['p_labels.txt', 'p.npy', 'a.npy']
+    for filename, sha_hash in zip(filenames, SHA256_HASHES):
+        pass
 
 class DataModule(L.LightningDataModule):
     def __init__(self,

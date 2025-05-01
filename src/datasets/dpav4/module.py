@@ -9,6 +9,23 @@ import lightning as L
 from common import *
 from .dataset import DPAv4
 from utils.calculate_dataset_stats import calculate_dataset_stats
+from utils.download_unzip import download as _download, unzip, verify_sha256
+
+# Downloading the Zaid version, since the official version appears to no longer be available.
+DOWNLOAD_URL = r'https://github.com/gabzai/Methodology-for-efficient-CNN-architectures-in-SCA/raw/refs/heads/master/DPA-contest%20v4/DPAv4_dataset.zip'
+DOWNLOAD_SHA256 = r'c42e0626793848ad38634f1765354fbecd9df3fa606ceb593a94febe6ebeda1f'
+def download(root: str):
+    dest_filename = DOWNLOAD_URL.split('/')[-1]
+    dest_path = os.path.join(root, dest_filename)
+    if os.path.exists(dest_path) and not(verify_sha256(dest_path, DOWNLOAD_SHA256)):
+        print(f'Download already exists at `{dest_path}`, but its SHA256 hash is incorrect. Deleting and re-downloading.')
+        os.remove(dest_path)
+    if not os.path.exists(dest_path):
+        _download(DOWNLOAD_URL, dest_path, verbose=True)
+    else:
+        print(f'Download already exists at `{dest_path}`.')
+    assert verify_sha256(dest_path, DOWNLOAD_SHA256), 'Finished download, but the SHA256 hash is incorrect!'
+    unzip(dest_filename, root)
 
 class DataModule(L.LightningDataModule):
     def __init__(self,

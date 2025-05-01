@@ -16,6 +16,16 @@ We used Python 3.9.19. It seems like things break if the Python version is too r
 
 All experiments are run via argparse commands to `src/run_trial.py`. Additionally, we have a self-contained minimal working example in `TODO`.
 
+### Available datasets
+
+If not already present, datasets will be auto-downloaded to the directory specified in `config/global_variables.yaml>resource_dirname` (by default, the `resources` subdirectory of the project directory) when you 
+- ASCADv1 (fixed) [(link)](https://github.com/ANSSI-FR/ASCAD/tree/master/ATMEGA_AES_v1/ATM_AES_v1_fixed_key): selected with `--dataset=ascadv1_fixed`.
+- ASCADv1 (variable) [(link)](https://github.com/ANSSI-FR/ASCAD/tree/master/ATMEGA_AES_v1/ATM_AES_v1_variable_key): selected with `--dataset=ascadv1_variable`.
+- DPAv4 (Zaid version) [(link)](https://github.com/gabzai/Methodology-for-efficient-CNN-architectures-in-SCA): selected with `--dataset=dpav4`.
+- AES-HD [(link)](https://github.com/AISyLab/AES_HD): selected with `--dataset=aes_hd`.
+- One Truth Prevails (1024-bit) [(link)](https://github.com/ECSIS-lab/one_truth_prevails): selected with `--dataset=otp`.
+- One Trace is All it Takes 
+
 ## Citation
 
 Please cite the following paper if you use our work:

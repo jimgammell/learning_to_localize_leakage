@@ -10,6 +10,36 @@ import lightning as L
 from common import *
 from .dataset import ASCADv1
 from utils.calculate_dataset_stats import calculate_dataset_stats
+from utils.download_unzip import download as _download, unzip, verify_sha256
+
+FIXED_DOWNLOAD_URL = r'https://www.data.gouv.fr/s/resources/ascad/20180530-163000/ASCAD_data.zip'
+FIXED_DOWNLOAD_SHA256 = r'a6884faf97133f9397aeb1af247dc71ab7616f3c181190f127ea4c474a0ad72c'
+VARIABLE_DOWNLOAD_URL = r'https://static.data.gouv.fr/resources/ascad-atmega-8515-variable-key/20190903-083349/ascad-variable.h5'
+VARIABLE_DOWNLOAD_SHA256 = r'd834da6ca5a288c4ba5add8e336845270a055d6eaf854dcf2f325a2eb6d7de06'
+def download(root: str):
+    version = root.split(os.sep)[-1].split('-')[-1]
+    if version == 'fixed':
+        url = FIXED_DOWNLOAD_URL
+        hash = FIXED_DOWNLOAD_SHA256
+    elif version == 'variable':
+        url = VARIABLE_DOWNLOAD_URL
+        hash = VARIABLE_DOWNLOAD_SHA256
+    else:
+        assert False
+    dest_filename = url.split('/')[-1]
+    dest_path = os.path.join(root, dest_filename)
+    if os.path.exists(dest_path) and not(verify_sha256(dest_path, hash)):
+        print(f'Download already exists at `{dest_path}`, but its SHA256 hash is incorrect. Deleting and re-downloading.')
+        os.remove(dest_path)
+    if not os.path.exists(dest_path):
+        _download(url, dest_path, verbose=True)
+        force_reextract = True
+    else:
+        print(f'Download already exists at `{dest_path}`.')
+        force_reextract = False
+    assert verify_sha256(dest_path, hash), 'Finished download, but the SHA256 hash is incorrect!'
+    if version == 'fixed':
+        unzip(dest_filename, root, overwrite=force_reextract)
 
 class DataModule(L.LightningDataModule):
     def __init__(self,

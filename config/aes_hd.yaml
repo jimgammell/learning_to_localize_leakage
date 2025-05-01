@@ -1,4 +1,4 @@
-data_dir: REDACTED
+dataset: aes-hd
 compute_ground_truth_assessments: true
 compute_first_order_stats: true
 run_supervised_hparam_sweep: true

@@ -26,14 +26,14 @@ def download(url, dest, force=False, chunk_size=2**20, verbose=False):
             for data in data_iter:
                 f.write(data)
 
-def unzip(filename, base_dir, split=False):
+def unzip(filename, base_dir, split=False, overwrite=False):
     if split:
         combined_name = 'combined.zip'
         subprocess.call(['zip', '-FF', os.path.join(base_dir, filename), '--out', os.path.join(base_dir, combined_name)])
         subprocess.call(['unzip', '-FF', os.path.join(base_dir, combined_name), '-d', base_dir])
         os.remove(os.path.join(base_dir, combined_name))
     else:
-        subprocess.call(['unzip', os.path.join(base_dir, filename), '-d', base_dir])
+        subprocess.call(['unzip', ('-n' if not(overwrite) else '-o'), os.path.join(base_dir, filename), '-d', base_dir])
 
 # Based on https://stackoverflow.com/questions/22058048/hashing-a-file-in-python
 def verify_sha256(path, sha256):

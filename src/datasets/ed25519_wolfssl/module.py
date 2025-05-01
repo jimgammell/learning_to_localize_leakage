@@ -9,6 +9,21 @@ import lightning as L
 from common import *
 from .dataset import ED25519
 from utils.calculate_dataset_stats import calculate_dataset_stats
+from utils.download_unzip import download as _download, unzip, verify_sha256
+
+DOWNLOAD_URL = r'https://github.com/leoweissbart/MachineLearningBasedSideChannelAttackonEdDSA/raw/refs/heads/master/databaseEdDSA.h5'
+DOWNLOAD_SHA256 = r'3d2751397b3c5984fa4da97b6d1a656f30ce541cba86cac4ca104387ca7bb14f'
+def download(root: str):
+    dest_filename = DOWNLOAD_URL.split('/')[-1]
+    dest_path = os.path.join(root, dest_filename)
+    if os.path.exists(dest_path) and not(verify_sha256(dest_path, DOWNLOAD_SHA256)):
+        print(f'Download already exists at `{dest_path}`, but its SHA256 hash is incorrect. Deleting and re-downloading.')
+        os.remove(dest_path)
+    if not os.path.exists(dest_path):
+        _download(DOWNLOAD_URL, dest_path, verbose=True)
+    else:
+        print(f'Download already exists at `{dest_path}`.')
+    assert verify_sha256(dest_path, DOWNLOAD_SHA256), 'Finished download, but the SHA256 hash is incorrect!'
 
 class DataModule(L.LightningDataModule):
     def __init__(self,

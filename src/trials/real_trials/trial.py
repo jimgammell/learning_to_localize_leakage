@@ -1,11 +1,14 @@
 from typing import Literal, Dict, Any, Optional
 import os
+from copy import copy
 
 import numpy as np
 from torch.utils.data import Dataset
 
 from common import *
 from utils.baseline_assessments import FirstOrderStatistics
+from .plot_things import *
+from training_modules.adversarial_leakage_localization import ALLTrainer
 
 class Trial:
     def __init__(self,
@@ -34,6 +37,8 @@ class Trial:
 
         self.random_assessment_dir = os.path.join(self.logging_dir, 'random_assessment')
         self.first_order_parametric_stats_dir = os.path.join(self.logging_dir, 'first_order_parametric_statistical_assessment')
+        self.all_hparam_sweep_dir = os.path.join(self.logging_dir, 'all_hparam_sweep')
+        self.all_classifiers_pretrain_dir = os.path.join(self.logging_dir, 'all_classifiers_pretrain')
 
         if self.dataset_name in ['ascadv1-fixed', 'ascadv1-variable']:
             self.oracle_targets = [ # based on Egger (2021) findings
@@ -95,6 +100,11 @@ class Trial:
         else:
             return np.load(os.path.join(self.random_assessment_dir, 'assessment.npy'))
     
+    def plot_random_assessment(self):
+        random_assessment = self.load_random_assessment()
+        oracle_assessment = self.load_oracle_assessment()
+        plot_leakage_assessment(oracle_assessment, random_assessment, os.path.join(self.random_assessment_dir, 'visualization.png'), self.dataset_name)
+    
     def compute_first_order_parametric_stats(self):
         os.makedirs(self.first_order_parametric_stats_dir, exist_ok=True)
         profiling_dataset = self.profiling_dataset
@@ -112,7 +122,7 @@ class Trial:
                     nonlocal stats_computer
                     dataset = profiling_dataset if split == 'profiling' else attack_dataset if split == 'attack' else None
                     stats_computer = stats_computer or FirstOrderStatistics(dataset, target)
-                    np.save(path, getattr(stats_computer, f'{method}_vals'))
+                    np.save(path, getattr(stats_computer, f'{method}_vals')[target].reshape(-1))
                 else:
                     print(f'Found existing {split} {method.upper()} for target `{target}`')
             for method in ['snr', 'sosd', 'cpa']:
@@ -132,8 +142,8 @@ class Trial:
             rv[method] = assessment
         return rv
     
-    def load_oracle_assessment(self, reduce=False) -> Union[np.ndarray, Dict[str, np.ndarray]]:
-        rv = np.zeros(self.profiling_dataset.timesteps_per_trace, dtype=np.float) if reduce else {}
+    def load_oracle_assessment(self, reduce=True) -> Union[np.ndarray, Dict[str, np.ndarray]]:
+        rv = np.zeros(self.profiling_dataset.timesteps_per_trace, dtype=np.float32) if reduce else {}
         for target in self.oracle_targets:
             path = os.path.join(self.first_order_parametric_stats_dir, f'attack_snr_{target}.npy')
             assessment = np.load(path)
@@ -143,12 +153,48 @@ class Trial:
                 rv[target] = assessment
         return rv
     
+    def plot_first_order_parametric_assessments(self):
+        first_order_parametric_assessments = self.load_first_order_parametric_assessments()
+        oracle_assessment = self.load_oracle_assessment()
+        for method, assessment in first_order_parametric_assessments.items():
+            plot_leakage_assessment(
+                oracle_assessment, assessment, 
+                os.path.join(self.first_order_parametric_stats_dir, f'{method}_visualization.png'), self.dataset_name
+            )
+        
+    def plot_oracle_assessments(self):
+        oracle_assessments = self.load_oracle_assessment(reduce=False)
+        plot_oracle_assessment(oracle_assessments, os.path.join(self.first_order_parametric_stats_dir, 'oracle_snr_visualization.png'), self.dataset_name)
+    
+    def run_all_hparam_sweep(self):
+        os.makedirs(self.all_hparam_sweep_dir, exist_ok=True)
+        if not os.path.exists(os.path.join(self.all_hparam_sweep_dir, 'results.pickle')):
+            print('Running ALL hparam sweep')
+            kwargs = copy(self.trial_config['default_kwargs'])
+            kwargs.update(self.trial_config['classifiers_pretrain_kwargs'])
+            kwargs.update(self.trial_config['all_kwargs'])
+            all_trainer = ALLTrainer(
+                self.profiling_dataset, self.attack_dataset, default_training_module_kwargs=kwargs, reference_leakage_assessment=self.load_oracle_assessment()
+            )
+            all_trainer.htune_leakage_localization(
+                self.all_hparam_sweep_dir,
+                pretrained_classifiers_logging_dir=os.path.join(self.all_classifiers_pretrain_dir, 'seed=0'),
+                trial_count=self.trial_config['all_htune_trial_count'],
+                max_steps=self.trial_config['all_train_steps']
+            )
+    
     def __call__(self,
         compute_random: bool = False,
-        compute_1o_parametric_stats: bool = False
+        compute_1o_parametric_stats: bool = False,
+        run_all_hparam_sweep: bool = False
     ):
         self.construct_datasets()
-        if compute_random:
-            self.compute_random_assessment()
         if compute_1o_parametric_stats:
             self.compute_first_order_parametric_stats()
+            self.plot_first_order_parametric_assessments()
+            self.plot_oracle_assessments()
+        if compute_random:
+            self.compute_random_assessment()
+            self.plot_random_assessment()
+        if run_all_hparam_sweep:
+            self.run_all_hparam_sweep()

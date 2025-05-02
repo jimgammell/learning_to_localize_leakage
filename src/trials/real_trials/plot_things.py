@@ -10,7 +10,7 @@ def get_attack_point_label(attack_pt_name: str, dataset_name: str) -> str:
         return {
             'label': r'$\operatorname{Sbox}(k_3 \oplus r_3)$',
             'subbytes': r'$\operatorname{Sbox}(k_3 \oplus r_3)$',
-            'r_in': r'$r_\mathrm{in}}$',
+            'r_in': r'$r_{\mathrm{in}}$',
             'r': r'$r$',
             'r_out': r'$r_{\mathrm{out}}$',
             'plaintext__key__r_in': r'$k_3 \oplus w_3 \oplus r_{\mathrm{in}}$',
@@ -49,12 +49,24 @@ def plot_leakage_assessment(oracle_assessment: np.ndarray, leakage_assessment: n
     if seed_count > 1:
         mean, std = leakage_assessment.mean(axis=0), leakage_assessment.std(axis=0)
         axes[0].fill_between(np.arange(timestep_count), mean-std, mean+std, color='blue', alpha=0.25)
-    axes[0].plot(np.arange(timestep_count), leakage_assessment.mean(axis=0), linestyle='none', marker='.', color='blue')
+    axes[0].plot(np.arange(timestep_count), leakage_assessment.mean(axis=0), linestyle='none', marker='.', markersize=1, color='blue')
     axes[1].set_xlabel('Oracle SNR of $X_t$')
     axes[1].set_ylabel('Estimated `leakiness\' of $X_t$')
+    sorted_indices = oracle_assessment.argsort()
     if seed_count > 1:
-        axes[1].fill_between(oracle_assessment, mean-std, mean+std, color='blue', alpha=0.25)
-    axes[1].plot(oracle_assessment, leakage_assessment.mean(axis=0), linestyle='none', marker='.', color='blue', **PLOT_KWARGS)
-    axes[1].legend()
+        axes[1].fill_between(oracle_assessment[sorted_indices], (mean-std)[sorted_indices], (mean+std)[sorted_indices], color='blue', alpha=0.25)
+    axes[1].plot(oracle_assessment[sorted_indices], leakage_assessment.mean(axis=0)[sorted_indices], linestyle='none', marker='.', color='blue', **PLOT_KWARGS)
     fig.tight_layout()
     fig.savefig(dest, **SAVEFIG_KWARGS)
+    plt.close(fig)
+
+def plot_oracle_assessment(oracle_assessment: Dict[str, np.ndarray], dest: str, dataset_name: str):
+    fig, ax = plt.subplots(figsize=(PLOT_WIDTH, PLOT_WIDTH))
+    ax.set_xlabel('Timestep $t$')
+    ax.set_ylabel('Oracle `leakiness\' of $X_t$')
+    for target, leakage_assessment in oracle_assessment.items():
+        ax.plot(leakage_assessment, linestyle='-', linewidth=0.1, marker='.', markersize=1, label=get_attack_point_label(target, dataset_name), **PLOT_KWARGS)
+    ax.legend()
+    fig.tight_layout()
+    fig.savefig(dest, **SAVEFIG_KWARGS)
+    plt.close(fig)

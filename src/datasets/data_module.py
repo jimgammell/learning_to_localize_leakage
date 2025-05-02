@@ -27,7 +27,7 @@ class DataModule(L.LightningDataModule):
         attack_dataset,
         val_prop: float = 0.2,
         train_batch_size: int = 256,
-        aug_train_batch_size: int = 256,
+        aug_train_batch_size: int = 1024,
         eval_batch_size: int = 2048,
         adversarial_mode: bool = False,
         data_mean: Optional[Union[float, Sequence[float]]] = None,

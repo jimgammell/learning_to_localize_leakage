@@ -25,10 +25,11 @@ def main():
     toy_gaussian_parser = subparsers.add_parser('run-toy-gaussian-trials')
     synthetic_parser = subparsers.add_parser('run-synthetic-trials')
     real_parser = subparsers.add_parser('run-real-trials')
-    real_sub_assessments = ['compute_random', 'compute_1o_parametric_stats']
+    real_sub_assessments = ['compute_random', 'compute_1o_parametric_stats', 'run_all_hparam_sweep']
     real_sub_hints = [
         'Compute and save the random leakage assessment baseline',
-        'Compute and save the first-order parametric statistics-based leakage assessments'
+        'Compute and save the first-order parametric statistics-based leakage assessments',
+        'Do a random hyperparameter search for Adversarial Leakage Localization.'
     ]
     for real_sub_assessment, real_sub_hint in zip(real_sub_assessments, real_sub_hints):
         real_parser.add_argument(f'--{real_sub_assessment.replace("_", "-")}', action='store_true', default=False, help=real_sub_hint)

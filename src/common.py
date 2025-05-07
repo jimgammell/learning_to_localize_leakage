@@ -66,6 +66,7 @@ def set_seed(
         seed = time.time_ns() & 0xFFFFFFFF
     global NUMPY_RNG
     NUMPY_RNG = np.random.default_rng(seed)
+    np.random.seed(seed)
     torch.manual_seed(seed)
     return seed
 

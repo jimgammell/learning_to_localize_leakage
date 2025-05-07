@@ -3,13 +3,15 @@ from .lenet import LeNet5
 from .sca_cnn import SCA_CNN
 from .resnet_1d import ResNet1d
 from .mlp_1d import MultilayerPerceptron_1d
+from .yap_cnn import YapCNN
 
 _MODEL_CONSTRUCTORS = {
     'multilayer-perceptron': MultilayerPerceptron,
     'mlp-1d': MultilayerPerceptron_1d, 
     'lenet-5': LeNet5,
     'sca-cnn': SCA_CNN,
-    'resnet-1d': ResNet1d
+    'resnet-1d': ResNet1d,
+    'yap-cnn': YapCNN
 }
 AVAILABLE_MODELS = list(_MODEL_CONSTRUCTORS.keys())
 

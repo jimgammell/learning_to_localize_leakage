@@ -49,9 +49,12 @@ class Module(lightning.LightningModule):
         etat_lr: float = 1e-3,
         etat_beta_1: float = 0.9,
         gamma_bar: float = 0.5,
+        norm_penalty_coeff: float = 0.0,
         relaxation_temp: float = 1.0,
         gradient_estimator: Literal['gumbel', 'reinmax'] = 'gumbel',
+        penalty_style: Literal['budget', 'l1', 'l2', 'l1_plus_l2'] = 'budget',
         adversarial_mode: bool = True,
+        omit_classifier_conditioning: bool = False,
         train_theta: bool = True,
         train_etat: bool = True,
         reference_leakage_assessment: Optional[np.ndarray] = None
@@ -67,13 +70,15 @@ class Module(lightning.LightningModule):
             self.hparams.timesteps_per_trace,
             self.hparams.output_classes,
             self.hparams.classifiers_name,
-            self.hparams.classifiers_kwargs
+            classifiers_kwargs=self.hparams.classifiers_kwargs,
+            omit_classifier_conditioning=self.hparams.omit_classifier_conditioning
         )
         self.selection_mechanism = SelectionMechanism(
             self.hparams.timesteps_per_trace,
             gamma_bar=self.hparams.gamma_bar,
             relaxation_temp=self.hparams.relaxation_temp,
-            adversarial_mode=self.hparams.adversarial_mode
+            adversarial_mode=self.hparams.adversarial_mode,
+            use_budget=True if self.hparams.penalty_style == 'budget' else False
         )
     
     def to_global_steps(self, steps: int) -> int: # Lightning considers it a 'step' every time we call optimizer.step. This computes training steps to Lightning steps one can pass to a trainer.
@@ -148,6 +153,10 @@ class Module(lightning.LightningModule):
         etat_loss = -mutinf.mean()
         if self.hparams.adversarial_mode:
             etat_loss = -1*etat_loss
+        if self.hparams.penalty_style == 'mask_norm_penalty':
+            etat_loss = etat_loss + self.hparams.norm_penalty_coeff*(mask.sum(dim=-1).mean() + mask.pow(2).sum(dim=-1).sqrt().mean())
+        if self.hparams.penalty_style== 'gamma_norm_penalty':
+            etat_loss = etat_loss + self.hparams.norm_penalty_coeff*self.selection_mechanism.get_gamma().sum(dim=-1).mean()
         if train_theta:
             self.manual_backward(theta_loss, retain_graph=train_etat, inputs=list(self.cmi_estimator.parameters()))
         if train_etat:

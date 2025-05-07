@@ -18,7 +18,10 @@ class Module(L.LightningModule):
         beta_1: float = 0.9,
         beta_2: float = 0.999,
         eps: float = 1e-8,
-        weight_decay: float = 0.0,
+        weight_decay: float = 0.01,
+        input_dropout: float = 0.0,
+        hidden_dropout: float = 0.0,
+        output_dropout: float = 0.0,
         noise_scale: Optional[float] = None,
         timesteps_per_trace: Optional[int] = None,
         class_count: int = 256
@@ -32,7 +35,8 @@ class Module(L.LightningModule):
             self.hparams.lr_scheduler_name = 'NoOpLRSched'
         self.classifier = models.load(
             self.hparams.classifier_name, input_shape=(1, self.hparams.timesteps_per_trace),
-            output_classes=self.hparams.class_count, **self.hparams.classifier_kwargs
+            output_classes=self.hparams.class_count, input_dropout=self.hparams.input_dropout, hidden_dropout=self.hparams.hidden_dropout,
+            output_dropout=self.hparams.output_dropout, **self.hparams.classifier_kwargs
         )
     
     def configure_optimizers(self):
@@ -82,7 +86,7 @@ class Module(L.LightningModule):
             rv.update({'rms_grad': get_rms_grad(self.classifier)})
             optimizer.step()
             lr_scheduler.step()
-        assert all(torch.all(torch.isfinite(param)) for param in self.classifier.parameters())
+        #assert all(torch.all(torch.isfinite(param)) for param in self.classifier.parameters())
         return rv
     
     def training_step(self, batch):

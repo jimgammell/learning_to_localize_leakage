@@ -1,5 +1,5 @@
 from typing import Dict, Any, Literal
-from math import log
+from math import log, log1p
 
 import torch
 from torch import nn
@@ -12,19 +12,21 @@ class CondMutInfEstimator(nn.Module):
         timesteps_per_trace: int,
         output_classes: int,
         classifiers_name: str,
-        classifiers_kwargs: Dict[str, Any] = {}
+        classifiers_kwargs: Dict[str, Any] = {},
+        omit_classifier_conditioning: bool = False
     ):
         super().__init__()
         self.timesteps_per_trace = timesteps_per_trace
         self.output_classes = output_classes
         self.classifiers_name = classifiers_name
         self.classifiers_kwargs = classifiers_kwargs
+        self.omit_classifier_conditioning = omit_classifier_conditioning
 
         self.classifiers = models.load(
             self.classifiers_name,
             input_shape=(1, self.timesteps_per_trace),
             output_classes=self.output_classes,
-            noise_conditional=True,
+            noise_conditional=not self.omit_classifier_conditioning,
             **self.classifiers_kwargs
         )
     
@@ -33,7 +35,10 @@ class CondMutInfEstimator(nn.Module):
         batch_size, *input_shape = input.shape
         assert tuple(input_shape) == (1, self.timesteps_per_trace)
         masked_input = condition_mask*input + (1-condition_mask)*torch.randn_like(input)
-        logits = self.classifiers(masked_input, condition_mask)
+        if self.omit_classifier_conditioning:
+            logits = self.classifiers(masked_input)
+        else:
+            logits = self.classifiers(masked_input, condition_mask)
         logits = logits.reshape(batch_size, self.output_classes)
         return logits
     
@@ -54,14 +59,16 @@ class CondMutInfEstimator(nn.Module):
         assert False
 
 class SelectionMechanism(nn.Module):
-    def __init__(self, timesteps_per_trace: int, gamma_bar: float = 0.5, adversarial_mode: bool = True, relaxation_temp: float = 1.0):
+    def __init__(self, timesteps_per_trace: int, gamma_bar: float = 0.5, adversarial_mode: bool = True, relaxation_temp: float = 1.0, use_budget: bool = True):
         super().__init__()
         self.timesteps_per_trace = timesteps_per_trace
         self.gamma_bar = gamma_bar
         self.adversarial_mode = adversarial_mode
         self.relaxation_temp = relaxation_temp
-        log_C = log(self.timesteps_per_trace) + log(gamma_bar) - log(1-gamma_bar)
-        self.register_buffer('log_C', torch.tensor(log_C))
+        self.use_budget = use_budget
+        if self.use_budget:
+            log_C = log(self.timesteps_per_trace) + log(gamma_bar) - log1p(-gamma_bar)
+            self.register_buffer('log_C', torch.tensor(log_C))
         self.etat = nn.Parameter(0.01*torch.randn((1, self.timesteps_per_trace)))
     
     def get_etat(self) -> torch.Tensor:
@@ -79,7 +86,10 @@ class SelectionMechanism(nn.Module):
     
     def get_gammat(self) -> torch.Tensor:
         etat = self.get_etat()
-        gammat = etat + self.log_C - torch.logsumexp(etat.squeeze(0), dim=0)
+        if self.use_budget:
+            gammat = etat + self.log_C - torch.logsumexp(etat.squeeze(0), dim=0)
+        else:
+            gammat = etat
         return gammat
     
     def get_gamma(self) -> torch.Tensor:

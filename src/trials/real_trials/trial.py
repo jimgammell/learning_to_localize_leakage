@@ -1,14 +1,22 @@
 from typing import Literal, Dict, Any, Optional
 import os
+import shutil
 from copy import copy
+import pickle
+import json
+from tqdm import tqdm
 
 import numpy as np
-from torch.utils.data import Dataset
+from scipy.stats import spearmanr
+from torch.utils.data import Dataset, DataLoader
 
 from common import *
-from utils.baseline_assessments import FirstOrderStatistics
+from utils.baseline_assessments import FirstOrderStatistics, NeuralNetAttribution, OccPOI
+from utils import dnn_performance_auc
 from .plot_things import *
-from training_modules.adversarial_leakage_localization import ALLTrainer
+from datasets.data_module import DataModule
+from training_modules.supervised_deep_sca import SupervisedTrainer, SupervisedModule
+from training_modules.adversarial_leakage_localization import ALLTrainer, ALLModule
 
 class Trial:
     def __init__(self,
@@ -37,8 +45,13 @@ class Trial:
 
         self.random_assessment_dir = os.path.join(self.logging_dir, 'random_assessment')
         self.first_order_parametric_stats_dir = os.path.join(self.logging_dir, 'first_order_parametric_statistical_assessment')
+        self.supervised_hparam_sweep_dir = os.path.join(self.logging_dir, 'supervised_hparam_sweep')
+        self.supervised_attribution_dir = os.path.join(self.logging_dir, 'supervised_models_for_attribution')
+        self.supervised_selection_dir = os.path.join(self.logging_dir, 'supervised_models_for_model_selection')
         self.all_hparam_sweep_dir = os.path.join(self.logging_dir, 'all_hparam_sweep')
         self.all_classifiers_pretrain_dir = os.path.join(self.logging_dir, 'all_classifiers_pretrain')
+        self.all_sensitivity_analysis_dir = os.path.join(self.logging_dir, 'all_sensitivity_analysis')
+        self.plots_for_paper_dir = os.path.join(self.logging_dir, 'plots_for_paper')
 
         if self.dataset_name in ['ascadv1-fixed', 'ascadv1-variable']:
             self.oracle_targets = [ # based on Egger (2021) findings
@@ -78,12 +91,17 @@ class Trial:
         else:
             assert False
     
+    # Random baseline
     def compute_random_assessment(self):
         os.makedirs(self.random_assessment_dir, exist_ok=True)
         if not os.path.exists(os.path.join(self.random_assessment_dir, 'assessment.npy')):
             print('Computing random assessment.')
-            assessment = np.random.randn(self.seed_count, self.profiling_dataset.timesteps_per_trace)
-            np.save(os.path.join(self.random_assessment_dir, 'assessment.npy'), assessment)
+            assessments = []
+            for seed in range(self.seed_count):
+                set_seed(seed)
+                assessment = np.random.randn(self.profiling_dataset.timesteps_per_trace)
+                assessments.append(assessment)
+            np.save(os.path.join(self.random_assessment_dir, 'assessment.npy'), np.stack(assessments))
         else:
             print('Random assessment already exists.')
             assessment = np.load(os.path.join(self.random_assessment_dir, 'assessment.npy'))
@@ -91,7 +109,9 @@ class Trial:
             assert timestep_count == self.profiling_dataset.timesteps_per_trace
             if seed_count < self.seed_count:
                 print(f'\tNot enough seeds. Running {self.seed_count-seed_count} more trials.')
-                assessment = np.concatenate([np.random.randn(self.seed_count-seed_count, timestep_count), assessment], axis=0)
+                for seed in range(seed_count, self.seed_count):
+                    set_seed(seed)
+                    assessment = np.concatenate([np.random.randn(1, timestep_count), assessment], axis=0)
                 np.save(os.path.join(self.random_assessment_dir, 'assessment.npy'), assessment)
     
     def load_random_assessment(self) -> Optional[np.ndarray]:
@@ -105,6 +125,7 @@ class Trial:
         oracle_assessment = self.load_oracle_assessment()
         plot_leakage_assessment(oracle_assessment, random_assessment, os.path.join(self.random_assessment_dir, 'visualization.png'), self.dataset_name)
     
+    # Parametric statistical methods. Here we are computing both the baseline methods and the oracle methods for calculating agreement with oSNR.
     def compute_first_order_parametric_stats(self):
         os.makedirs(self.first_order_parametric_stats_dir, exist_ok=True)
         profiling_dataset = self.profiling_dataset
@@ -143,15 +164,49 @@ class Trial:
         return rv
     
     def load_oracle_assessment(self, reduce=True) -> Union[np.ndarray, Dict[str, np.ndarray]]:
-        rv = np.zeros(self.profiling_dataset.timesteps_per_trace, dtype=np.float32) if reduce else {}
+        rv = {}
         for target in self.oracle_targets:
             path = os.path.join(self.first_order_parametric_stats_dir, f'attack_snr_{target}.npy')
             assessment = np.load(path)
-            if reduce:
-                rv += assessment
-            else:
-                rv[target] = assessment
+            rv[target] = assessment
+        if reduce:
+            rv = np.mean(np.stack(list(rv.values())), axis=0)
         return rv
+
+    def plot_assessment_vs_oracle_leakage(self, assessment, dest):
+        assert self.dataset_name in ['ascadv1-fixed', 'ascadv1-variable']
+        oracle_assessments = self.load_oracle_assessment(reduce=False)
+        sorted_indices = assessment.argsort()
+        assessment = assessment[sorted_indices]
+        oracle_assessments = {key: val[sorted_indices] for key, val in oracle_assessments.items()}
+        fig, axes = plt.subplots(2, 4, figsize=(4*PLOT_WIDTH, 2*PLOT_WIDTH))
+        for (target_name, target_snr), ax in zip(oracle_assessments.items(), axes.flatten()):
+            ax.plot(assessment, target_snr, linestyle='none', marker='.', markersize=2, label=target_name, **PLOT_KWARGS)
+            ax.set_xscale('log')
+            ax.set_yscale('log')
+            ax.set_title(target_name)
+        #ax.legend()
+        #ax.set_xlabel('Assessment under test')
+        #ax.set_ylabel('Oracle SNR')
+        fig.tight_layout()
+        fig.savefig(dest, **SAVEFIG_KWARGS)
+        plt.close(fig)
+    
+    def compute_oracle_snr_corr(self, leakage_assessment):
+        oracle_assessment = self.load_oracle_assessment()
+        corr = spearmanr(leakage_assessment.reshape(-1), oracle_assessment.reshape(-1)).statistic
+        return corr
+    
+    def compute_dnno_auc(self, leakage_assessment, supervised_model=None, seed: int = 0):
+        if supervised_model is None:
+            supervised_model = self.load_supervised_model(os.path.join(self.supervised_selection_dir, f'seed={seed}'), 'early_stop')
+        auc_rv = dnn_performance_auc.compute_dnn_performance_auc(
+            DataLoader(self.profiling_dataset, batch_size=2048, num_workers=1), supervised_model, leakage_assessment,
+            device='cuda' if torch.cuda.is_available() else 'cpu', cluster_count=None
+        )
+        fwd_dnno = auc_rv['forward_dnn_auc']
+        rev_dnno = auc_rv['reverse_dnn_auc']
+        return fwd_dnno, rev_dnno
     
     def plot_first_order_parametric_assessments(self):
         first_order_parametric_assessments = self.load_first_order_parametric_assessments()
@@ -166,27 +221,351 @@ class Trial:
         oracle_assessments = self.load_oracle_assessment(reduce=False)
         plot_oracle_assessment(oracle_assessments, os.path.join(self.first_order_parametric_stats_dir, 'oracle_snr_visualization.png'), self.dataset_name)
     
-    def run_all_hparam_sweep(self):
-        os.makedirs(self.all_hparam_sweep_dir, exist_ok=True)
-        if not os.path.exists(os.path.join(self.all_hparam_sweep_dir, 'results.pickle')):
-            print('Running ALL hparam sweep')
+    # Random hyperparameter search for the supervised models. Search space is hard-coded in training_modules/supervised_deep_sca/trainer.py because I'm lazy.
+    def run_supervised_hparam_sweep(self):
+        os.makedirs(self.supervised_hparam_sweep_dir, exist_ok=True)
+        print('Running supervised hparam sweep')
+        kwargs = copy(self.trial_config['default_kwargs'])
+        kwargs.update(self.trial_config['supervised_training_kwargs'])
+        supervised_trainer = SupervisedTrainer(
+            self.profiling_dataset, self.attack_dataset, default_training_module_kwargs=kwargs, reference_leakage_assessment=self.load_oracle_assessment()
+        )
+        supervised_trainer.hparam_tune(
+            self.supervised_hparam_sweep_dir,
+            trial_count=self.trial_config['supervised_htune_trial_count'],
+            max_steps=self.trial_config['supervised_train_steps'],
+            starting_seed=5 # to avoid overlap with other trials
+        )
+        with open(os.path.join(self.supervised_hparam_sweep_dir, 'results.pickle'), 'rb') as f:
+            results = pickle.load(f)
+        mean_leakage_assessments = defaultdict(lambda: np.zeros((self.profiling_dataset.timesteps_per_trace,), dtype=np.float32))
+        for trial_idx in range(self.trial_config['supervised_htune_trial_count']):
+            leakage_assessments = np.load(os.path.join(self.supervised_hparam_sweep_dir, f'trial_{trial_idx}', 'early_stop_leakage_assessments.npz'), allow_pickle=True)
+            for key, val in leakage_assessments.items():
+                mean_leakage_assessments[key] += val
+        mean_leakage_assessments = {key: val/self.trial_config['supervised_htune_trial_count'] for key, val in mean_leakage_assessments.items()}
+        osnr_vals, agreement_vals = defaultdict(list), defaultdict(list)
+        for trial_idx in range(self.trial_config['supervised_htune_trial_count']):
+            leakage_assessments = np.load(os.path.join(self.supervised_hparam_sweep_dir, f'trial_{trial_idx}', 'early_stop_leakage_assessments.npz'), allow_pickle=True)
+            for key, val in leakage_assessments.items():
+                osnr_vals[key].append(self.compute_oracle_snr_corr(val))
+                agreement_vals[key].append(spearmanr(val, mean_leakage_assessments[key]).statistic)
+        osnr_vals = {key: np.array(val) for key, val in osnr_vals.items()}
+        agreement_vals = {key: np.array(val) for key, val in agreement_vals.items()}
+        fig, ax = plt.subplots(1, 1, figsize=(PLOT_WIDTH, PLOT_WIDTH))
+        ax.plot(results['min_rank'], results['early_stop_gradvis'], linestyle='none', marker='.', label='GradVis', **PLOT_KWARGS)
+        ax.plot(results['min_rank'], results['early_stop_saliency'], linestyle='none', marker='.', label='Saliency', **PLOT_KWARGS)
+        ax.plot(results['min_rank'], results['early_stop_lrp'], linestyle='none', marker='.', label='LRP', **PLOT_KWARGS)
+        ax.plot(results['min_rank'], results['early_stop_inputxgrad'], linestyle='none', marker='.', label='Input x Grad', **PLOT_KWARGS)
+        ax.set_xlabel(r'Best validation rank $\downarrow$')
+        ax.set_ylabel(r'oSNR agreement $\uparrow$')
+        ax.legend()
+        fig.tight_layout()
+        fig.savefig(os.path.join(self.supervised_hparam_sweep_dir, 'performance_based_model_selection.png'), **SAVEFIG_KWARGS)
+        plt.close(fig)
+        fig, ax = plt.subplots(1, 1, figsize=(PLOT_WIDTH, PLOT_WIDTH))
+        for (k1, v1), (k2, v2) in zip(osnr_vals.items(), agreement_vals.items()):
+            assert k1 == k2
+            sorted_indices = np.argsort(v1)
+            ax.plot(v1[sorted_indices], v2[sorted_indices], label=k1, linestyle='none', marker='.')
+        ax.set_ylabel('Agreement with mean leakiness assessment')
+        ax.set_xlabel(r'oSNR agreement $\uparrow$')
+        ax.legend()
+        fig.tight_layout()
+        fig.savefig(os.path.join(self.supervised_hparam_sweep_dir, 'mean_agreement_based_model_selection.png'), **SAVEFIG_KWARGS)
+        plt.close(fig)
+
+        best_idx = np.argmax(agreement_vals)
+        best_trial_dir = os.path.join(self.supervised_hparam_sweep_dir, f'trial_{best_idx}')
+        best_leakage_assessment = np.load(os.path.join(best_trial_dir, 'early_stop_leakage_assessments.npz'))['inputxgrad']
+        self.plot_assessment_vs_oracle_leakage(best_leakage_assessment, os.path.join(self.supervised_hparam_sweep_dir, 'visualization.png'))
+    
+    # Returns the hyperparameters which yielded the best classification performance
+    def get_optimal_supervised_kwargs(self):
+        assert os.path.exists(os.path.join(self.supervised_hparam_sweep_dir, 'results.pickle'))
+        with open(os.path.join(self.supervised_hparam_sweep_dir, 'results.pickle'), 'rb') as f:
+            results = pickle.load(f)
+        best_result_idx = np.argmin(results['min_rank'])
+        best_result_dir = os.path.join(self.supervised_hparam_sweep_dir, f'trial_{best_result_idx}')
+        with open(os.path.join(best_result_dir, 'hparams.json'), 'r') as f:
+            best_hparams = json.load(f)
+        kwargs = copy(self.trial_config['default_kwargs'])
+        kwargs.update(self.trial_config['supervised_training_kwargs'])
+        kwargs.update(best_hparams)
+        return kwargs
+    
+    # Re-runs the trial with the best model hyperparameters for multiple random seeds so we can compute error bars.
+    def run_supervised_trials_for_attribution(self):
+        optimal_supervised_kwargs = self.get_optimal_supervised_kwargs()
+        os.makedirs(self.supervised_attribution_dir, exist_ok=True)
+        for seed in range(self.seed_count):
+            set_seed(seed)
+            supervised_trainer = SupervisedTrainer(
+                self.profiling_dataset, self.attack_dataset, default_training_module_kwargs=optimal_supervised_kwargs, reference_leakage_assessment=None #self.load_oracle_assessment()
+            )
+            supervised_trainer.run(os.path.join(self.supervised_attribution_dir, f'seed={seed}'), max_steps=self.trial_config['supervised_train_steps'])
+
+    # Re-runs the trial with the best model hyperparameters for multiple random seeds, for use when running DNN occlusion tests. I want these to be independent to avoid any sort of weird coupling between trials.
+    def run_supervised_trials_for_selection(self):
+        optimal_supervised_kwargs = self.get_optimal_supervised_kwargs()
+        #optimal_supervised_kwargs.update({'lr': 3e-4, 'beta_1': 0.5, 'weight_decay': 1e-2, 'lr_scheduler_name': 'CosineDecayLRSched', 'input_dropout': 0.0, 'hidden_dropout': 0.0, 'output_dropout': 0.0})
+        os.makedirs(self.supervised_selection_dir, exist_ok=True)
+        for seed in range(self.seed_count):
+            set_seed(seed)
+            supervised_trainer = SupervisedTrainer(
+                self.profiling_dataset, self.attack_dataset, default_training_module_kwargs=optimal_supervised_kwargs, reference_leakage_assessment=None #self.load_oracle_assessment()
+            )
+            supervised_trainer.run(os.path.join(self.supervised_selection_dir, f'seed={seed}'), max_steps=self.trial_config['supervised_train_steps'])
+    
+    @staticmethod
+    def load_supervised_model(model_dir, checkpoint: Literal['early_stop', 'final'] = 'early_stop'):
+        checkpoint_path = os.path.join(model_dir, f'{checkpoint}_checkpoint.ckpt')
+        module = SupervisedModule.load_from_checkpoint(checkpoint_path)
+        classifier = module.classifier
+        classifier.eval()
+        classifier.requires_grad_(False)
+        return classifier
+
+    def run_supervised_attribution(self):
+        if not os.path.exists(os.path.join(self.supervised_attribution_dir, 'leakage_assessments.npz')):
+            print('Running supervised attribution.')
+            leakage_assessments = {
+                method: np.full((self.seed_count, self.profiling_dataset.timesteps_per_trace), np.nan, dtype=np.float32)
+                for method in ['gradvis', 'saliency', 'lrp', '1-occlusion', 'inputxgrad'] #, 'occpoi']
+            }
+            for seed in range(self.seed_count):
+                set_seed(seed)
+                base_dir = os.path.join(self.supervised_attribution_dir, f'seed={seed}')
+                classifier = self.load_supervised_model(base_dir, 'early_stop')
+                attributor = NeuralNetAttribution(DataLoader(self.profiling_dataset, batch_size=2048, num_workers=1), classifier, seed=seed, device='cuda' if torch.cuda.is_available() else 'cpu')
+                leakage_assessments['gradvis'][seed, :] = attributor.compute_gradvis()
+                leakage_assessments['saliency'][seed, :] = attributor.compute_saliency()
+                leakage_assessments['lrp'][seed, :] = attributor.compute_lrp()
+                leakage_assessments['1-occlusion'][seed, :] = attributor.compute_n_occlusion(1)
+                leakage_assessments['inputxgrad'][seed, :] = attributor.compute_inputxgrad()
+                #occpoi_computer = OccPOI(
+                #    DataLoader(self.attack_dataset, batch_size=2048, num_workers=1), classifier, seed=seed, device='cuda' if torch.cuda.is_available() else 'cpu', dataset_name=self.dataset_name
+                #)
+                #leakage_assessments['occpoi'][seed, :] = occpoi_computer(extended=False)
+            assert all(np.all(np.isfinite(x)) for x in leakage_assessments.values())
+            np.savez(os.path.join(self.supervised_attribution_dir, 'leakage_assessments.npz'), **leakage_assessments)
+        else:
+            leakage_assessments = np.load(os.path.join(self.supervised_attribution_dir, 'leakage_assessments.npz'), allow_pickle=True)
+        print('oSNR for neural net attribution-based assessments:')
+        for method_name, leakage_assessment in leakage_assessments.items():
+            corr = np.array([self.compute_oracle_snr_corr(_leakage_assessment) for _leakage_assessment in leakage_assessment])
+            print(f'\t{method_name}: {corr.mean()} +/- {corr.std()}')
+
+    # Random hyperparameter search for ALL with various ablations. Search space is hard-coded in training_modules/adversarial_leakage_localization/trainer.py because I'm lazy.
+    def run_all_hparam_sweep(self, ablation: Literal[
+        'none', # The method as described in the paper.
+        'cooperative', # Instead of training the noise generator to maximize loss -> noisier === leakier, we train it to minimize loss -> less-noisy === leakier.
+        'noconditioning', # We don't feed the input mask as an auxiliary argument to the classifier.
+        'two_stage', # We solely train the classifier for 50% of the steps, followed by solely training the noise generator for 50% of the steps.
+        'attribution', # Two-stage training without conditioning. i.e. we have converted our method into a neural net attribution method.
+        'mask_norm_penalty', # We omit the budget constraint and instead penalize the sum of the l1 and l2 norms of the input mask, similar to one of our reviewer's papers.
+        'gamma_norm_penalty' # We omit the budget constraint and instead penalize the l1 norm of the erasure probabilities, similar to ENCO.
+    ] = 'none'):
+        experiment_dir = os.path.join(self.all_hparam_sweep_dir, f'ablation={ablation}')
+        os.makedirs(experiment_dir, exist_ok=True)
+        pretrain_classifiers = self.trial_config['all_classifiers_pretrain_htune_trial_count'] > 0
+        if not os.path.exists(os.path.join(experiment_dir, 'results.pickle')):
+            print(f'Running ALL hparam sweep with ablation: {ablation}')
             kwargs = copy(self.trial_config['default_kwargs'])
             kwargs.update(self.trial_config['classifiers_pretrain_kwargs'])
             kwargs.update(self.trial_config['all_kwargs'])
+            if ablation == 'none':
+                classifier_pretrain_hparam_sweep_dir = os.path.join(self.all_hparam_sweep_dir, 'ablation=none', 'pretrained_classifiers')
+            elif ablation == 'cooperative':
+                kwargs.update({'adversarial_mode': False})
+                classifier_pretrain_hparam_sweep_dir = os.path.join(self.all_hparam_sweep_dir, 'ablation=none', 'pretrained_classifiers')
+            elif ablation == 'noconditioning':
+                kwargs.update({'omit_classifier_conditioning': True})
+                classifier_pretrain_hparam_sweep_dir = os.path.join(self.all_hparam_sweep_dir, 'ablation=noconditioning', 'pretrained_classifiers')
+            elif ablation == 'two_stage':
+                pretrain_classifiers = False
+            elif ablation == 'attribution':
+                pretrain_classifiers = False
+            elif ablation == 'mask_norm_penalty':
+                kwargs.update({'penalty_style': 'mask_norm_penalty'})
+                classifier_pretrain_hparam_sweep_dir = os.path.join(self.all_hparam_sweep_dir, 'ablation=none', 'pretrained_classifiers')
+            elif ablation == 'gamma_norm_penalty':
+                kwargs.update({'penalty_style': 'gamma_norm_penalty'})
+                classifier_pretrain_hparam_sweep_dir = os.path.join(self.all_hparam_sweep_dir, 'ablation=none', 'pretrained_classifiers')
+            else:
+                assert False
             all_trainer = ALLTrainer(
                 self.profiling_dataset, self.attack_dataset, default_training_module_kwargs=kwargs, reference_leakage_assessment=self.load_oracle_assessment()
             )
+            if pretrain_classifiers:
+                os.makedirs(classifier_pretrain_hparam_sweep_dir, exist_ok=True)
+                best_all_classifier_pretrain_dir = all_trainer.htune_pretrain_classifiers(
+                    classifier_pretrain_hparam_sweep_dir,
+                    trial_count=self.trial_config['all_classifiers_pretrain_htune_trial_count'],
+                    max_steps=self.trial_config['all_classifiers_pretrain_steps'],
+                    starting_seed=5
+                )
+            else:
+                best_all_classifier_pretrain_dir = None
             all_trainer.htune_leakage_localization(
-                self.all_hparam_sweep_dir,
-                pretrained_classifiers_logging_dir=os.path.join(self.all_classifiers_pretrain_dir, 'seed=0'),
+                experiment_dir,
+                pretrained_classifiers_logging_dir=best_all_classifier_pretrain_dir,
                 trial_count=self.trial_config['all_htune_trial_count'],
-                max_steps=self.trial_config['all_train_steps']
+                max_steps=self.trial_config['all_train_steps'],
+                ablation=ablation,
+                starting_seed=5 + self.trial_config['all_classifiers_pretrain_htune_trial_count']
             )
+
+    def find_optimal_all_run(self, ablation: Literal[
+        'none', # The method as described in the paper.
+        'cooperative', # Instead of training the noise generator to maximize loss -> noisier === leakier, we train it to minimize loss -> less-noisy === leakier.
+        'noconditioning', # We don't feed the input mask as an auxiliary argument to the classifier.
+        'two_stage', # We solely train the classifier for 50% of the steps, followed by solely training the noise generator for 50% of the steps.
+        'attribution', # Two-stage training without conditioning. i.e. we have converted our method into a neural net attribution method.
+        'mask_norm_penalty', # We omit the budget constraint and instead penalize the sum of the l1 and l2 norms of the input mask, similar to one of our reviewer's papers.
+        'gamma_norm_penalty' # We omit the budget constraint and instead penalize the l1 norm of the erasure probabilities, similar to ENCO.
+    ] = 'none'):
+        experiment_dir = os.path.join(self.all_hparam_sweep_dir, f'ablation={ablation}')
+        if not os.path.exists(os.path.join(experiment_dir, 'leakage_assessment_performance.npz')):
+            oracle_snr_vals, agreement_vals = [], []
+            trial_count = max(int(f.split('_')[-1]) for f in os.listdir(experiment_dir) if f.split('_')[0] == 'trial')
+            avg_leakage_assessment = np.mean(np.stack([
+                np.load(os.path.join(experiment_dir, f'trial_{trial_idx}', 'leakage_assessment.npy')) for trial_idx in range(trial_count)
+            ]), axis=0)
+            for trial_idx in range(trial_count):
+                trial_dir = os.path.join(experiment_dir, f'trial_{trial_idx}')
+                leakage_assessment = np.load(os.path.join(trial_dir, 'leakage_assessment.npy'))
+                oracle_snr = self.compute_oracle_snr_corr(leakage_assessment)
+                oracle_snr_vals.append(oracle_snr)
+                agreement_with_avg = spearmanr(avg_leakage_assessment, leakage_assessment).statistic
+                agreement_vals.append(agreement_with_avg)
+            results = dict(oracle_snr=np.array(oracle_snr_vals), agreement_vals=np.array(agreement_vals))
+            np.savez(os.path.join(experiment_dir, 'leakage_assessment_performance.npz'), **results)
+        else:
+            results = np.load(os.path.join(experiment_dir, 'leakage_assessment_performance.npz'), allow_pickle=True)
+        fig, ax = plt.subplots(1, 1, figsize=(PLOT_WIDTH, PLOT_WIDTH))
+        sorted_indices = np.argsort(results['oracle_snr'])
+        #ax.plot(results['oracle_snr'][sorted_indices], results['fwd_dnno'][sorted_indices], color='blue', marker='.', linestyle='none', **PLOT_KWARGS)
+        #ax.plot(results['oracle_snr'][sorted_indices], results['rev_dnno'][sorted_indices], color='red', marker='.', linestyle='none', **PLOT_KWARGS)
+        ax.plot(results['oracle_snr'][sorted_indices], results['agreement_vals'][sorted_indices], color='green', marker='.', linestyle='none', **PLOT_KWARGS)
+        ax.set_xlabel('Oracle SNR')
+        ax.set_ylabel('Proxy performance evaluation')
+        fig.tight_layout()
+        fig.savefig(os.path.join(experiment_dir, 'selection.png'), **SAVEFIG_KWARGS)
+
+        best_idx = np.argmax(results['agreement_vals'])
+        best_leakage_assessment = np.load(os.path.join(experiment_dir, f'trial_{best_idx}', 'leakage_assessment.npy'))
+        self.plot_assessment_vs_oracle_leakage(best_leakage_assessment, os.path.join(experiment_dir, 'visualization.png'))
+
+        with open(os.path.join(experiment_dir, f'trial_{best_idx}', 'hparams.json'), 'r') as f:
+            hparams = json.load(f)
+        return hparams
+    
+    def find_best_all_classifiers_pretrain_dir(self):
+        base_dir = os.path.join(self.all_hparam_sweep_dir, 'ablation=none', 'pretrained_classifiers')
+        if os.path.exists(os.path.join(base_dir, 'results.pickle')):
+            with open(os.path.join(base_dir, 'results.pickle'), 'rb') as f:
+                results = pickle.load(f)
+            best_idx = np.argmin(results['min_rank'])
+            dir = os.path.join(base_dir, f'trial_{best_idx}')
+            return dir
+        else:
+            return None
+    
+    def get_best_all_model(self, oracle=False, ablation='none'):
+        experiment_dir = os.path.join(self.all_hparam_sweep_dir, f'ablation={ablation}')
+        
+
+    def run_all_trial(self, logging_dir: str, override_hparams: Optional[dict] = None):
+        override_hparams = override_hparams or {}
+        kwargs = copy(self.trial_config['default_kwargs'])
+        kwargs.update(self.trial_config['classifiers_pretrain_kwargs'])
+        kwargs.update(self.trial_config['all_kwargs'])
+        trainer = ALLTrainer(self.profiling_dataset, self.attack_dataset, default_training_module_kwargs=kwargs, reference_leakage_assessment=self.load_oracle_assessment())
+        if self.trial_config['all_classifiers_pretrain_htune_trial_count'] > 0:
+            classifiers_pretrain_dir = self.find_best_all_classifiers_pretrain_dir()
+        else:
+            classifiers_pretrain_dir = None
+        trainer.run(logging_dir, pretrained_classifiers_logging_dir=classifiers_pretrain_dir, max_steps=self.trial_config['all_train_steps'], override_kwargs=override_hparams)
+
+    def evaluate_all_hparam_sensitivity(self):
+        gamma_bar_vals = np.arange(0.05, 1.0, 0.05)
+        theta_lr_scalar_vals = np.logspace(-1, 1, 11)
+        etat_lr_scalar_vals = np.logspace(-1, 1, 11)
+
+        for seed in range(self.seed_count):
+            for gamma_bar in gamma_bar_vals:
+                trial_dir = os.path.join(self.all_sensitivity_analysis_dir, f'seed={seed}', f'gamma_bar={gamma_bar}')
+                if not os.path.exists(os.path.join(trial_dir, 'leakage_assessment.npy')):
+                    hparams = self.find_best_all_hparams()
+                    hparams.update({'gamma_bar': gamma_bar})
+                    set_seed(seed)
+                    self.run_all_trial(trial_dir, hparams)
+            for theta_lr_scalar in theta_lr_scalar_vals:
+                for etat_lr_scalar in etat_lr_scalar_vals:
+                    if not os.path.exists(os.path.join(trial_dir, 'leakage_assessment.npy')):
+                        trial_dir = os.path.join(self.all_sensitivity_analysis_dir, f'seed={seed}', f'theta_lr_sc={theta_lr_scalar}__etat_lr_sc={etat_lr_scalar}')
+                        hparams = self.find_best_all_hparams()
+                        hparams.update({'theta_lr': theta_lr_scalar*hparams['theta_lr'], 'etat_lr': etat_lr_scalar*hparams['etat_lr']})
+                        set_seed(seed)
+                        self.run_all_trial(trial_dir, hparams)
+
+        # Plot performance vs. gamma_bar
+        os.makedirs(self.plots_for_paper_dir, exist_ok=True)
+        optimal_hparams = self.find_best_all_hparams()
+        gamma_bar_sweep_perf = np.full((self.seed_count, len(gamma_bar_vals)), np.nan, dtype=np.float32)
+        for seed in range(self.seed_count):
+            for idx, gamma_bar in enumerate(gamma_bar_vals):
+                trial_dir = os.path.join(self.all_sensitivity_analysis_dir, f'seed={0}', f'gamma_bar={gamma_bar}')
+                leakage_assessment = np.load(os.path.join(trial_dir, 'leakage_assessment.npy'))
+                gamma_bar_sweep_perf[seed, idx] = self.compute_oracle_snr_corr(leakage_assessment)
+        assert np.all(np.isfinite(gamma_bar_sweep_perf))
+        fig, ax = plt.subplots(figsize=(PLOT_WIDTH, PLOT_WIDTH))
+        chosen_idx = np.argmin(np.abs(gamma_bar_vals - optimal_hparams['gamma_bar']))
+        ax.errorbar(gamma_bar_vals, gamma_bar_sweep_perf.mean(axis=0), gamma_bar_sweep_perf.std(axis=0), fmt='.', markersize=2, color='blue', ecolor='blue')
+        ax.plot(gamma_bar_vals[chosen_idx], gamma_bar_sweep_perf.mean(axis=0)[chosen_idx], linestyle='none', color='blue', markersize=5, marker='*', **PLOT_KWARGS)
+        ax.axhline(0, color='black', linestyle='--')
+        ax.set_xlabel(r'Budget hyperparameter: $\overline{\gamma}$')
+        ax.set_ylabel(r'Agreement with oracle $\uparrow$')
+        ax.set_title(r'Performance of ALL vs. budget hyperparameter $\overline{\gamma}$')
+        fig.tight_layout()
+        fig.savefig(os.path.join(self.plots_for_paper_dir, f'{self.dataset_name}_sensitivity_to_gammabar.pdf'), **SAVEFIG_KWARGS)
+        plt.close(fig)
+
+        lr_scalar_sweep_perf = np.full((self.seed_count, len(theta_lr_scalar_vals), len(etat_lr_scalar_vals)), np.nan, dtype=np.float32)
+        for seed in range(self.seed_count):
+            for tidx, theta_lr_scalar in enumerate(theta_lr_scalar_vals):
+                for eidx, etat_lr_scalar in enumerate(etat_lr_scalar_vals):
+                    trial_dir = os.path.join(self.all_sensitivity_analysis_dir, f'seed={seed}', f'theta_lr_sc={theta_lr_scalar}__etat_lr_sc={etat_lr_scalar}')
+                    leakage_assessment = np.load(os.path.join(trial_dir, 'leakage_assessment.npy'))
+                    lr_scalar_sweep_perf[seed, tidx, eidx] = self.compute_oracle_snr_corr(leakage_assessment)
+        assert np.all(np.isfinite(lr_scalar_sweep_perf))
+        fig, ax = plt.subplots(figsize=(PLOT_WIDTH, PLOT_WIDTH))
+        contour = ax.contourf(optimal_hparams['theta_lr']*theta_lr_scalar_vals, optimal_hparams['etat_lr']*etat_lr_scalar_vals, lr_scalar_sweep_perf.mean(axis=0), levels=50)
+        for x in contour.collections:
+            x.set_rasterized(True)
+        ax.set_xscale('log')
+        ax.set_yscale('log')
+        ax.set_xlabel(r'Learning rate for $\boldsymbol{\theta}$')
+        ax.set_ylabel(r'Learning rate for $\tilde{\boldsymbol{\eta}}$')
+        ax.set_title(r'Performance of ALL vs. learning rates of $\boldsymbol{\theta}$ and $\tilde{\boldsymbol{\eta}}$')
+        plt.colorbar(contour, label=r'Agreement with oracle $\uparrow$')
+        fig.tight_layout()
+        fig.savefig(os.path.join(self.plots_for_paper_dir, f'{self.dataset_name}_sensitivity_to_lr.pdf'), **SAVEFIG_KWARGS)
+        plt.close(fig)
+    
+    def plot_all_hparam_sweep(self):
+        plot_hparam_sweep_results(self.all_hparam_sweep_dir)
     
     def __call__(self,
         compute_random: bool = False,
         compute_1o_parametric_stats: bool = False,
-        run_all_hparam_sweep: bool = False
+        run_supervised_hparam_sweep: bool = False,
+        do_supervised_training: bool = False,
+        run_supervised_attribution: bool = False,
+        run_all_hparam_sweep: bool = False,
+        run_all: bool = False,
+        eval_all_sensitivity: bool = False
     ):
         self.construct_datasets()
         if compute_1o_parametric_stats:
@@ -196,5 +575,18 @@ class Trial:
         if compute_random:
             self.compute_random_assessment()
             self.plot_random_assessment()
+        if run_supervised_hparam_sweep:
+            self.run_supervised_hparam_sweep()
+        if do_supervised_training:
+            self.run_supervised_trials_for_attribution()
+            self.run_supervised_trials_for_selection()
+        if run_supervised_attribution:
+            self.run_supervised_attribution()
         if run_all_hparam_sweep:
-            self.run_all_hparam_sweep()
+            for ablation in ['none']: #, 'cooperative', 'noconditioning', 'mask_norm_penalty', 'gamma_norm_penalty']:
+                self.run_all_hparam_sweep(ablation)
+            #self.plot_all_hparam_sweep()
+        if run_all:
+            self.find_optimal_all_run()
+        if eval_all_sensitivity:
+            self.evaluate_all_hparam_sensitivity()

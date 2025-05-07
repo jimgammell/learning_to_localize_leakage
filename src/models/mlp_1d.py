@@ -11,7 +11,10 @@ class MultilayerPerceptron_1d(nn.Module):
         layer_count: int = 3,
         hidden_dim: int = 500,
         output_bottleneck: bool = False,
-        noise_conditional: bool = False
+        noise_conditional: bool = False,
+        input_dropout: float = 0.1,
+        hidden_dropout: float = 0.2,
+        output_dropout: float = 0.3
     ):
         super().__init__()
         self.input_shape = input_shape
@@ -20,13 +23,19 @@ class MultilayerPerceptron_1d(nn.Module):
         self.hidden_dim = hidden_dim
         self.output_bottleneck = output_bottleneck
         self.noise_conditional = noise_conditional
+        self.input_dropout = input_dropout
+        self.hidden_dropout = hidden_dropout
+        self.output_dropout = output_dropout
         
         modules = []
+        modules.append(('input_dropout', nn.Dropout(self.input_dropout)))
         modules.append(('dense_in', nn.Linear(2*np.prod(self.input_shape) if self.noise_conditional else np.prod(self.input_shape), self.hidden_dim)))
         modules.append(('act_in', nn.ReLU()))
         for layer_num in range(1, self.layer_count+1):
+            modules.append((f'dropout_h{layer_num}', nn.Dropout(self.hidden_dropout)))
             modules.append((f'dense_h{layer_num}', nn.Linear(self.hidden_dim, self.hidden_dim if not(self.output_bottleneck and layer_num==self.layer_count) else 2)))
             modules.append((f'act_h{layer_num}', nn.ReLU()))
+        modules.append(('output_dropout', nn.Dropout(self.output_dropout)))
         modules.append(('dense_out', nn.Linear(self.hidden_dim if not(self.output_bottleneck) else 2, self.output_classes)))
         self.model = nn.Sequential(OrderedDict(modules))
         for mod in self.modules():

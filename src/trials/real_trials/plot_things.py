@@ -1,4 +1,7 @@
 from typing import Union, Dict
+from collections import defaultdict
+import json
+import pickle
 
 import numpy as np
 from matplotlib import pyplot as plt
@@ -69,4 +72,52 @@ def plot_oracle_assessment(oracle_assessment: Dict[str, np.ndarray], dest: str, 
     ax.legend()
     fig.tight_layout()
     fig.savefig(dest, **SAVEFIG_KWARGS)
+    plt.close(fig)
+
+def plot_hparam_sweep_results(base_dir: str):
+    results = defaultdict(list)
+    for subdir in os.listdir(base_dir):
+        if not os.path.exists(os.path.join(base_dir, subdir, 'training_curves.pickle')):
+            continue
+        with open(os.path.join(base_dir, subdir, 'training_curves.pickle'), 'rb') as f:
+            training_curves = pickle.load(f)
+        with open(os.path.join(base_dir, subdir, 'hparams.json'), 'r') as f:
+            hparams = json.load(f)
+        oracle_snr_corr = training_curves['oracle_snr_corr'][1][-1]
+        results['oracle_snr_corr'].append(oracle_snr_corr)
+        for key, val in hparams.items():
+            results[key].append(val)
+    results.update({key: np.array(val) for key, val in results.items() if all(isinstance(x, float) for x in val)})
+    
+    fig, ax = plt.subplots(figsize=(PLOT_WIDTH, PLOT_WIDTH))
+    ax.hist(
+        [results['oracle_snr_corr'][idx] for idx in range(len(results['oracle_snr_corr'])) if results['gradient_estimator'][idx] == 'gumbel'],
+        color='blue', alpha=0.5, label='CONCRETE'
+    )
+    ax.hist(
+        [results['oracle_snr_corr'][idx] for idx in range(len(results['oracle_snr_corr'])) if results['gradient_estimator'][idx] == 'reinmax'],
+        color='red', alpha=0.5, label='ReinMax'
+    )
+    ax.set_xlabel('Oracle SNR correlation')
+    ax.set_ylabel('Count')
+    ax.legend()
+    fig.tight_layout()
+    fig.savefig(os.path.join(base_dir, 'gradient_estimator_comp.png'), **SAVEFIG_KWARGS)
+    plt.close(fig)
+
+    results = {key: np.array([val[idx] for idx in range(len(results['oracle_snr_corr'])) if results['gradient_estimator'][idx] == 'gumbel']) for key, val in results.items()}
+    fig, axes = plt.subplots(1, 4, figsize=(4*PLOT_WIDTH, PLOT_WIDTH))
+    axes[0].plot(results['theta_lr'], results['oracle_snr_corr'], '.')
+    axes[1].plot(results['etat_lr'], results['oracle_snr_corr'], '.')
+    axes[2].plot(results['theta_lr']/results['etat_lr'], results['oracle_snr_corr'], '.')
+    axes[3].plot(results['gamma_bar'], results['oracle_snr_corr'], '.')
+    axes[0].set_xscale('log')
+    axes[1].set_xscale('log')
+    axes[2].set_xscale('log')
+    axes[0].set_xlabel(r'$\theta$ learning rate')
+    axes[1].set_xlabel(r'$\tilde{\eta}$ learning rate')
+    axes[2].set_xlabel('learning rate ratio')
+    axes[3].set_xlabel(r'budget $\overline{\gamma}$')
+    fig.tight_layout()
+    fig.savefig(os.path.join(base_dir, 'sweep_summary.png'), **SAVEFIG_KWARGS)
     plt.close(fig)

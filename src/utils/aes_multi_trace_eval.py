@@ -22,7 +22,7 @@ class ReshapeOutput(nn.Module):
         return logits
 
 class AESMultiTraceEvaluator:
-    def __init__(self, dataloader: DataLoader, model: Union[nn.Module, str, os.PathLike], seed: Optional[int] = None, device: Optional[str] = None, dataset_name: Literal['dpav4', 'aes_hd', 'ascadv1_fixed', 'ascadv1_variable'] = 'dpav4'):
+    def __init__(self, dataloader: DataLoader, model: Union[nn.Module, str, os.PathLike], seed: Optional[int] = None, device: Optional[str] = None, dataset_name: Literal['dpav4', 'aes-hd', 'ascadv1-fixed', 'ascadv1-variable'] = 'dpav4'):
         self.dataloader = dataloader
         base_dataset = self.dataloader.dataset
         while isinstance(base_dataset, Subset):
@@ -49,9 +49,9 @@ class AESMultiTraceEvaluator:
         self.dataset_name = dataset_name
         if self.dataset_name == 'dpav4':
             from datasets.dpav4 import to_key_preds
-        elif self.dataset_name == 'aes_hd':
+        elif self.dataset_name == 'aes-hd':
             from datasets.aes_hd import to_key_preds
-        elif self.dataset_name in ['ascadv1_fixed', 'ascadv1_variable']:
+        elif self.dataset_name in ['ascadv1-fixed', 'ascadv1-variable']:
             from datasets.ascadv1 import to_key_preds
         else:
             raise NotImplementedError
@@ -84,7 +84,7 @@ class AESMultiTraceEvaluator:
                     key_logits = self.to_key_preds(logits[idx, :], np.stack([ciphertext_11[idx], ciphertext_7[idx]]))
                     key_logitss[save_idx, :] = key_logits
                     ground_truth_keys[save_idx] = keys[idx]
-            elif self.dataset_name in ['ascadv1_fixed', 'ascadv1_variable']:
+            elif self.dataset_name in ['ascadv1-fixed', 'ascadv1-variable']:
                 plaintexts = metadata['plaintext'].numpy()
                 keys = metadata['key'].numpy()
                 for idx in range(batch_size):

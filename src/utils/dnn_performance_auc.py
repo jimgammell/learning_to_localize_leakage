@@ -1,5 +1,6 @@
 from typing import *
 import numpy as np
+from scipy.stats import spearmanr
 import torch
 from torch import nn
 from torch.utils.data import Dataset, DataLoader
@@ -71,7 +72,7 @@ def compute_dnn_performance_auc(
             idx += 1
     mask = torch.zeros(1, timesteps_per_trace, dtype=torch.float, device=device)
     ranks = []
-    for index_cluster in indices:
+    for index_cluster in indices: #[:timesteps_per_trace//10]:
         mask[:, index_cluster] = 1.
         masked_traces = mask.unsqueeze(0)*traces
         if multi_classifiers:

@@ -34,7 +34,8 @@ class DataModule(L.LightningDataModule):
         data_var: Optional[Union[float, Sequence[float]]] = None,
         dataloader_kwargs: dict = {},
         uniform_noise_len: float = 0.0,
-        gaussian_noise_std: float = 0.0
+        gaussian_noise_std: float = 0.0,
+        num_workers: Optional[int] = None
     ):
         super().__init__()
         self.profiling_dataset = copy(profiling_dataset)
@@ -49,6 +50,7 @@ class DataModule(L.LightningDataModule):
         self.dataloader_kwargs = dataloader_kwargs
         self.uniform_noise_len = uniform_noise_len
         self.gaussian_noise_std = gaussian_noise_std
+        self.num_workers = num_workers if num_workers is not None else max(os.cpu_count()//4, 1)
         self.train_indices = self.val_indices = None
         self.setup('')
     
@@ -79,10 +81,10 @@ class DataModule(L.LightningDataModule):
         set_transforms(self.val_dataset, self.data_transform, self.target_transform)
         set_transforms(self.attack_dataset, self.data_transform, self.target_transform)
         dataloader_kwargs = {
-            'num_workers': max(os.cpu_count()//4, 1),
+            'num_workers': self.num_workers,
             'pin_memory': True,
-            'persistent_workers': True,
-            'prefetch_factor': 4
+            'persistent_workers': self.num_workers > 0,
+            'prefetch_factor': 4 if self.num_workers > 0 else None
         }
         dataloader_kwargs.update(self.dataloader_kwargs)
         self.dataloader_kwargs = dataloader_kwargs

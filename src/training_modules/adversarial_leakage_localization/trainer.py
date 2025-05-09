@@ -219,6 +219,8 @@ class Trainer:
             pickle.dump(results, f)
     
     def eval_model(self, model_dir: str, pretrained_classifiers_dir: str, output_dir: str, epoch_count: int = 5):
+        seed = 0
+        set_seed(seed)
         data_module = DataModule(
             self.profiling_dataset,
             self.attack_dataset,
@@ -227,21 +229,22 @@ class Trainer:
         module = Module.load_from_checkpoint(os.path.join(model_dir, 'final_checkpoint.ckpt'))
         pretrained_classifier_module = Module.load_from_checkpoint(os.path.join(pretrained_classifiers_dir, 'best_checkpoint.ckpt'))
         module.cmi_estimator.load_state_dict(pretrained_classifier_module.cmi_estimator.state_dict())
-        gamma_bar = 0.5
-        module.selection_mechanism.gamma_bar = gamma_bar
-        nn.init.constant_(module.selection_mechanism.log_C, log(module.hparams.timesteps_per_trace) + log(gamma_bar) - log1p(-gamma_bar))
-        trainer = LightningTrainer(
-            max_steps=1,
-            val_check_interval=1.,
-            default_root_dir=output_dir,
-            accelerator='gpu',
-            devices=1,
-            logger=TensorBoardLogger(output_dir, name='lightning_output'),
-            callbacks=[],
-            enable_checkpointing=False
-        )
-        for _ in range(epoch_count):
+        val_ranks = []
+        for gamma_bar in np.arange(0.05, 1.0, 0.05):
+            module.selection_mechanism.gamma_bar = gamma_bar
+            nn.init.constant_(module.selection_mechanism.log_C, log(module.hparams.timesteps_per_trace) + log(gamma_bar) - log1p(-gamma_bar))
+            trainer = LightningTrainer(
+                max_steps=1,
+                val_check_interval=1.,
+                default_root_dir=output_dir,
+                accelerator='gpu',
+                devices=1,
+                logger=TensorBoardLogger(output_dir, name='lightning_output'),
+                callbacks=[],
+                enable_checkpointing=False
+            )
             trainer.validate(module, datamodule=data_module)
-        training_curves = get_training_curves(output_dir)
-        val_rank = np.mean(training_curves['val_theta_rank'][-1])
-        return val_rank
+            training_curves = get_training_curves(output_dir)
+            val_rank = np.mean(training_curves['val_theta_rank'][-1])
+            val_ranks.append(val_rank)
+        return val_ranks

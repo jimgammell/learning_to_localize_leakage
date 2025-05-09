@@ -33,10 +33,14 @@ class Module(L.LightningModule):
         assert self.hparams.timesteps_per_trace is not None
         if self.hparams.lr_scheduler_name is None:
             self.hparams.lr_scheduler_name = 'NoOpLRSched'
+        self.hparams.classifier_kwargs.update({
+            'input_dropout': self.hparams.input_dropout,
+            'hidden_dropout': self.hparams.hidden_dropout,
+            'output_dropout': self.hparams.output_dropout
+        })
         self.classifier = models.load(
             self.hparams.classifier_name, input_shape=(1, self.hparams.timesteps_per_trace),
-            output_classes=self.hparams.class_count, input_dropout=self.hparams.input_dropout, hidden_dropout=self.hparams.hidden_dropout,
-            output_dropout=self.hparams.output_dropout, **self.hparams.classifier_kwargs
+            output_classes=self.hparams.class_count, **self.hparams.classifier_kwargs
         )
     
     def configure_optimizers(self):

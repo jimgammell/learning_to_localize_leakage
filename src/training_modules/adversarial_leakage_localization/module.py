@@ -117,6 +117,7 @@ class Module(lightning.LightningModule):
             assert False
         self.theta_lr_scheduler = theta_lr_scheduler_constructor(self.theta_optimizer, total_steps=self.total_steps, **self.hparams.theta_lr_scheduler_kwargs)
         self.etat_lr_scheduler = etat_lr_scheduler_constructor(self.etat_optimizer, total_steps=self.total_steps, **self.hparams.etat_lr_scheduler_kwargs)
+        self.step_idx = 0
         rv = [
             {'optimizer': self.theta_optimizer, 'lr_scheduler': {'scheduler': self.theta_lr_scheduler, 'interval': 'step'}},
             {'optimizer': self.etat_optimizer, 'lr_scheduler': {'scheduler': self.etat_lr_scheduler, 'interval': 'step'}}

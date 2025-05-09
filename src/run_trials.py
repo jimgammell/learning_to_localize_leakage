@@ -26,12 +26,13 @@ def main():
     synthetic_parser = subparsers.add_parser('run-synthetic-trials')
     real_parser = subparsers.add_parser('run-real-trials')
     real_sub_assessments = [
-        'compute_random', 'compute_1o_parametric_stats', 'run_supervised_hparam_sweep', 'do_supervised_training', 'run_supervised_attribution',
+        'compute_random', 'compute_1o_parametric_stats', 'run_supervised_trials', 'run_supervised_hparam_sweep', 'do_supervised_training', 'run_supervised_attribution',
         'run_all_hparam_sweep', 'run_all', 'eval_all_sensitivity'
     ]
     real_sub_hints = [
         'Compute and save the random leakage assessment baseline',
         'Compute and save the first-order parametric statistics-based leakage assessments',
+        'Train supervised models to use for the neural net attribution methods',
         'Do a random hyperparameter search for supervised training of the models we will use for the neural net attribution baselines.',
         'Train supervised models using the optimal hyperparameters found through the random search',
         'Run the neural network attribution methods on the trained supervised models',

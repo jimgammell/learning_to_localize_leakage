@@ -9,7 +9,8 @@ from torch.utils.data import DataLoader
 
 from common import *
 from datasets.simple_gaussian import SimpleGaussianDataset
-from training_modules.cooperative_leakage_localization import LeakageLocalizationTrainer
+from datasets.multi_xor_dataset import MultiXORDataset
+from training_modules.adversarial_leakage_localization import ALLTrainer
 from training_modules.supervised_deep_sca import SupervisedTrainer
 from utils.baseline_assessments import NeuralNetAttribution, FirstOrderStatistics
 from trials.utils import *
@@ -37,13 +38,80 @@ class Trial:
         self.seed_count = seed_count
         self.trial_count = trial_count
         self.run_kwargs = {'max_steps': 10000, 'anim_gammas': False}
-        self.supervised_kwargs = {'classifier_name': 'mlp-1d', 'classifier_kwargs': {'layer_count': 1}, 'lr': 1e-3}
+        self.supervised_kwargs = {
+            'classifier_name': 'mlp-1d', 'classifier_kwargs': {'layer_count': 1, 'input_dropout': 0.0, 'hidden_dropout': 0.0, 'output_dropout': 0.0},
+            'lr': 1e-3
+        }
         self.leakage_localization_kwargs = {
-            'classifiers_name': 'mlp-1d', 'classifiers_kwargs': {'layer_count': 1}, 'theta_lr': 1e-3, 'etat_lr': 1e-3,
-            'adversarial_mode': True, 'ent_penalty': 0., 'starting_prob': 0.5,
+            'classifiers_name': 'mlp-1d', 'classifiers_kwargs': {'layer_count': 1, 'input_dropout': 0.0, 'hidden_dropout': 0.0, 'output_dropout': 0.0},
+            'theta_lr': 1e-3, 'etat_lr': 1e-3, 'adversarial_mode': True, 'gamma_bar': 0.5,
         }
         self.run_baselines = run_baselines
     
+    def run_multi_xor_experiments(self, logging_dir, max_leaky_pair_count: int = 8, run_baselines: bool = True):
+        leakage_assessments = {key: defaultdict(list) for key in ['all', 'gradvis', 'saliency', 'lrp', 'inputxgrad']}
+        for seed in range(self.seed_count):
+            for leaky_pair_count in range(max_leaky_pair_count+1):
+                trial_dir = os.path.join(logging_dir, f'seed={seed}', f'leaky_pair_count={leaky_pair_count}', 'advll')
+                if not os.path.exists(os.path.join(trial_dir, 'leakage_assessment.npy')):
+                    set_seed(seed)
+                    profiling_dataset = MultiXORDataset(second_order_pair_count=2**leaky_pair_count)
+                    attack_dataset = MultiXORDataset(second_order_pair_count=2**leaky_pair_count)
+                    all_trainer = ALLTrainer(
+                        profiling_dataset, attack_dataset, 
+                        default_data_module_kwargs={'train_batch_size': len(profiling_dataset)//10, 'data_mean': np.array([0.0]), 'data_var': np.array([1.0]), 'num_workers': 0},
+                        default_training_module_kwargs={**self.leakage_localization_kwargs}
+                    )
+                    all_assessment = all_trainer.run(
+                        logging_dir=trial_dir,
+                        max_steps=self.run_kwargs['max_steps']
+                    )
+                else:
+                    all_assessment = np.load(os.path.join(trial_dir, 'leakage_assessment.npy'))
+                leakage_assessments['all'][leaky_pair_count].append(all_assessment)
+                trial_dir = os.path.join(logging_dir, f'seed={seed}', f'leaky_pair_count={leaky_pair_count}', 'supervised')
+                if not os.path.exists(os.path.join(trial_dir, 'leakage_assessments.npz')):
+                    set_seed(seed)
+                    profiling_dataset = MultiXORDataset(second_order_pair_count=2**leaky_pair_count)
+                    attack_dataset = MultiXORDataset(second_order_pair_count=2**leaky_pair_count)
+                    supervised_trainer = SupervisedTrainer(
+                        profiling_dataset, attack_dataset,
+                        default_data_module_kwargs={'train_batch_size': len(profiling_dataset)//10, 'data_mean': np.array([0.0]), 'data_var': np.array([1.0]), 'num_workers': 0},
+                        default_training_module_kwargs={**self.supervised_kwargs}
+                    )
+                    supervised_trainer.run(
+                        logging_dir=trial_dir,
+                        max_steps=self.run_kwargs['max_steps'],
+                        compute_leakage_assessments=True
+                    )
+                attr_leakage_assessments = np.load(os.path.join(trial_dir, 'final_leakage_assessments.npz'), allow_pickle=True)
+                for key, val in attr_leakage_assessments.items():
+                    leakage_assessments[key][leaky_pair_count].append(val)
+        for k1 in leakage_assessments:
+            for k2 in leakage_assessments[k1]:
+                leakage_assessments[k1][k2] = np.stack(leakage_assessments[k1][k2])
+        np.savez(os.path.join(logging_dir, 'leakage_assessments.npz'), **leakage_assessments)
+        return leakage_assessments
+    
+    def plot_multi_xor_experiments(self, logging_dir, leakage_assessments):
+        fig, ax = plt.subplots(1, 1, figsize=(PLOT_WIDTH, PLOT_WIDTH))
+        for method, leakage_assessments_for_method in leakage_assessments.items():
+            leaky_point_counts, negative_ranks = [], []
+            for leaky_pt_cnt, assessment in leakage_assessments_for_method.items():
+                assessment = assessment.reshape(-1)
+                negative_rank = np.sum(assessment < assessment[0]) / len(assessment)
+                leaky_point_counts.append(leaky_pt_cnt)
+                negative_ranks.append(negative_rank)
+            leaky_point_counts = 2**np.array(leaky_point_counts)
+            negative_ranks = np.array(negative_ranks)
+            ax.plot(leaky_point_counts, negative_ranks, label=method, **PLOT_KWARGS)
+        ax.set_xscale('log')
+        ax.set_xlabel(r'Leaky pair count')
+        ax.set_ylabel(r'Percentile of negative point $\downarrow$')
+        ax.legend()
+        fig.tight_layout()
+        fig.savefig(os.path.join(logging_dir, 'visualization.png'), **SAVEFIG_KWARGS)
+
     def run_experiments(self, logging_dir, dataset_kwargss, run_baselines: bool = True):
         leakage_assessments = {}
         for trial_name, dataset_kwargs in dataset_kwargss:
@@ -79,7 +147,7 @@ class Trial:
             #    default_training_module_kwargs={**self.leakage_localization_kwargs}
             #)
             #ll_trainer.pretrain_classifiers(os.path.join(logging_dir, trial_name, 'pretrain_classifiers'), max_steps=self.run_kwargs['max_steps']//2)
-            ll_trainer = LeakageLocalizationTrainer(
+            ll_trainer = ALLTrainer(
                 profiling_dataset, attack_dataset,
                 default_data_module_kwargs={'train_batch_size': len(profiling_dataset)//10},
                 default_training_module_kwargs={**self.leakage_localization_kwargs}
@@ -301,10 +369,12 @@ class Trial:
                 np.savez(os.path.join(logging_dir, 'leakage_assessments.npz'), leakage_assessments=leakage_assessments)
     
     def __call__(self):
-        self.leakage_localization_kwargs['starting_prob'] = 0.5
+        out = self.run_multi_xor_experiments(os.path.join(self.logging_dir, 'multi_xor'))
+        self.plot_multi_xor_experiments(os.path.join(self.logging_dir, 'multi_xor'), out)
+        r"""self.leakage_localization_kwargs['starting_prob'] = 0.5
         self.run_xor_var_sweep()
         self.plot_xor_var_sweep()
         self.leakage_localization_kwargs['starting_prob'] = 0.9
         self.run_1o_count_sweep()
         self.plot_1o_count_sweep()
-        self.create_main_paper_plot()
+        self.create_main_paper_plot()"""

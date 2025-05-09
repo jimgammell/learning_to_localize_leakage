@@ -292,10 +292,11 @@ class Trial:
             fig.tight_layout()
             fig.savefig(os.path.join(exp_dir, 'shuffle_loc_count_sweep.png'), **SAVEFIG_KWARGS)
     
-    def plot_main_paper_sweeps(self):
-        subsample = np.linspace(0, self.trial_count-1, 4).astype(int)
+    def plot_main_paper_sweeps(self, dest: str, dont_subsample=False):
+        subsample = np.linspace(0, self.trial_count-1, 4).astype(int) if not dont_subsample else None
+        trial_count = len(subsample) if subsample is not None else self.trial_count
         #subsample = np.arange(self.trial_count)
-        fig, axes = plt.subplots(4, len(subsample), figsize=(0.75*len(subsample)*PLOT_WIDTH, 0.75*4*PLOT_WIDTH))
+        fig, axes = plt.subplots(4, trial_count, figsize=(0.75*trial_count*PLOT_WIDTH, 0.75*4*PLOT_WIDTH))
         self.plot_1o_beta_sweep(axes[0, :], subsample)
         self.plot_1o_leaky_pt_count_sweep(axes[1, :], subsample)
         self.plot_1o_no_op_count_sweep(axes[2, :], subsample)
@@ -311,7 +312,7 @@ class Trial:
             ax.set_yticklabels(['0.', '1.'])
         fig.tight_layout()
         fig.canvas.draw_idle()
-        fig.savefig(os.path.join(self.logging_dir, 'main_paper_sweep.pdf'), **SAVEFIG_KWARGS)
+        fig.savefig(dest, **SAVEFIG_KWARGS)
     
     def run_2o_trial(self):
         exp_dir = os.path.join(self.logging_dir, '2o_trial')
@@ -332,4 +333,5 @@ class Trial:
         self.plot_1o_no_op_count_sweep()
         self.run_1o_shuffle_loc_sweep()
         self.plot_1o_shuffle_loc_sweep()
-        self.plot_main_paper_sweeps()
+        self.plot_main_paper_sweeps(os.path.join(self.logging_dir, 'main_paper_sweep.pdf'))
+        self.plot_main_paper_sweeps(os.path.join(self.logging_dir, 'full_synthetic_sweeps_for_appendix.pdf'), dont_subsample=True)

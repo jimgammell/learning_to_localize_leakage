@@ -1,7 +1,7 @@
 from typing import *
 import os
 from collections import defaultdict
-from copy import copy
+from copy import copy, deepcopy
 import numpy as np
 import torch
 from torch import nn
@@ -25,7 +25,7 @@ class ReshapeOutput(nn.Module):
 class NeuralNetAttribution:
     def __init__(self, dataloader, model: nn.Module, seed: Optional[int] = None, device: Optional[str] = None):
         self.dataloader = DataLoader(dataloader.dataset, batch_size=len(dataloader.dataset), num_workers=dataloader.num_workers)
-        self.base_model = model
+        self.base_model = deepcopy(model)
         self.device = device if device is not None else 'cuda' if torch.cuda.is_available() else 'cpu'
         self.base_model.eval()
         self.base_model.requires_grad_(False)

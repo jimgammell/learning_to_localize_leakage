@@ -15,6 +15,33 @@ from .module import Module
 from .plot_things import *
 from utils.baseline_assessments.neural_net_attribution import NeuralNetAttribution
 
+class ComputeLeakageAssessmentsCallback(Callback):
+    def __init__(self, reference_assessment: np.ndarray, total_steps: int, measurements: int = 10):
+        super().__init__()
+        self.reference_assessment = reference_assessment
+        self.total_steps = total_steps
+        self.measurement_steps = [idx*self.total_steps//measurements for idx in range(measurements)] + [self.total_steps-1]
+        self.current_step_for_assessment = 0
+    
+    def on_train_batch_end(self, trainer, pl_module, outputs, batch, batch_idx):
+        if self.current_step_for_assessment in self.measurement_steps:
+            print(self.current_step_for_assessment, self.measurement_steps)
+            attributor = NeuralNetAttribution(
+                trainer.datamodule.train_dataloader(), pl_module.classifier, seed=0, device=pl_module.device
+            )
+            assessments = {
+                'gradvis': attributor.compute_gradvis(),
+                'saliency': attributor.compute_saliency(),
+                'lrp': attributor.compute_lrp(),
+                'inputxgrad': attributor.compute_inputxgrad()
+            }
+            for assessment_name, assessment in assessments.items():
+                corr = spearmanr(self.reference_assessment, assessment.reshape(-1)).statistic
+                if np.isnan(corr): # this happens if the leakage assessment is constant -- tends to happen for poorly-fit models
+                    corr = 0.
+                pl_module.log(f'{assessment_name}_oracle_agreement', corr, on_step=True)
+        self.current_step_for_assessment += 1
+
 class Trainer:
     def __init__(self,
         profiling_dataset: Dataset,
@@ -38,7 +65,9 @@ class Trainer:
     def run(self,
         logging_dir: Union[str, os.PathLike],
         max_steps: int = 1000,
-        override_kwargs: dict = {}
+        override_kwargs: dict = {},
+        plot_metrics_over_time: bool = False,
+        compute_leakage_assessments: bool = False
     ):
         data_module = DataModule(
                 self.profiling_dataset,
@@ -51,7 +80,6 @@ class Trainer:
             os.makedirs(logging_dir)
             kwargs = copy(self.default_training_module_kwargs)
             kwargs.update(override_kwargs)
-            print(kwargs)
             training_module = Module(
                 timesteps_per_trace=self.profiling_dataset.timesteps_per_trace,
                 class_count=self.profiling_dataset.class_count,
@@ -64,6 +92,10 @@ class Trainer:
                 dirpath=logging_dir,
                 filename='early_stop_checkpoint'
             )]
+            if plot_metrics_over_time:
+                assert self.reference_leakage_assessment is not None
+                compute_assessments_callback = ComputeLeakageAssessmentsCallback(self.reference_leakage_assessment, total_steps=max_steps)
+                callbacks.append(compute_assessments_callback)
             trainer = LightningTrainer(
                 max_steps=max_steps,
                 val_check_interval=1.,
@@ -75,41 +107,42 @@ class Trainer:
             )
             trainer.fit(training_module, datamodule=data_module)
             trainer.save_checkpoint(os.path.join(logging_dir, 'final_checkpoint.ckpt'))
-        if not os.path.exists(os.path.join(logging_dir, 'final_leakage_assessments.npz')):
-            module = Module.load_from_checkpoint(os.path.join(logging_dir, 'final_checkpoint.ckpt'))
-            neural_net_attributor = NeuralNetAttribution(
-                data_module.train_dataloader(), module.classifier, device=module.device
-            )
-            final_leakage_assessments = {
-                'gradvis': neural_net_attributor.compute_gradvis().reshape(-1),
-                'saliency': neural_net_attributor.compute_saliency().reshape(-1),
-                'lrp': neural_net_attributor.compute_lrp().reshape(-1),
-                'inputxgrad': neural_net_attributor.compute_inputxgrad().reshape(-1)
-            }
-            np.savez(os.path.join(logging_dir, 'final_leakage_assessments.npz'), **final_leakage_assessments)
-        final_leakage_assessments = np.load(os.path.join(logging_dir, 'final_leakage_assessments.npz'), allow_pickle=True)
-        if not os.path.exists(os.path.join(logging_dir, 'early_stop_leakage_assessments.npz')):
-            module = Module.load_from_checkpoint(os.path.join(logging_dir, 'early_stop_checkpoint.ckpt'))
-            neural_net_attributor = NeuralNetAttribution(
-                data_module.train_dataloader(), module.classifier, device=module.device
-            )
-            early_stop_leakage_assessments = {
-                'gradvis': neural_net_attributor.compute_gradvis().reshape(-1),
-                'saliency': neural_net_attributor.compute_saliency().reshape(-1),
-                'lrp': neural_net_attributor.compute_lrp().reshape(-1),
-                'inputxgrad': neural_net_attributor.compute_inputxgrad().reshape(-1)
-            }
-            np.savez(os.path.join(logging_dir, 'early_stop_leakage_assessments.npz'), **early_stop_leakage_assessments)
-        early_stop_leakage_assessments = np.load(os.path.join(logging_dir, 'early_stop_leakage_assessments.npz'), allow_pickle=True)
+        if compute_leakage_assessments:
+            if not os.path.exists(os.path.join(logging_dir, 'final_leakage_assessments.npz')):
+                module = Module.load_from_checkpoint(os.path.join(logging_dir, 'final_checkpoint.ckpt'))
+                neural_net_attributor = NeuralNetAttribution(
+                    data_module.train_dataloader(), module.classifier, device=module.device
+                )
+                final_leakage_assessments = {
+                    'gradvis': neural_net_attributor.compute_gradvis().reshape(-1),
+                    'saliency': neural_net_attributor.compute_saliency().reshape(-1),
+                    'lrp': neural_net_attributor.compute_lrp().reshape(-1),
+                    'inputxgrad': neural_net_attributor.compute_inputxgrad().reshape(-1)
+                }
+                np.savez(os.path.join(logging_dir, 'final_leakage_assessments.npz'), **final_leakage_assessments)
+            final_leakage_assessments = np.load(os.path.join(logging_dir, 'final_leakage_assessments.npz'), allow_pickle=True)
+            if not os.path.exists(os.path.join(logging_dir, 'early_stop_leakage_assessments.npz')):
+                module = Module.load_from_checkpoint(os.path.join(logging_dir, 'early_stop_checkpoint.ckpt'))
+                neural_net_attributor = NeuralNetAttribution(
+                    data_module.train_dataloader(), module.classifier, device=module.device
+                )
+                early_stop_leakage_assessments = {
+                    'gradvis': neural_net_attributor.compute_gradvis().reshape(-1),
+                    'saliency': neural_net_attributor.compute_saliency().reshape(-1),
+                    'lrp': neural_net_attributor.compute_lrp().reshape(-1),
+                    'inputxgrad': neural_net_attributor.compute_inputxgrad().reshape(-1)
+                }
+                np.savez(os.path.join(logging_dir, 'early_stop_leakage_assessments.npz'), **early_stop_leakage_assessments)
+            early_stop_leakage_assessments = np.load(os.path.join(logging_dir, 'early_stop_leakage_assessments.npz'), allow_pickle=True)
         training_curves = get_training_curves(logging_dir)
         save_training_curves(training_curves, logging_dir)
         plot_training_curves(logging_dir)
-        if self.reference_leakage_assessment is not None:
+        r"""if self.reference_leakage_assessment is not None:
             rv = {
                 **{f'final_{key}': spearmanr(self.reference_leakage_assessment.reshape(-1), assessment.reshape(-1)).statistic for key, assessment in final_leakage_assessments.items()},
                 **{f'early_stop_{key}': spearmanr(self.reference_leakage_assessment.reshape(-1), assessment.reshape(-1)).statistic for key, assessment in early_stop_leakage_assessments.items()}
             }
-            return rv
+            return rv"""
     
     def hparam_tune(self,
         logging_dir: Union[str, os.PathLike],

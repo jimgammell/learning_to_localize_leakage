@@ -48,7 +48,7 @@ class Trial:
         }
         self.run_baselines = run_baselines
     
-    def run_multi_xor_experiments(self, logging_dir, max_leaky_pair_count: int = 8, run_baselines: bool = True):
+    def run_multi_xor_experiments(self, logging_dir, max_leaky_pair_count: int = 12, run_baselines: bool = True):
         leakage_assessments = {key: defaultdict(list) for key in ['all', 'gradvis', 'saliency', 'lrp', 'inputxgrad']}
         for seed in range(self.seed_count):
             for leaky_pair_count in range(max_leaky_pair_count+1):

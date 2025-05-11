@@ -1,16 +1,31 @@
 from typing import Dict, Any, Optional, Literal
 import os
+from collections import defaultdict
 import pickle
 import json
+from tqdm import tqdm
 
 import numpy as np
+from scipy.stats import spearmanr
+from matplotlib import pyplot as plt
 from torch.utils.data import Dataset, DataLoader
 
 from common import *
+from datasets.data_module import DataModule
 from training_modules.supervised_deep_sca import SupervisedTrainer, SupervisedModule
 from utils.aes_multi_trace_eval import AESMultiTraceEvaluator
 from utils.baseline_assessments.neural_net_attribution import NeuralNetAttribution
 from utils.baseline_assessments.occpoi import OccPOI
+from . import evaluation_methods
+
+def get_dataloader(profiling_dataset: Dataset, attack_dataset: Dataset, split: Literal['profile', 'attack'], **kwargs):
+    data_module = DataModule(profiling_dataset, attack_dataset, **kwargs)
+    if split == 'profile':
+        return data_module.profiling_dataloader()
+    elif split == 'attack':
+        return data_module.test_dataloader()
+    else:
+        assert False
 
 def load_trained_supervised_model(
     model_dir: str, as_lightning_module: bool = False
@@ -33,7 +48,9 @@ def train_supervised_model(
 ):
     if training_kwargs is None:
         training_kwargs = {}
-    trainer = SupervisedTrainer(profiling_dataset, attack_dataset, default_training_module_kwargs=training_kwargs, reference_leakage_assessment=reference_leakage_assessment)
+    trainer = SupervisedTrainer(
+        profiling_dataset, attack_dataset, default_training_module_kwargs=training_kwargs, reference_leakage_assessment=reference_leakage_assessment
+    )
     set_seed(seed)
     start_event = torch.cuda.Event(enable_timing=True)
     end_event = torch.cuda.Event(enable_timing=True)
@@ -42,7 +59,8 @@ def train_supervised_model(
     end_event.record()
     torch.cuda.synchronize()
     elapsed_time = start_event.elapsed_time(end_event)
-    np.save(os.path.join(output_dir, 'training_time.npy'), elapsed_time)
+    if not os.path.exists(os.path.join(output_dir, 'training_time.npy')):
+        np.save(os.path.join(output_dir, 'training_time.npy'), elapsed_time)
 
 # Train 50 supervised models on the dataset of interest
 def run_supervised_hparam_sweep(
@@ -54,43 +72,86 @@ def run_supervised_hparam_sweep(
     max_steps: int = 1000, # number of training steps per trial
     starting_seed: int = 0 # each trial will use the seed trial_idx+starting_seed
 ):
-    if training_kwargs is None:
-        training_kwargs = {}
-    trainer = SupervisedTrainer(profiling_dataset, attack_dataset, default_training_module_kwargs=training_kwargs)
-    trainer.hparam_tune(output_dir, trial_count=trial_count, max_steps=max_steps, starting_seed=starting_seed)
+    if not os.path.exists(os.path.join(output_dir, 'results.pickle')):
+        if training_kwargs is None:
+            training_kwargs = {}
+        trainer = SupervisedTrainer(profiling_dataset, attack_dataset, default_training_module_kwargs=training_kwargs)
+        trainer.hparam_tune(output_dir, trial_count=trial_count, max_steps=max_steps, starting_seed=starting_seed)
 
-def get_best_supervised_model_hparams(sweep_dir: str):
+def get_best_supervised_model_hparams(sweep_dir: str, profiling_dataset: Dataset, attack_dataset: Dataset, dataset_name: str, reference_leakage_assessment: np.ndarray):
     best_model_dir = None
     best_val_rank, best_val_loss = float('inf'), float('inf')
-    for model_dir in os.listdir(sweep_dir):
+    dirpaths = [os.path.join(sweep_dir, x) for x in os.listdir(sweep_dir) if x.split('_')[0] == 'trial']
+    print('Finding best supervised model...')
+    results = defaultdict(list)
+    for model_dir in tqdm(dirpaths):
         assert 'training_curves.pickle' in os.listdir(os.path.join(sweep_dir, model_dir))
         assert 'early_stop_checkpoint.ckpt' in os.listdir(os.path.join(sweep_dir, model_dir))
         with open(os.path.join(sweep_dir, model_dir, 'training_curves.pickle'), 'rb') as f:
             training_curves = pickle.load(f)
         val_rank_over_time = training_curves['val_rank'][-1]
         val_loss_over_time = training_curves['val_loss'][-1]
-        early_stop_idx = np.argmin(val_rank)
+        early_stop_idx = np.argmin(val_rank_over_time)
         val_rank = val_rank_over_time[early_stop_idx]
         val_loss = val_loss_over_time[early_stop_idx]
         if (val_rank < best_val_rank) or (val_rank == best_val_rank and val_loss < best_val_loss):
             best_model_dir = model_dir
             best_val_rank = val_rank
             best_val_loss = val_loss
+        attribute_neural_net(
+            model_dir, profiling_dataset, attack_dataset, dataset_name,
+            compute_gradvis=True, compute_saliency=True, compute_inputxgrad=True, compute_lrp=True, compute_occlusion=[1]
+        )
+        def record_result(key):
+            assessment = np.load(os.path.join(model_dir, f'{key}.npz'))['attribution']
+            if assessment.std() == 0:
+                results[key].append(0.)
+            else:
+                results[key].append(spearmanr(assessment, reference_leakage_assessment).statistic)
+        for key in ['gradvis', 'saliency', 'lrp', 'inputxgrad', '1-occlusion']:
+            record_result(key)
     with open(os.path.join(best_model_dir, 'hparams.json'), 'r') as f:
         best_hparams = json.load(f)
+    print(f'Best supervised trial stored in {best_model_dir} with hyperparameters {best_hparams}')
+    fig, axes = plt.subplots(1, 5, figsize=(5*PLOT_WIDTH, PLOT_WIDTH))
+    for (key, val), ax in zip(results.items(), axes):
+        ax.hist(val, color='blue')
+        ax.set_label('Oracle agreement')
+        ax.set_ylabel('Count')
+        ax.set_title(key)
+    fig.tight_layout()
+    fig.savefig(os.path.join(sweep_dir, 'oracle_agreement_histograms.png'))
+    plt.close(fig)
     return best_hparams
 
 # Create plots showing the performance of a trained supervised model
-def eval_on_attack_dataset(model_dir: str, attack_dataset: Dataset, dataset_name: str):
-    if os.path.exists(os.path.join(model_dir, 'attack_performance.npy')):
-        rv = np.load(os.path.join(model_dir, 'attack_performance.npy'))
+def eval_on_attack_dataset(model_dir: str, profile_dataset: Dataset, attack_dataset: Dataset, dataset_name: str):
+    if dataset_name in ['ascadv1-fixed', 'ascadv1-variable', 'aes-hd', 'dpav4']:
+        if os.path.exists(os.path.join(model_dir, 'attack_performance.npy')):
+            rv = np.load(os.path.join(model_dir, 'attack_performance.npy'))
+        else:
+            dataloader = get_dataloader(profile_dataset, attack_dataset, split='attack')
+            model = load_trained_supervised_model(model_dir, as_lightning_module=False)
+            evaluator = AESMultiTraceEvaluator(dataloader, model, seed=0, dataset_name=dataset_name)
+            rv = evaluator(get_rank_over_time=True)
+            np.save(os.path.join(model_dir, 'attack_performance.npy'), rv)
+        fig, ax = plt.subplots(1, 1, figsize=(PLOT_WIDTH, PLOT_WIDTH))
+        ax.plot(np.arange(1, len(rv)+1), rv, color='blue')
+        ax.set_xlabel('Traces seen')
+        ax.set_ylabel('Rank of correct key')
+        ax.set_xscale('log')
+        ax.set_yscale('log')
+        fig.tight_layout()
+        fig.savefig(os.path.join(model_dir, 'attack_performance.png'))
+        plt.close(fig)
+    if os.path.exists(os.path.join(model_dir, 'attack_rank_and_loss.npy')):
+        loss, rank = np.load(os.path.join(model_dir, 'attack_rank_and_loss.npy'))
     else:
-        dataloader = DataLoader(attack_dataset, batch_size=len(attack_dataset), num_workers=4, dataset_named=dataset_name)
+        dataloader = get_dataloader(profile_dataset, attack_dataset, split='attack')
         model = load_trained_supervised_model(model_dir, as_lightning_module=False)
         evaluator = AESMultiTraceEvaluator(dataloader, model, seed=0, dataset_name=dataset_name)
-        rv = evaluator()
-        np.save(os.path.join(model_dir, 'attack_performance.npy'), rv)
-    return rv
+        loss, rank = evaluator(get_rank_over_time=False)
+        np.save(os.path.join(model_dir, 'attack_rank_and_loss.npy'), np.array([loss, rank]))
 
 # Compute various neural net attribution leakage assessments given a trained model directory
 def attribute_neural_net(
@@ -99,8 +160,8 @@ def attribute_neural_net(
     compute_lrp: bool = False, compute_occlusion: List[int] = [], compute_second_order_occlusion: List[int] = [],
     compute_occpoi: bool = False, compute_extended_occpoi: bool = False
 ):
-    profiling_dataloader = DataLoader(profiling_dataset, batch_size=len(profiling_dataset), num_workers=4)
-    attack_dataloader = DataLoader(attack_dataset, batch_size=len(attack_dataset), num_workers=4)
+    profiling_dataloader = get_dataloader(profiling_dataset, attack_dataset, split='profile')
+    attack_dataloader = get_dataloader(attack_dataset, attack_dataset, split='profile')
     model = load_trained_supervised_model(model_dir, as_lightning_module=False)
     neural_net_attributor = NeuralNetAttribution(profiling_dataloader, model, seed=0, device='cuda' if torch.cuda.is_available() else 'cpu')
     occpoi_computor = OccPOI(attack_dataloader, model, seed=0, device='cuda' if torch.cuda.is_available() else 'cpu', dataset_name=dataset_name)
@@ -117,18 +178,108 @@ def attribute_neural_net(
             rv = {'attribution': attribution, 'elapsed_time': elapsed_time}
             np.savez(os.path.join(model_dir, filename), **rv)
     if compute_gradvis:
-        compute_attribution(lambda: neural_net_attributor.compute_gradvis(), 'gradvis.npz')
+        compute_attribution(neural_net_attributor.compute_gradvis, 'gradvis.npz')
     if compute_saliency:
-        compute_attribution(lambda: neural_net_attributor.compute_saliency(), 'saliency.npz')
+        compute_attribution(neural_net_attributor.compute_saliency, 'saliency.npz')
     if compute_inputxgrad:
-        compute_attribution(lambda: neural_net_attributor.compute_inputxgrad(), 'occpoi.npz')
+        compute_attribution(neural_net_attributor.compute_inputxgrad, 'inputxgrad.npz')
     if compute_lrp:
-        compute_attribution(lambda: neural_net_attributor.compute_lrp(), 'lrp.npz')
+        compute_attribution(neural_net_attributor.compute_lrp, 'lrp.npz')
     for window_size in compute_occlusion:
         compute_attribution(lambda: neural_net_attributor.compute_n_occlusion(window_size), f'{window_size}-occlusion.npz')
     for window_size in compute_second_order_occlusion:
         compute_attribution(lambda: neural_net_attributor.compute_second_order_occlusion(window_size=window_size), f'{window_size}-second-order-occlusion.npz')
     if compute_occpoi:
         compute_attribution(lambda: occpoi_computor(extended=False), 'occpoi.npz')
-    if compute_extended_occpoi:
+    if False: #compute_extended_occpoi:
         compute_attribution(lambda: occpoi_computor(extended=True), 'extended-occpoi.npz')
+
+def evaluate_model_performance(
+    base_dir: str
+):
+    print(f'Computing attack performance for models in {base_dir}')
+    model_dirs = [os.path.join(base_dir, x) for x in os.listdir(base_dir) if x.split('=')[0] == 'seed']
+    if all(os.path.exists(os.path.join(x, 'attack_performance.npy')) for x in model_dirs):
+        rank_over_time_curves = np.stack([
+            np.load(os.path.join(x, 'attack_performance.npy')) for x in model_dirs if os.path.exists(os.path.join(x, 'attack_performance.npy'))
+        ])
+        traces_to_disclosure = np.stack([
+            np.nonzero(x-1)[0][-1] + 1 if len(np.nonzero(x-1)) > 0 else 1 for x in rank_over_time_curves
+        ])
+        print(f'\tTraces to AES key disclosure: {traces_to_disclosure.mean()} +/- {traces_to_disclosure.std()}')
+    losses_and_ranks = np.stack([
+        np.load(os.path.join(x, 'attack_rank_and_loss.npy')) for x in model_dirs
+    ])
+    losses = losses_and_ranks[:, 0]
+    ranks = losses_and_ranks[:, 1]
+    print(f'\tLoss: {losses.mean()} +/- {losses.std()}')
+    print(f'\tRanks: {ranks.mean()} +/- {ranks.std()}')
+
+def evaluate_leakage_assessments(
+    base_dir: str, oracle_assessment: np.ndarray
+):
+    attr_filenames =  ['gradvis', 'saliency', 'inputxgrad', 'lrp', 'occpoi', 'extended-occpoi', '1-occlusion', '1-second-order-occlusion']
+    model_dirs = [os.path.join(base_dir, x) for x in os.listdir(base_dir) if x.split('=')[0] == 'seed']
+    assessments = defaultdict(list)
+    elapsed_times = defaultdict(list)
+    assessments_over_time = defaultdict(list)
+    model_training_times = []
+    for model_dir in model_dirs:
+        model_training_times.append(np.load(os.path.join(model_dir, 'training_time.npy')))
+        for attr_filename in attr_filenames:
+            if os.path.exists(os.path.join(model_dir, f'{attr_filename}.npz')):
+                res = np.load(os.path.join(model_dir, f'{attr_filename}.npz'), allow_pickle=True)
+                assessments[attr_filename].append(res['attribution'])
+                elapsed_times[attr_filename].append(res['elapsed_time'])
+        with open(os.path.join(model_dir, 'training_curves.pickle'), 'rb') as f:
+            training_curves = pickle.load(f)
+        for method in ['gradvis', 'inputxgrad', 'lrp', 'saliency']:
+            assessments_over_time[method].append(training_curves[f'{method}_oracle_agreement'][1])
+    assessments = {key: np.stack(val) for key, val in assessments.items()}
+    elapsed_times = {key: np.stack(val) for key, val in elapsed_times.items()}
+    model_training_times = np.array(model_training_times)
+    assessments_over_time = {key: np.stack(val) for key, val in assessments_over_time.items()}
+    print(f'Base model training time: {model_training_times.mean()} +/- {model_training_times.std()}')
+    for attr_filename in assessments:
+        osnr_scores = [spearmanr(x, oracle_assessment).statistic for x in assessments[attr_filename]]
+        osnr_scores = np.array([0. if np.isnan(x) else x for x in osnr_scores])
+        times = 1e-3*elapsed_times[attr_filename]/60
+        print(f'Method: {attr_filename}')
+        print(f'\tOracle agreement: {osnr_scores.mean()} +/- {osnr_scores.std()}')
+        print(f'\tElapsed time: {times.mean()} +/- {times.std()}')
+
+    fig, axes = plt.subplots(2, len(assessments)//2, figsize=(len(assessments)*PLOT_WIDTH//2, 2*PLOT_WIDTH))
+    for ax, (assessment_name, assessment) in zip(axes.flatten(), assessments.items()):
+        for _assessment in assessment:
+            ax.plot(oracle_assessment, _assessment, marker='.', linestyle='none', markersize=1)
+        ax.set_xlabel('Oracle leakiness')
+        ax.set_ylabel('Estimated leakiness')
+        ax.set_title(assessment_name)
+        ax.set_xscale('log')
+        ax.set_yscale('log')
+    fig.savefig(os.path.join(base_dir, 'assessments_vs_oracle.png'))
+    plt.close(fig)
+
+    fig, axes = plt.subplots(2, len(assessments)//2, figsize=(len(assessments)*PLOT_WIDTH//2, 2*PLOT_WIDTH))
+    for ax, (assessment_name, assessment) in zip(axes.flatten(), assessments.items()):
+        ax.fill_between(np.arange(assessment.shape[1]), assessment.mean(axis=0)-assessment.std(axis=0), assessment.mean(axis=0)+assessment.std(axis=0), color='blue', alpha=0.25)
+        ax.plot(assessment.mean(axis=0), marker='.', markersize=1, linestyle='none', color='blue')
+        ax.set_xlabel('Timestep')
+        ax.set_ylabel('Estimated leakiness')
+        ax.set_title(assessment_name)
+    fig.tight_layout()
+    fig.savefig(os.path.join(base_dir, 'assessments.png'))
+    plt.close(fig)
+
+    fig, ax = plt.subplots(1, 1, figsize=(PLOT_WIDTH, PLOT_WIDTH))
+    colors = ['red', 'green', 'blue', 'purple']
+    for (assessment_name, assessment), color in zip(assessments_over_time.items(), colors):
+        mean, std = assessment.mean(axis=0), assessment.std(axis=0)
+        ax.fill_between(np.arange(len(mean)), mean-std, mean+std, alpha=0.25, color=color)
+        ax.plot(mean, marker='.', linestyle='none', color=color, label=assessment_name)
+    ax.set_xlabel('Training steps')
+    ax.set_ylabel('Agreement with oracle')
+    ax.legend()
+    fig.tight_layout()
+    fig.savefig(os.path.join(base_dir, 'assessments_over_time.png'))
+    plt.close(fig)

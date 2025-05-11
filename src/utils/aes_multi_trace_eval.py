@@ -54,17 +54,33 @@ class AESMultiTraceEvaluator:
         elif self.dataset_name in ['ascadv1-fixed', 'ascadv1-variable']:
             from datasets.ascadv1 import to_key_preds
         else:
-            raise NotImplementedError
+            to_key_preds = None
         self.to_key_preds = to_key_preds
     
+    @torch.no_grad()
+    def get_loss_and_rank(self):
+        losses, ranks = [], []
+        for batch_idx, (trace, label, _) in enumerate(self.dataloader):
+            trace = trace.to(self.device)
+            logits = self.model(trace).cpu()
+            loss = nn.functional.cross_entropy(logits, label)
+            rank = get_rank(logits, label).mean()
+            losses.append(loss.item())
+            ranks.append(rank.item())
+        return np.mean(losses), np.mean(ranks)
+
     @torch.no_grad()
     def get_key_predictions(self):
         key_logitss = np.full((len(self.dataloader.dataset), 256), np.nan, dtype=np.float32)
         ground_truth_keys = np.full((len(self.dataloader.dataset),), -1, dtype=np.int64)
+        losses = []
         for batch_idx, (trace, label, metadata) in enumerate(self.dataloader):
             trace = trace.to(self.device)
             batch_size = trace.shape[0]
-            logits = self.model(trace).cpu().numpy()
+            logits = self.model(trace).cpu()
+            loss = nn.functional.cross_entropy(logits, label)
+            losses.append(loss.detach().cpu().item())
+            logits = logits.numpy()
             if self.dataset_name == 'dpav4':
                 plaintexts = metadata['plaintext'].numpy()
                 keys = metadata['key'].numpy()
@@ -75,7 +91,7 @@ class AESMultiTraceEvaluator:
                     key_logits = self.to_key_preds(logits[idx, :], np.stack([plaintexts[idx], offsets[idx]]), np.stack([mask]))
                     key_logitss[save_idx, :] = key_logits
                     ground_truth_keys[save_idx] = keys[idx]
-            elif self.dataset_name == 'aes_hd':
+            elif self.dataset_name == 'aes-hd':
                 ciphertext_11 = metadata['ciphertext_11'].numpy()
                 ciphertext_7 = metadata['ciphertext_7'].numpy()
                 keys = metadata['key'].numpy()
@@ -112,7 +128,11 @@ class AESMultiTraceEvaluator:
         assert np.all(np.isfinite(accumulated_predictions)) and np.all(rank_over_time > -1)
         return rank_over_time
     
-    def __call__(self):
-        logitss, ground_truth_keys = self.get_key_predictions()
-        rank_over_time = self.get_rank_over_time(logitss, ground_truth_keys)
-        return rank_over_time
+    def __call__(self, get_rank_over_time: bool = True):
+        if get_rank_over_time:
+            logitss, ground_truth_keys = self.get_key_predictions()
+            rank_over_time = self.get_rank_over_time(logitss, ground_truth_keys)
+            return rank_over_time
+        else:
+            loss, rank = self.get_loss_and_rank()
+            return loss, rank

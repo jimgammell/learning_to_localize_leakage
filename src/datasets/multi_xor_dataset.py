@@ -37,18 +37,18 @@ class MultiXORDataset(Dataset):
         labels = np.random.randint(2, size=(self.buffer_size,), dtype=np.int64)
         random_features = (
             np.random.randn(self.buffer_size, 1, self.random_feature_count).astype(np.float32)
-            + (2*np.random.randint(2, size=(self.buffer_size, 1, self.random_feature_count)).astype(np.float32)+1)
+            + (2*np.random.randint(2, size=(self.buffer_size, 1, self.random_feature_count)).astype(np.float32)-1)
         )
         if self.random_feature_count > 0:
             masks = np.random.randint(2, size=(self.buffer_size, self.second_order_pair_count), dtype=np.int64)
             masked_labels = labels.reshape(self.buffer_size, 1) ^ masks
             mask_features = (
                 np.random.randn(self.buffer_size, 1, self.second_order_pair_count).astype(np.float32)
-                + (2*masks.reshape(self.buffer_size, 1, self.second_order_pair_count).astype(np.float32)+1)
+                + (2*masks.reshape(self.buffer_size, 1, self.second_order_pair_count).astype(np.float32)-1)
             )
             masked_label_features = (
                 np.random.randn(self.buffer_size, 1, self.second_order_pair_count).astype(np.float32)
-                + (2*masked_labels.reshape(self.buffer_size, 1, self.second_order_pair_count).astype(np.float32)+1)
+                + (2*masked_labels.reshape(self.buffer_size, 1, self.second_order_pair_count).astype(np.float32)-1)
             )
             datapoints = np.concatenate([random_features, mask_features, masked_label_features], axis=2)
             return datapoints, labels

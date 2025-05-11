@@ -77,6 +77,7 @@ class DataModule(L.LightningDataModule):
             self.val_indices = indices[self.train_length:]
         self.train_dataset = Subset(copy(self.profiling_dataset), self.train_indices)
         self.val_dataset = Subset(copy(self.profiling_dataset), self.val_indices)
+        set_transforms(self.profiling_dataset, self.data_transform, self.target_transform)
         set_transforms(self.train_dataset, self.aug_data_transform, self.target_transform)
         set_transforms(self.val_dataset, self.data_transform, self.target_transform)
         set_transforms(self.attack_dataset, self.data_transform, self.target_transform)
@@ -89,6 +90,9 @@ class DataModule(L.LightningDataModule):
         dataloader_kwargs.update(self.dataloader_kwargs)
         self.dataloader_kwargs = dataloader_kwargs
     
+    def profiling_dataloader(self):
+        return DataLoader(self.profiling_dataset, batch_size=self.eval_batch_size, shuffle=False, **self.dataloader_kwargs)
+
     def train_dataloader(self, override_batch_size=None, override_aug_batch_size=None):
         train_batch_size = min(self.train_batch_size if override_batch_size is None else override_batch_size, len(self.train_dataset))
         train_dataloader = DataLoader(self.train_dataset, batch_size=train_batch_size, shuffle=True, **self.dataloader_kwargs)

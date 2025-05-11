@@ -23,5 +23,13 @@ supervised_training_kwargs:
   output_dropout: 0.3
 classifiers_pretrain_kwargs:
   classifiers_name: mlp-1d
+  classifiers_kwargs:
+    input_dropout: 0.0
+    hidden_dropout: 0.0
+    output_dropout: 0.0
 all_kwargs:
   classifiers_name: mlp-1d
+  classifiers_kwargs:
+    input_dropout: 0.0
+    hidden_dropout: 0.0
+    output_dropout: 0.0

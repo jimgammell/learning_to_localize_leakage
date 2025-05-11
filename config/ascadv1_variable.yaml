@@ -8,6 +8,19 @@ all_htune_trial_count: 40
 default_kwargs: {}
 supervised_training_kwargs:
   classifier_name: mlp-1d
+  classifier_kwargs:
+    layer_count: 3
+    hidden_dim: 500
+  lr_scheduler_name: null
+  lr_scheduler_kwargs: {}
+  lr: 2.e-4
+  beta_1: 0.9
+  beta_2: 0.999
+  eps: 1.e-8
+  weight_decay: 1.e-2
+  input_dropout: 0.1
+  hidden_dropout: 0.2
+  output_dropout: 0.3
 classifiers_pretrain_kwargs:
   classifiers_name: mlp-1d
   classifiers_kwargs:

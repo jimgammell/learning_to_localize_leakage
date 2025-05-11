@@ -18,6 +18,7 @@ from datasets.data_module import DataModule
 from training_modules.supervised_deep_sca import SupervisedTrainer, SupervisedModule
 from training_modules.adversarial_leakage_localization import ALLTrainer, ALLModule
 from . import supervised_experiment_methods
+from . import all_experiment_methods
 
 class Trial:
     def __init__(self,
@@ -216,6 +217,20 @@ class Trial:
         rev_dnno = auc_rv['reverse_dnn_auc']
         return fwd_dnno, rev_dnno
     
+    def get_dataloader(self, split: Literal['train', 'val', 'profile', 'attack'] = 'train', seed=0):
+        set_seed(seed)
+        data_module = DataModule(self.profiling_dataset, self.attack_dataset)
+        if split == 'train':
+            return data_module.train_dataloader()
+        elif split == 'val':
+            return data_module.val_dataloader()
+        elif split == 'profile':
+            return data_module.profiling_dataloader()
+        elif split == 'attack':
+            return data_module.test_dataloader()
+        else:
+            assert False
+    
     def eval_all_assessment(self, assessment_dir, seed: int = 0):
         output_dir = os.path.join(assessment_dir, 'eval_output')
         kwargs = copy(self.trial_config['default_kwargs'])
@@ -247,7 +262,9 @@ class Trial:
             trial_count=self.trial_config['supervised_htune_trial_count'], max_steps=self.trial_config['supervised_train_steps'], starting_seed=base_seed
         )
         base_seed += self.trial_config['supervised_htune_trial_count']
-        best_supervised_hparams = supervised_experiment_methods.get_best_supervised_model_hparams(self.supervised_hparam_sweep_dir)
+        best_supervised_hparams = supervised_experiment_methods.get_best_supervised_model_hparams(
+            self.supervised_hparam_sweep_dir, self.profiling_dataset, self.attack_dataset, self.dataset_name, self.load_oracle_assessment()
+        )
         base_supervised_kwargs.update(best_supervised_hparams)
         for seed in range(base_seed, base_seed + self.seed_count):
             supervised_experiment_methods.train_supervised_model(
@@ -261,14 +278,36 @@ class Trial:
                 model_dir, self.profiling_dataset, self.attack_dataset, training_kwargs=base_supervised_kwargs,
                 max_steps=self.trial_config['supervised_train_steps'], seed=seed, reference_leakage_assessment=self.load_oracle_assessment()
             )
-            if self.dataset_name in ['ascadv1-fixed', 'ascadv1-variable', 'aes-hd', 'dpav4']:
-                supervised_experiment_methods.eval_on_attack_dataset(model_dir, self.attack_dataset, self.dataset_name)
+            supervised_experiment_methods.eval_on_attack_dataset(model_dir, self.profiling_dataset, self.attack_dataset, self.dataset_name)
             supervised_experiment_methods.attribute_neural_net(
                 model_dir, self.profiling_dataset, self.attack_dataset, self.dataset_name,
                 compute_gradvis=True, compute_saliency=True, compute_inputxgrad=True,
-                compute_lrp=True, compute_occlusion=np.arange(1, 23, 2), compute_second_order_occlusion=[1],
-                compute_occpoi=True, compute_extended_occpoi=True
+                compute_lrp=True, compute_occlusion=np.arange(1, 23, 2), compute_second_order_occlusion=[],
+                compute_occpoi=True, compute_extended_occpoi=False
             )
+        supervised_experiment_methods.evaluate_model_performance(self.supervised_attribution_dir)
+        supervised_experiment_methods.evaluate_leakage_assessments(self.supervised_attribution_dir, self.load_oracle_assessment())
+    
+    def run_all_trials(self):
+        base_seed = 0
+        kwargs = copy(self.trial_config['default_kwargs'])
+        kwargs.update(self.trial_config['classifiers_pretrain_kwargs'])
+        kwargs.update(self.trial_config['all_kwargs'])
+        all_experiment_methods.run_all_hparam_sweep(
+            self.all_hparam_sweep_dir, self.profiling_dataset, self.attack_dataset, training_kwargs=kwargs,
+            classifiers_pretrain_trial_count=self.trial_config['all_classifiers_pretrain_htune_trial_count'],
+            trial_count=self.trial_config['all_htune_trial_count'],
+            max_classifiers_pretrain_steps=self.trial_config['all_classifiers_pretrain_steps'],
+            max_steps=self.trial_config['all_train_steps'],
+            starting_seed=base_seed,
+            reference_leakage_assessment=self.load_oracle_assessment()
+        )
+        base_seed += self.trial_config['all_classifiers_pretrain_htune_trial_count'] + self.trial_config['all_htune_trial_count']
+        selection_dnn_seeds = [int(x.split('=')[1]) for x in os.listdir(self.supervised_selection_dir) if x.split('=')[0] == 'seed']
+        selection_dnn_dir = os.path.join(self.supervised_selection_dir, f'seed={selection_dnn_seeds[0]}')
+        selection_dnn = supervised_experiment_methods.load_trained_supervised_model(selection_dnn_dir)
+        selection_dataloader = self.get_dataloader(split='val', seed=selection_dnn_seeds[0])
+        all_experiment_methods.get_best_all_hparams(self.all_hparam_sweep_dir, self.load_oracle_assessment(), selection_dnn, selection_dataloader)
     
     # Random hyperparameter search for the supervised models. Search space is hard-coded in training_modules/supervised_deep_sca/trainer.py because I'm lazy.
     def run_supervised_hparam_sweep(self):
@@ -541,7 +580,7 @@ class Trial:
             hparams = json.load(f)
         return hparams
 
-    def run_all_trials(self):
+    def _run_all_trials(self):
         optimal_all_hparams = self.find_best_all_hparams()
         pretrain_classifiers = self.trial_config['all_classifiers_pretrain_htune_trial_count'] > 0
         for seed in range(self.seed_count):
@@ -727,6 +766,7 @@ class Trial:
         compute_random: bool = False,
         compute_1o_parametric_stats: bool = False,
         run_supervised_trials: bool = False,
+        run_all_trials: bool = False,
         run_supervised_hparam_sweep: bool = False,
         do_supervised_training: bool = False,
         run_supervised_attribution: bool = False,
@@ -744,6 +784,8 @@ class Trial:
             self.plot_random_assessment()
         if run_supervised_trials:
             self.run_supervised_trials()
+        if run_all_trials:
+            self.run_all_trials()
         r"""if run_supervised_hparam_sweep:
             self.run_supervised_hparam_sweep()
         if do_supervised_training:

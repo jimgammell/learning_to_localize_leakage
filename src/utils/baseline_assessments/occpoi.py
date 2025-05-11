@@ -39,7 +39,7 @@ class OccPOI:
         # Setting these values to approximately the 'traces to disclosure' shown on pg. 35 of my paper.
         #  Note that having fewer attack traces actually seems to make the method perform better.
         assert dataset_name is not None
-        if dataset_name == 'dpav4':
+        r"""if dataset_name == 'dpav4':
             attack_traces = 10
         elif dataset_name == 'ascadv1-fixed':
             attack_traces = 100
@@ -53,7 +53,9 @@ class OccPOI:
             attack_traces = 100
         else:
             assert False
-        attack_dataset = Subset(attack_dataloader.dataset, np.arange(attack_traces))
+        attack_dataset = Subset(attack_dataloader.dataset, np.arange(attack_traces))"""
+        attack_dataset = attack_dataloader.dataset
+        attack_traces = len(attack_dataset)
         #attack_dataset.dataset.traces = torch.from_numpy(attack_dataset.dataset.traces).to(device)
         self.attack_dataloader = DataLoader(attack_dataset, batch_size=attack_traces)
         if isinstance(model, str):
@@ -71,6 +73,7 @@ class OccPOI:
         self.base_model.requires_grad_(False)
         self.seed = seed
         self.device = device if device is not None else 'cuda' if torch.cuda.is_available() else 'cpu'
+        self.base_model = self.base_model.to(self.device)
         self.dataset_name = dataset_name
         self.trace_shape = (1, self.base_model.input_shape[-1])
         self.model = OccludedModel(self.base_model, [])

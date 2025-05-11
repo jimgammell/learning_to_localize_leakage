@@ -21,11 +21,9 @@ class ComputeLeakageAssessmentsCallback(Callback):
         self.reference_assessment = reference_assessment
         self.total_steps = total_steps
         self.measurement_steps = [idx*self.total_steps//measurements for idx in range(measurements)] + [self.total_steps-1]
-        self.current_step_for_assessment = 0
     
     def on_train_batch_end(self, trainer, pl_module, outputs, batch, batch_idx):
-        if self.current_step_for_assessment in self.measurement_steps:
-            print(self.current_step_for_assessment, self.measurement_steps)
+        if trainer.global_step in self.measurement_steps:
             attributor = NeuralNetAttribution(
                 trainer.datamodule.train_dataloader(), pl_module.classifier, seed=0, device=pl_module.device
             )
@@ -39,8 +37,7 @@ class ComputeLeakageAssessmentsCallback(Callback):
                 corr = spearmanr(self.reference_assessment, assessment.reshape(-1)).statistic
                 if np.isnan(corr): # this happens if the leakage assessment is constant -- tends to happen for poorly-fit models
                     corr = 0.
-                pl_module.log(f'{assessment_name}_oracle_agreement', corr, on_step=True)
-        self.current_step_for_assessment += 1
+                pl_module.log(f'{assessment_name}_oracle_agreement', corr, on_step=True, on_epoch=False)
 
 class Trainer:
     def __init__(self,

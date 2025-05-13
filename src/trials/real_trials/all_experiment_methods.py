@@ -1,6 +1,9 @@
 from typing import Optional, Dict, Any
 from collections import defaultdict
 import json
+import pickle
+from copy import copy
+from tqdm import tqdm
 
 import numpy as np
 from scipy.stats import spearmanr
@@ -49,6 +52,23 @@ def run_all_hparam_sweep(
             starting_seed=starting_seed+classifiers_pretrain_trial_count
         )
 
+def get_best_all_pretrain_hparams(sweep_dir: str):
+    trial_indices = [int(x.split('_')[1]) for x in os.listdir(sweep_dir) if x.split('_')[0] == 'trial']
+    trial_count = max(trial_indices) + 1
+    assert all(os.path.exists(os.path.join(sweep_dir, f'trial_{x}')) for x in range(trial_count))
+    best_val_rank = np.inf
+    best_hparams = None
+    for trial_idx in tqdm(range(trial_count)):
+        dirpath = os.path.join(sweep_dir, f'trial_{trial_idx}')
+        with open(os.path.join(dirpath, 'training_curves.pickle'), 'rb') as f:
+            training_curves = pickle.load(f)
+        val_rank = np.min(training_curves['val_theta_rank'][-1])
+        if val_rank < best_val_rank:
+            best_val_rank = val_rank
+            with open(os.path.join(dirpath, 'hparams.pickle'), 'rb') as f:
+                best_hparams = pickle.load(f)
+    return best_hparams
+
 def get_best_all_hparams(sweep_dir: str, oracle_assessment: np.ndarray, reference_dnn: nn.Module, reference_dataloader: Dataset):
     trial_indices = [int(x.split('_')[1]) for x in os.listdir(sweep_dir) if x.split('_')[0] == 'trial']
     trial_count = max(trial_indices) + 1
@@ -57,7 +77,7 @@ def get_best_all_hparams(sweep_dir: str, oracle_assessment: np.ndarray, referenc
         np.load(os.path.join(sweep_dir, f'trial_{trial_idx}', 'leakage_assessment.npy')) for trial_idx in range(trial_count)
     ]).mean(axis=0)
     collected_results = defaultdict(list)
-    for trial_idx in range(trial_count):
+    for trial_idx in tqdm(range(trial_count)):
         dirpath = os.path.join(sweep_dir, f'trial_{trial_idx}')
         if not os.path.exists(os.path.join(dirpath, 'metrics.npz')):
             leakage_assessment = np.load(os.path.join(dirpath, 'leakage_assessment.npy'))
@@ -93,10 +113,16 @@ def get_best_all_hparams(sweep_dir: str, oracle_assessment: np.ndarray, referenc
     fig.savefig(os.path.join(sweep_dir, 'selection_criterion.png'))
     plt.close(fig)
     
-    best_idx = np.argmin(collected_results['composite_dnno_criterion'])
-    with open(os.path.join(sweep_dir, f'trial_{best_idx}', 'hparams.json'), 'r') as f:
-        best_hparams = json.load(f)
-    return best_hparams
+    fair_best_idx = np.argmin(collected_results['composite_criterion'])
+    with open(os.path.join(sweep_dir, f'trial_{fair_best_idx}', 'hparams.json'), 'r') as f:
+        fair_best_hparams = json.load(f)
+    oracle_best_idx = np.argmax(collected_results['oracle_agreement'])
+    with open(os.path.join(sweep_dir, f'trial_{oracle_best_idx}', 'hparams.json'), 'r') as f:
+        oracle_best_hparams = json.load(f)
+    return {
+        'fair': fair_best_hparams,
+        'oracle': oracle_best_hparams
+    }
 
 def train_all_model(
     output_dir: str,
@@ -106,7 +132,8 @@ def train_all_model(
     max_steps: int = 1000,
     seed: int = 0,
     reference_leakage_assessment: Optional[np.ndarray] = None,
-    pretrain_classifiers: bool = False
+    pretrain_max_steps: int = 0,
+    pretrain_kwargs: Optional[Dict[str, Any]] = None,
 ):
     if training_kwargs is None:
         training_kwargs = {}
@@ -117,6 +144,37 @@ def train_all_model(
     start_event = torch.cuda.Event(enable_timing=True)
     end_event = torch.cuda.Event(enable_timing=True)
     start_event.record()
-    if pretrain_classifiers:
-        pass
-    assert False
+    if pretrain_max_steps > 0:
+        if pretrain_kwargs is None:
+            pretrain_kwargs = {}
+        kwargs = copy(training_kwargs)
+        kwargs.update(pretrain_kwargs)
+        trainer.pretrain_classifiers(
+            os.path.join(output_dir, 'classifier_pretraining'),
+            max_steps=pretrain_max_steps,
+            override_kwargs=kwargs
+        )
+    trainer.run(
+        os.path.join(output_dir, 'all_training'),
+        pretrained_classifiers_logging_dir=os.path.join(output_dir, 'classifier_pretraining') if pretrain_max_steps > 0 else None,
+        max_steps=max_steps,
+        anim_gammas=False,
+        reference=reference_leakage_assessment
+    )
+    end_event.record()
+    torch.cuda.synchronize()
+    elapsed_time = start_event.elapsed_time(end_event)
+    if not os.path.exists(os.path.join(output_dir, 'training_time.npy')):
+        np.save(os.path.join(output_dir, 'training_time.npy'), elapsed_time)
+
+def evaluate_all_hparam_sensitivity(
+    output_dir: str,
+    profiling_dataset: Dataset,
+    attack_dataset: Dataset,
+    training_kwargs: Optional[Dict[str, Any]] = None,
+    max_steps: int = 1000,
+    seed: int = 0,
+    reference_leakage_assessment: Optional[np.ndarray] = None,
+):
+    gamma_bar_vals = np.arange(0.05, 1.0, 0.05)
+    

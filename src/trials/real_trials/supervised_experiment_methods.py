@@ -81,7 +81,8 @@ def run_supervised_hparam_sweep(
 def get_best_supervised_model_hparams(sweep_dir: str, profiling_dataset: Dataset, attack_dataset: Dataset, dataset_name: str, reference_leakage_assessment: np.ndarray):
     best_model_dir = None
     best_val_rank, best_val_loss = float('inf'), float('inf')
-    dirpaths = [os.path.join(sweep_dir, x) for x in os.listdir(sweep_dir) if x.split('_')[0] == 'trial']
+    trial_count = max(int(x.split('_')[-1]) for x in os.listdir(sweep_dir) if x.split('_')[0] == 'trial')
+    dirpaths = [os.path.join(sweep_dir, f'trial_{x}') for x in range(trial_count)]
     print('Finding best supervised model...')
     results = defaultdict(list)
     for model_dir in tqdm(dirpaths):
@@ -110,9 +111,6 @@ def get_best_supervised_model_hparams(sweep_dir: str, profiling_dataset: Dataset
                 results[key].append(spearmanr(assessment, reference_leakage_assessment).statistic)
         for key in ['gradvis', 'saliency', 'lrp', 'inputxgrad', '1-occlusion']:
             record_result(key)
-    with open(os.path.join(best_model_dir, 'hparams.json'), 'r') as f:
-        best_hparams = json.load(f)
-    print(f'Best supervised trial stored in {best_model_dir} with hyperparameters {best_hparams}')
     fig, axes = plt.subplots(1, 5, figsize=(5*PLOT_WIDTH, PLOT_WIDTH))
     for (key, val), ax in zip(results.items(), axes):
         ax.hist(val, color='blue')
@@ -122,6 +120,19 @@ def get_best_supervised_model_hparams(sweep_dir: str, profiling_dataset: Dataset
     fig.tight_layout()
     fig.savefig(os.path.join(sweep_dir, 'oracle_agreement_histograms.png'))
     plt.close(fig)
+
+    best_indices = {
+        'classification': int(best_model_dir.split('_')[-1]),
+        **{
+            f'oracle_{method}': np.argmax(results[method]) for method in ['gradvis', 'saliency', 'lrp', 'inputxgrad', '1-occlusion']
+        }
+    }
+    best_hparams = {}
+    for name, idx in best_indices.items():
+        with open(os.path.join(sweep_dir, f'trial_{idx}', 'hparams.json'), 'r') as f:
+            hparams = json.load(f)
+        best_hparams[name] = hparams
+
     return best_hparams
 
 # Create plots showing the performance of a trained supervised model
@@ -163,8 +174,8 @@ def attribute_neural_net(
     profiling_dataloader = get_dataloader(profiling_dataset, attack_dataset, split='profile')
     attack_dataloader = get_dataloader(attack_dataset, attack_dataset, split='profile')
     model = load_trained_supervised_model(model_dir, as_lightning_module=False)
-    neural_net_attributor = NeuralNetAttribution(profiling_dataloader, model, seed=0, device='cuda' if torch.cuda.is_available() else 'cpu')
-    occpoi_computor = OccPOI(attack_dataloader, model, seed=0, device='cuda' if torch.cuda.is_available() else 'cpu', dataset_name=dataset_name)
+    neural_net_attributor = None
+    occpoi_computor = None
     def compute_attribution(attribution_fn: Callable, filename: str):
         if not os.path.exists(os.path.join(model_dir, filename)):
             set_seed(0)
@@ -178,20 +189,28 @@ def attribute_neural_net(
             rv = {'attribution': attribution, 'elapsed_time': elapsed_time}
             np.savez(os.path.join(model_dir, filename), **rv)
     if compute_gradvis:
+        neural_net_attributor = neural_net_attributor or NeuralNetAttribution(profiling_dataloader, model, seed=0, device='cuda' if torch.cuda.is_available() else 'cpu')
         compute_attribution(neural_net_attributor.compute_gradvis, 'gradvis.npz')
     if compute_saliency:
+        neural_net_attributor = neural_net_attributor or NeuralNetAttribution(profiling_dataloader, model, seed=0, device='cuda' if torch.cuda.is_available() else 'cpu')
         compute_attribution(neural_net_attributor.compute_saliency, 'saliency.npz')
     if compute_inputxgrad:
+        neural_net_attributor = neural_net_attributor or NeuralNetAttribution(profiling_dataloader, model, seed=0, device='cuda' if torch.cuda.is_available() else 'cpu')
         compute_attribution(neural_net_attributor.compute_inputxgrad, 'inputxgrad.npz')
     if compute_lrp:
+        neural_net_attributor = neural_net_attributor or NeuralNetAttribution(profiling_dataloader, model, seed=0, device='cuda' if torch.cuda.is_available() else 'cpu')
         compute_attribution(neural_net_attributor.compute_lrp, 'lrp.npz')
     for window_size in compute_occlusion:
+        neural_net_attributor = neural_net_attributor or NeuralNetAttribution(profiling_dataloader, model, seed=0, device='cuda' if torch.cuda.is_available() else 'cpu')
         compute_attribution(lambda: neural_net_attributor.compute_n_occlusion(window_size), f'{window_size}-occlusion.npz')
+        neural_net_attributor = neural_net_attributor or NeuralNetAttribution(profiling_dataloader, model, seed=0, device='cuda' if torch.cuda.is_available() else 'cpu')
     for window_size in compute_second_order_occlusion:
         compute_attribution(lambda: neural_net_attributor.compute_second_order_occlusion(window_size=window_size), f'{window_size}-second-order-occlusion.npz')
-    if compute_occpoi:
+    if False: #compute_occpoi:
+        occpoi_computor = occpoi_computor or OccPOI(attack_dataloader, model, seed=0, device='cuda' if torch.cuda.is_available() else 'cpu', dataset_name=dataset_name)
         compute_attribution(lambda: occpoi_computor(extended=False), 'occpoi.npz')
     if False: #compute_extended_occpoi:
+        occpoi_computor = occpoi_computor or OccPOI(attack_dataloader, model, seed=0, device='cuda' if torch.cuda.is_available() else 'cpu', dataset_name=dataset_name)
         compute_attribution(lambda: occpoi_computor(extended=True), 'extended-occpoi.npz')
 
 def evaluate_model_performance(

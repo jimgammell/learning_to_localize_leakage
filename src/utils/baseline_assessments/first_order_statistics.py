@@ -1,5 +1,6 @@
 from typing import *
 from copy import copy
+from tqdm import tqdm
 import numpy as np
 from torch.utils.data import Dataset, Subset
 
@@ -42,7 +43,10 @@ class FirstOrderStatistics:
         self.compute_cpa()
     
     def get_chunk_iterator(self):
-        return chunk_iterator(self.dataset, chunk_size=self.chunk_size)
+        if self.chunk_size > 1:
+            return chunk_iterator(self.dataset, chunk_size=self.chunk_size)
+        else:
+            return self.dataset
 
     def get_key_iterator(self):
         for target in self.targets:

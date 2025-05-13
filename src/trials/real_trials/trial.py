@@ -265,36 +265,42 @@ class Trial:
         best_supervised_hparams = supervised_experiment_methods.get_best_supervised_model_hparams(
             self.supervised_hparam_sweep_dir, self.profiling_dataset, self.attack_dataset, self.dataset_name, self.load_oracle_assessment()
         )
-        base_supervised_kwargs.update(best_supervised_hparams)
         for seed in range(base_seed, base_seed + self.seed_count):
+            best_classification_kwargs = copy(base_supervised_kwargs)
+            best_classification_kwargs.update(best_supervised_hparams['classification'])
             supervised_experiment_methods.train_supervised_model(
-                os.path.join(self.supervised_selection_dir, f'seed={seed}'), self.profiling_dataset, self.attack_dataset, training_kwargs=base_supervised_kwargs,
+                os.path.join(self.supervised_selection_dir, f'seed={seed}'), self.profiling_dataset, self.attack_dataset, training_kwargs=best_classification_kwargs,
                 max_steps=self.trial_config['supervised_train_steps'], seed=seed
             )
-        base_seed += self.seed_count
-        for seed in range(base_seed, base_seed + self.seed_count):
-            model_dir = os.path.join(self.supervised_attribution_dir, f'seed={seed}')
-            supervised_experiment_methods.train_supervised_model(
-                model_dir, self.profiling_dataset, self.attack_dataset, training_kwargs=base_supervised_kwargs,
-                max_steps=self.trial_config['supervised_train_steps'], seed=seed, reference_leakage_assessment=self.load_oracle_assessment()
-            )
-            supervised_experiment_methods.eval_on_attack_dataset(model_dir, self.profiling_dataset, self.attack_dataset, self.dataset_name)
-            supervised_experiment_methods.attribute_neural_net(
-                model_dir, self.profiling_dataset, self.attack_dataset, self.dataset_name,
-                compute_gradvis=True, compute_saliency=True, compute_inputxgrad=True,
-                compute_lrp=True, compute_occlusion=np.arange(1, 23, 2), compute_second_order_occlusion=[],
-                compute_occpoi=True, compute_extended_occpoi=False
-            )
-        supervised_experiment_methods.evaluate_model_performance(self.supervised_attribution_dir)
-        supervised_experiment_methods.evaluate_leakage_assessments(self.supervised_attribution_dir, self.load_oracle_assessment())
+            base_seed += 1
+        for name, hparams in best_supervised_hparams.items():
+            model_dir = os.path.join(self.supervised_attribution_dir, name)
+            print(f'Running experiments for {model_dir} with hparams {hparams}')
+            for seed in range(base_seed, base_seed + self.seed_count):
+                subdir = os.path.join(model_dir, f'seed={seed}')
+                kwargs = copy(base_supervised_kwargs)
+                kwargs.update(hparams)
+                supervised_experiment_methods.train_supervised_model(
+                    subdir, self.profiling_dataset, self.attack_dataset, training_kwargs=kwargs,
+                    max_steps=self.trial_config['supervised_train_steps'], seed=seed, reference_leakage_assessment=self.load_oracle_assessment()
+                )
+                supervised_experiment_methods.eval_on_attack_dataset(subdir, self.profiling_dataset, self.attack_dataset, self.dataset_name)
+                supervised_experiment_methods.attribute_neural_net(
+                    subdir, self.profiling_dataset, self.attack_dataset, self.dataset_name,
+                    compute_gradvis=True, compute_saliency=True, compute_inputxgrad=True,
+                    compute_lrp=True, compute_occlusion=np.arange(1, 23, 2), compute_second_order_occlusion=[],
+                    compute_occpoi=True, compute_extended_occpoi=False
+                )
+            supervised_experiment_methods.evaluate_model_performance(model_dir)
+            supervised_experiment_methods.evaluate_leakage_assessments(model_dir, self.load_oracle_assessment())
     
     def run_all_trials(self):
         base_seed = 0
-        kwargs = copy(self.trial_config['default_kwargs'])
-        kwargs.update(self.trial_config['classifiers_pretrain_kwargs'])
-        kwargs.update(self.trial_config['all_kwargs'])
+        base_all_kwargs = copy(self.trial_config['default_kwargs'])
+        base_all_kwargs.update(self.trial_config['classifiers_pretrain_kwargs'])
+        base_all_kwargs.update(self.trial_config['all_kwargs'])
         all_experiment_methods.run_all_hparam_sweep(
-            self.all_hparam_sweep_dir, self.profiling_dataset, self.attack_dataset, training_kwargs=kwargs,
+            self.all_hparam_sweep_dir, self.profiling_dataset, self.attack_dataset, training_kwargs=base_all_kwargs,
             classifiers_pretrain_trial_count=self.trial_config['all_classifiers_pretrain_htune_trial_count'],
             trial_count=self.trial_config['all_htune_trial_count'],
             max_classifiers_pretrain_steps=self.trial_config['all_classifiers_pretrain_steps'],
@@ -307,7 +313,28 @@ class Trial:
         selection_dnn_dir = os.path.join(self.supervised_selection_dir, f'seed={selection_dnn_seeds[0]}')
         selection_dnn = supervised_experiment_methods.load_trained_supervised_model(selection_dnn_dir)
         selection_dataloader = self.get_dataloader(split='val', seed=selection_dnn_seeds[0])
-        all_experiment_methods.get_best_all_hparams(self.all_hparam_sweep_dir, self.load_oracle_assessment(), selection_dnn, selection_dataloader)
+        best_all_hparams = all_experiment_methods.get_best_all_hparams(
+            self.all_hparam_sweep_dir, self.load_oracle_assessment(), selection_dnn, selection_dataloader
+        )
+        if self.trial_config['all_classifiers_pretrain_steps'] > 0:
+            best_pretrain_hparams = all_experiment_methods.get_best_all_pretrain_hparams(os.path.join(self.all_hparam_sweep_dir, 'classifiers_pretraining'))
+        else:
+            best_pretrain_hparams = None
+        for name, hparams in best_all_hparams.items():
+            model_dir = os.path.join(self.all_dir, name)
+            print(f'Running experiments for {model_dir} with hparams {hparams}')
+            for seed in range(base_seed, base_seed + self.seed_count):
+                subdir = os.path.join(model_dir, f'seed={seed}')
+                kwargs = copy(base_all_kwargs)
+                if best_pretrain_hparams is not None:
+                    kwargs.update(best_pretrain_hparams)
+                kwargs.update(hparams)
+                all_experiment_methods.train_all_model(
+                    subdir, self.profiling_dataset, self.attack_dataset, training_kwargs=kwargs,
+                    max_steps=self.trial_config['all_train_steps'], seed=seed, reference_leakage_assessment=self.load_oracle_assessment(),
+                    pretrain_max_steps=self.trial_config['all_classifiers_pretrain_steps'], pretrain_kwargs=best_pretrain_hparams
+                )
+
     
     # Random hyperparameter search for the supervised models. Search space is hard-coded in training_modules/supervised_deep_sca/trainer.py because I'm lazy.
     def run_supervised_hparam_sweep(self):

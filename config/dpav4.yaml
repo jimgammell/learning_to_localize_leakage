@@ -1,7 +1,7 @@
 dataset: dpav4
 supervised_train_steps: 10000
 supervised_htune_trial_count: 50
-all_classifiers_pretrain_steps: 10000
+all_classifiers_pretrain_steps: 0
 all_train_steps: 10000
 all_classifiers_pretrain_htune_trial_count: 0
 all_htune_trial_count: 50

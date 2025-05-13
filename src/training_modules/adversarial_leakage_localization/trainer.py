@@ -52,11 +52,10 @@ class Trainer:
             os.makedirs(logging_dir)
             kwargs = copy(self.default_training_module_kwargs)
             kwargs.update(override_kwargs)
+            kwargs.update({'gamma_bar': 0.5, 'train_etat': False})
             training_module = Module(
                 self.profiling_dataset.timesteps_per_trace,
                 self.profiling_dataset.class_count,
-                gamma_bar=0.5,
-                train_etat=False,
                 **kwargs
             )
             checkpoint = ModelCheckpoint(

@@ -1,4 +1,5 @@
 from typing import Literal, Optional
+from tqdm import tqdm
 
 import numpy as np
 from scipy.stats import spearmanr
@@ -16,13 +17,18 @@ def get_oracle_agreement(leakage_assessment, oracle_assessment):
         agreement = spearmanr(leakage_assessment.reshape(-1), oracle_assessment.reshape(-1)).statistic
     return agreement
 
+@torch.no_grad()
 def run_dnn_occlusion_test(
     leakage_assessment, model, traces, labels,
     performance_metric: Literal['mean_rank', 'traces_to_disclosure'] = 'mean_rank',
     direction: Literal['forward', 'reverse'] = 'reverse',
-    dataset_name: Optional[Literal['dpav4', 'aes-hd', 'ascasdv1-fixed', 'ascadv1-variable']] = None
+    dataset_name: Optional[Literal['dpav4', 'aes-hd', 'ascasdv1-fixed', 'ascadv1-variable']] = None,
+    parallel_pass_count: int = 50
 ):
-    device = list(model.parameters())[0].device
+    device = 'cuda' if torch.cuda.is_available() else 'cpu'
+    model = model.to(device)
+    traces = traces.to(device)
+    labels = labels.to(device)
     timesteps_per_trace = leakage_assessment.shape[-1]
     leakage_ranking = leakage_assessment.reshape(-1).argsort()
     if direction == 'forward':
@@ -31,14 +37,25 @@ def run_dnn_occlusion_test(
         assert direction == 'reverse'
     mask = torch.zeros(1, timesteps_per_trace, dtype=torch.float, device=device)
     performance = []
-    for idx in leakage_ranking:
-        mask[:, idx] = 1.
-        masked_traces = mask.unsqueeze(0)*traces
+    idx = 0
+    batch_size, *trace_dims = traces.shape
+    while idx < len(leakage_ranking):
+        masked_trace_batch = []
+        for _ in range(parallel_pass_count):
+            if idx < len(leakage_ranking):
+                mask[:, leakage_ranking[idx]] = 1.
+                masked_traces = mask.unsqueeze(0)*traces
+                masked_trace_batch.append(masked_traces)
+            idx += 1
+        _parallel_pass_count = len(masked_trace_batch)
+        masked_trace_batch = torch.stack(masked_trace_batch).reshape(batch_size*_parallel_pass_count, *trace_dims)
         if performance_metric == 'mean_rank':
-            logits = model(masked_traces)
-            rank = get_rank(logits, labels)
-            performance.append(rank)
+            logits_batch = model(masked_trace_batch).reshape(_parallel_pass_count, batch_size, -1).cpu()
+            for logits in logits_batch:
+                rank = get_rank(logits, labels)
+                performance.append(rank)
         elif performance_metric == 'traces_to_disclosure':
+            assert parallel_pass_count == 1
             assert dataset_name is not None
             dataset = TensorDataset(masked_traces, labels)
             dataloader = DataLoader(dataset, batch_size=len(traces))

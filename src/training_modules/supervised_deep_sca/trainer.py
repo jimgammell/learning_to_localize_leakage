@@ -114,7 +114,8 @@ class Trainer:
                     'gradvis': neural_net_attributor.compute_gradvis().reshape(-1),
                     'saliency': neural_net_attributor.compute_saliency().reshape(-1),
                     'lrp': neural_net_attributor.compute_lrp().reshape(-1),
-                    'inputxgrad': neural_net_attributor.compute_inputxgrad().reshape(-1)
+                    'inputxgrad': neural_net_attributor.compute_inputxgrad().reshape(-1),
+                    '1-occlusion': neural_net_attributor.compute_n_occlusion(1).reshape(-1)
                 }
                 np.savez(os.path.join(logging_dir, 'final_leakage_assessments.npz'), **final_leakage_assessments)
             final_leakage_assessments = np.load(os.path.join(logging_dir, 'final_leakage_assessments.npz'), allow_pickle=True)

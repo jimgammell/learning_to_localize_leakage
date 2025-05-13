@@ -78,7 +78,7 @@ class OccPOI:
         self.trace_shape = (1, self.base_model.input_shape[-1])
         self.model = OccludedModel(self.base_model, [])
         base_guessing_entropy = self.compute_guessing_entropy([])
-        self.lbda = base_guessing_entropy + 1 if dataset_name != 'otp' else base_guessing_entropy + 0.1 # generalizes lambda in paper to settings where we don't get down to zero guessing entropy
+        self.lbda = base_guessing_entropy + 1 if dataset_name not in ['otp', 'toy_gaussian'] else base_guessing_entropy + 0.1 # generalizes lambda in paper to settings where we don't get down to zero guessing entropy
     
     # Using the test set as part of the algorithm is problematic. But baselines should significantly outperform this regardless, so I'm leaving as-is.
     #   Probably some better options would be: 1) cut test set in half, use half here and half for evaluation so that we can still accumulate predictions
@@ -93,7 +93,7 @@ class OccPOI:
             rank_over_time = multi_trace_evaluator()
             guessing_entropy = rank_over_time[-1]
             return guessing_entropy
-        elif self.dataset_name in ['otiait', 'otp']:
+        elif self.dataset_name in ['otiait', 'otp', 'toy_gaussian']:
             trace, target = next(iter(self.attack_dataloader))
             trace, target = trace.to(self.device), target.to(self.device)
             logits = self.model(trace)

@@ -11,7 +11,7 @@ from common import *
 from datasets.simple_gaussian import SimpleGaussianDataset
 from training_modules.adversarial_leakage_localization import ALLTrainer
 from training_modules.supervised_deep_sca import SupervisedTrainer
-from utils.baseline_assessments import NeuralNetAttribution, FirstOrderStatistics
+from utils.baseline_assessments import NeuralNetAttribution, FirstOrderStatistics, OccPOI
 from trials.utils import *
 
 to_names = {
@@ -67,8 +67,6 @@ class Trial:
                     np.savez(os.path.join(trial_dir, 'leakage_assessment.npz'), **param_assessments)
                 else:
                     param_assessments = np.load(os.path.join(trial_dir, 'leakage_assessments.npz'), allow_pickle=True)
-                for key, val in param_assessments.items():
-                    leakage_assessments[key][leaky_pair_count].append(val)
                 trial_dir = os.path.join(logging_dir, f'seed={seed}', f'leaky_pair_count={leaky_pair_count}', 'advll')
                 if not os.path.exists(os.path.join(trial_dir, 'leakage_assessment.npy')):
                     set_seed(seed)
@@ -101,12 +99,14 @@ class Trial:
                         supervised_trainer = SupervisedTrainer(
                             profiling_dataset, attack_dataset,
                             default_data_module_kwargs={'train_batch_size': int(0.08*len(profiling_dataset)), 'data_mean': np.array([0.0]), 'data_var': np.array([1.0]), 'num_workers': 0},
-                            default_training_module_kwargs={**self.supervised_kwargs}
+                            default_training_module_kwargs={**self.supervised_kwargs},
+                            dataset_name='toy_gaussian'
                         )
                         supervised_trainer.run(
                             logging_dir=trial_dir,
                             max_steps=self.run_kwargs['max_steps'],
-                            compute_leakage_assessments=True
+                            compute_leakage_assessments=True,
+                            compute_occpoi=True
                         )
                     attr_leakage_assessments = np.load(os.path.join(trial_dir, 'final_leakage_assessments.npz'), allow_pickle=True)
                     for key, val in attr_leakage_assessments.items():

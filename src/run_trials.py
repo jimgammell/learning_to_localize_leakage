@@ -24,6 +24,7 @@ def main():
     download_parser.add_argument('--dataset', default=AVAILABLE_DATASETS, choices=AVAILABLE_DATASETS, nargs='*', help='Download the specified dataset(s).')
     toy_gaussian_parser = subparsers.add_parser('run-toy-gaussian-trials')
     synthetic_parser = subparsers.add_parser('run-synthetic-trials')
+    plot_parser = subparsers.add_parser('create-plots')
     real_parser = subparsers.add_parser('run-real-trials')
     real_sub_assessments = [
         'compute_random', 'compute_1o_parametric_stats', 'run_supervised_trials', 'run_all_trials',
@@ -50,20 +51,24 @@ def main():
         for dataset_name in clargs.dataset:
             print(f'\tDownloading dataset: {dataset_name}')
             download(dataset_name)
+    elif clargs.action == 'create-plots':
+        print('Creating plots for paper.')
+        from trials.real_trials.analysis_for_paper import do_analysis_for_paper
+        do_analysis_for_paper()
     else:
-        assert clargs.config_file is not None, 'Must specify a configuration file via the --config-file argument.'
-        config_filename = f'{clargs.config_file}.yaml'
-        config_filepath = os.path.join(CONFIG_DIR, config_filename)
-        with open(config_filepath, 'r') as f:
-            config = yaml.load(f, Loader=yaml.FullLoader)
         trial_name = clargs.trial_name or clargs.config_file
         trial_dir = os.path.join(OUTPUT_DIR, trial_name)
         seed_count = clargs.seed_count
         print(f'Starting trial of type `{clargs.action}`.')
-        print(f'\tConfig path: `{config_filepath}`')
         print(f'\tOutput directory: `{trial_dir}`')
         print(f'\tSeed count: {seed_count}')
         if clargs.action == 'run-real-trials':
+            assert clargs.config_file is not None, 'Must specify a configuration file via the --config-file argument.'
+            config_filename = f'{clargs.config_file}.yaml'
+            config_filepath = os.path.join(CONFIG_DIR, config_filename)
+            print(f'\tConfig path: `{config_filepath}`')
+            with open(config_filepath, 'r') as f:
+                config = yaml.load(f, Loader=yaml.FullLoader)
             from trials.real_trials import Trial
             trial = Trial(
                 dataset_name=config['dataset'],

@@ -13,7 +13,7 @@ from trials.utils import *
 from datasets.data_module import DataModule
 from .module import Module
 from .plot_things import *
-from utils.baseline_assessments.neural_net_attribution import NeuralNetAttribution
+from utils.baseline_assessments import NeuralNetAttribution
 
 class ComputeLeakageAssessmentsCallback(Callback):
     def __init__(self, reference_assessment: np.ndarray, total_steps: int, measurements: int = 10):
@@ -45,13 +45,15 @@ class Trainer:
         attack_dataset: Dataset,
         default_data_module_kwargs: dict = {},
         default_training_module_kwargs: dict = {},
-        reference_leakage_assessment: Optional[np.ndarray] = None
+        reference_leakage_assessment: Optional[np.ndarray] = None,
+        dataset_name: str = None
     ):
         self.profiling_dataset = profiling_dataset
         self.attack_dataset = attack_dataset
         self.default_data_module_kwargs = default_data_module_kwargs
         self.default_training_module_kwargs = default_training_module_kwargs
         self.reference_leakage_assessment = reference_leakage_assessment
+        self.dataset_name = dataset_name
         
         #self.data_module = DataModule(
         #    self.profiling_dataset,
@@ -64,7 +66,9 @@ class Trainer:
         max_steps: int = 1000,
         override_kwargs: dict = {},
         plot_metrics_over_time: bool = False,
-        compute_leakage_assessments: bool = False
+        compute_leakage_assessments: bool = False,
+        compute_occpoi: bool = False,
+        occl_window_sizes = []
     ):
         data_module = DataModule(
                 self.profiling_dataset,
@@ -105,22 +109,9 @@ class Trainer:
             trainer.fit(training_module, datamodule=data_module)
             trainer.save_checkpoint(os.path.join(logging_dir, 'final_checkpoint.ckpt'))
         if compute_leakage_assessments:
-            if not os.path.exists(os.path.join(logging_dir, 'final_leakage_assessments.npz')):
-                module = Module.load_from_checkpoint(os.path.join(logging_dir, 'final_checkpoint.ckpt'))
-                neural_net_attributor = NeuralNetAttribution(
-                    data_module.train_dataloader(), module.classifier, device=module.device
-                )
-                final_leakage_assessments = {
-                    'gradvis': neural_net_attributor.compute_gradvis().reshape(-1),
-                    'saliency': neural_net_attributor.compute_saliency().reshape(-1),
-                    'lrp': neural_net_attributor.compute_lrp().reshape(-1),
-                    'inputxgrad': neural_net_attributor.compute_inputxgrad().reshape(-1),
-                    '1-occlusion': neural_net_attributor.compute_n_occlusion(1).reshape(-1)
-                }
-                np.savez(os.path.join(logging_dir, 'final_leakage_assessments.npz'), **final_leakage_assessments)
-            final_leakage_assessments = np.load(os.path.join(logging_dir, 'final_leakage_assessments.npz'), allow_pickle=True)
             if not os.path.exists(os.path.join(logging_dir, 'early_stop_leakage_assessments.npz')):
                 module = Module.load_from_checkpoint(os.path.join(logging_dir, 'early_stop_checkpoint.ckpt'))
+                print('Doing neural net attribution assessments')
                 neural_net_attributor = NeuralNetAttribution(
                     data_module.train_dataloader(), module.classifier, device=module.device
                 )
@@ -128,8 +119,16 @@ class Trainer:
                     'gradvis': neural_net_attributor.compute_gradvis().reshape(-1),
                     'saliency': neural_net_attributor.compute_saliency().reshape(-1),
                     'lrp': neural_net_attributor.compute_lrp().reshape(-1),
-                    'inputxgrad': neural_net_attributor.compute_inputxgrad().reshape(-1)
+                    'inputxgrad': neural_net_attributor.compute_inputxgrad().reshape(-1),
+                    **{f'{m}-occlusion': neural_net_attributor.compute_n_occlusion(m) for m in occl_window_sizes}
                 }
+                if compute_occpoi:
+                    print('Doing OccPOI assessments')
+                    occpoi_computor = OccPOI(
+                        data_module.test_dataloader(), module.classifier, device=module.device, dataset_name=self.dataset_name
+                    )
+                    assessments = occpoi_computor()
+                    early_stop_leakage_assessments['occpoi'] = assessments.reshape(-1)
                 np.savez(os.path.join(logging_dir, 'early_stop_leakage_assessments.npz'), **early_stop_leakage_assessments)
             early_stop_leakage_assessments = np.load(os.path.join(logging_dir, 'early_stop_leakage_assessments.npz'), allow_pickle=True)
         training_curves = get_training_curves(logging_dir)

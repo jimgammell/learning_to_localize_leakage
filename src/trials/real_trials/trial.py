@@ -288,7 +288,7 @@ class Trial:
                 supervised_experiment_methods.attribute_neural_net(
                     subdir, self.profiling_dataset, self.attack_dataset, self.dataset_name,
                     compute_gradvis=True, compute_saliency=True, compute_inputxgrad=True,
-                    compute_lrp=True, compute_occlusion=np.arange(1, 23, 2), compute_second_order_occlusion=[],
+                    compute_lrp=True, compute_occlusion=np.arange(1, 23, 2), compute_second_order_occlusion=[1],
                     compute_occpoi=True, compute_extended_occpoi=False
                 )
             supervised_experiment_methods.evaluate_model_performance(model_dir)

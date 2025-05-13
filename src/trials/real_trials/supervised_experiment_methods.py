@@ -206,7 +206,7 @@ def attribute_neural_net(
         neural_net_attributor = neural_net_attributor or NeuralNetAttribution(profiling_dataloader, model, seed=0, device='cuda' if torch.cuda.is_available() else 'cpu')
     for window_size in compute_second_order_occlusion:
         compute_attribution(lambda: neural_net_attributor.compute_second_order_occlusion(window_size=window_size), f'{window_size}-second-order-occlusion.npz')
-    if False: #compute_occpoi:
+    if compute_occpoi:
         occpoi_computor = occpoi_computor or OccPOI(attack_dataloader, model, seed=0, device='cuda' if torch.cuda.is_available() else 'cpu', dataset_name=dataset_name)
         compute_attribution(lambda: occpoi_computor(extended=False), 'occpoi.npz')
     if False: #compute_extended_occpoi:

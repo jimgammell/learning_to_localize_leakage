@@ -45,12 +45,13 @@ def train_supervised_model(
     training_kwargs: Optional[Dict[str, Any]] = None,
     max_steps: int = 1000,
     seed: int = 0,
-    reference_leakage_assessment: Optional[np.ndarray] = None
+    reference_leakage_assessment: Optional[np.ndarray] = None,
+    dataset_name: Optional[str] = None
 ):
     if training_kwargs is None:
         training_kwargs = {}
     trainer = SupervisedTrainer(
-        profiling_dataset, attack_dataset, default_training_module_kwargs=training_kwargs, reference_leakage_assessment=reference_leakage_assessment
+        profiling_dataset, attack_dataset, default_training_module_kwargs=training_kwargs, reference_leakage_assessment=reference_leakage_assessment, dataset_name=dataset_name
     )
     set_seed(seed)
     start_event = torch.cuda.Event(enable_timing=True)

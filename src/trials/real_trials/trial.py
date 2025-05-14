@@ -362,7 +362,7 @@ class Trial:
                 )
         base_seed += self.seed_count
         print('Evaluating the sensitivity of ALL to hyperparameters.')
-        for seed in range(base_seed, base_seed+self.seed_count):
+        for seed in range(base_seed+3, base_seed+self.seed_count): # FIXME -- hack so I can split trials across multiple machines
             hparams = copy(base_all_kwargs)
             if best_pretrain_hparams is not None:
                 kwargs.update(best_pretrain_hparams)

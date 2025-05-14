@@ -2,6 +2,7 @@ import os
 from pathlib import Path
 from collections import defaultdict
 from math import floor, log10
+from copy import copy
 
 import numpy as np
 import pandas as pd
@@ -152,6 +153,91 @@ def plot_m_occlusion_oracle_agreement_scores(base_dir, dest):
     fig.savefig(dest, **SAVEFIG_KWARGS)
     plt.close(fig)
 
+def plot_all_sensitivity_analysis(base_dir, dest):
+    gamma_bar_sweep = defaultdict(lambda: defaultdict(list))
+    theta_lr_scalar_sweep = defaultdict(lambda: defaultdict(list))
+    etat_lr_scalar_sweep = defaultdict(lambda: defaultdict(list))
+    oracle_assessments = get_oracle_assessments(base_dir)
+    for dataset_name in DATASET_NAMES.keys():
+        oracle_assessment = oracle_assessments[dataset_name]
+        trial_dir = os.path.join(base_dir, dataset_name, 'all_sensitivity_analysis')
+        for seed in [55, 56]: # FIXME
+            if not os.path.exists(os.path.join(trial_dir, f'seed={seed}')):
+                print(f'Skipping directory {os.path.join(trial_dir, f"seed={seed}")} because it does not exist')
+                continue
+            gamma_bar_subdirs = [x for x in os.listdir(os.path.join(trial_dir, f'seed={seed}')) if x.split('=')[0] == 'gamma_bar']
+            for x in gamma_bar_subdirs:
+                gamma_bar = float(x.split('=')[1])
+                if os.path.exists(path := os.path.join(trial_dir, f'seed={seed}', x, 'all_training', 'leakage_assessment.npy')):
+                    assessment = np.load(path)
+                else:
+                    print(f'Skipping path {path} because it does not exist')
+                    continue
+                oracle_agreement = get_oracle_agreement(assessment, oracle_assessment)
+                gamma_bar_sweep[dataset_name][gamma_bar].append(oracle_agreement)
+            theta_lr_scalar_subdirs = [x for x in os.listdir(os.path.join(trial_dir, f'seed={seed}')) if x.split('=')[0] == 'theta_lr_scalar']
+            for x in theta_lr_scalar_subdirs:
+                theta_lr_scalar = float(x.split('=')[1])
+                if os.path.exists(path := os.path.join(trial_dir, f'seed={seed}', x, 'all_training', 'leakage_assessment.npy')):
+                    assessment = np.load(path)
+                else:
+                    print(f'Skipping path {path} because it does not exist')
+                    continue
+                oracle_agreement = get_oracle_agreement(assessment, oracle_assessment)
+                theta_lr_scalar_sweep[dataset_name][theta_lr_scalar].append(oracle_agreement)
+            etat_lr_sweep_subdirs = [x for x in os.listdir(os.path.join(trial_dir, f'seed={seed}')) if x.split('=')[0] == 'etat_lr_scalar']
+            for x in etat_lr_sweep_subdirs:
+                etat_lr_scalar = float(x.split('=')[1])
+                if os.path.exists(path := os.path.join(trial_dir, f'seed={seed}', x, 'all_training', 'leakage_assessment.npy')):
+                    assessment = np.load(path)
+                else:
+                    print(f'Skipping path {path} because it does not exist')
+                    continue
+                oracle_agreement = get_oracle_agreement(assessment, oracle_assessment)
+                etat_lr_scalar_sweep[dataset_name][etat_lr_scalar].append(oracle_agreement)
+    fig, axes = plt.subplots(2, 3, figsize=(3*PLOT_WIDTH, 2*PLOT_WIDTH))
+    for dataset_name, ax in zip(DATASET_NAMES.keys(), axes.flatten()):
+        ax.set_title(f'Dataset: {DATASET_NAMES[dataset_name]}')
+        theta_lr_scalar_ax = ax.twiny()
+        etat_lr_scalar_ax = ax.twiny()
+        etat_lr_scalar_ax.spines['top'].set_position(('outward', 40))
+
+        gamma_bar_vals = np.array(list(gamma_bar_sweep[dataset_name].keys()))
+        gamma_bar_agreements = np.stack(list(gamma_bar_sweep[dataset_name].values()))
+        sorted_indices = np.argsort(gamma_bar_vals)
+        gamma_bar_vals = gamma_bar_vals[sorted_indices]
+        gamma_bar_agreements = gamma_bar_agreements[sorted_indices]
+        ax.axhline(0., color='black', linestyle='--')
+        ax.fill_between(gamma_bar_vals, gamma_bar_agreements.mean(axis=1)-gamma_bar_agreements.std(axis=1), gamma_bar_agreements.mean(axis=1)+gamma_bar_agreements.std(axis=1), color='blue', alpha=0.25, **PLOT_KWARGS)
+        ax.plot(gamma_bar_vals, gamma_bar_agreements.mean(axis=1), color='blue', marker='.', linestyle='none', **PLOT_KWARGS)
+        ax.set_xlabel(r'Budget hyperparameter $\overline{\gamma}$', color='blue')
+        ax.set_ylabel('Oracle agreement')
+
+        theta_lr_scalar_vals = np.array(list(theta_lr_scalar_sweep[dataset_name].keys()))
+        theta_lr_scalar_agreements = np.stack(list(theta_lr_scalar_sweep[dataset_name].values()))
+        sorted_indices = np.argsort(theta_lr_scalar_vals)
+        theta_lr_scalar_vals = theta_lr_scalar_vals[sorted_indices]
+        theta_lr_scalar_agreements = theta_lr_scalar_agreements[sorted_indices]
+        theta_lr_scalar_ax.fill_between(theta_lr_scalar_vals, theta_lr_scalar_agreements.mean(axis=1)-theta_lr_scalar_agreements.std(axis=1), theta_lr_scalar_agreements.mean(axis=1)+theta_lr_scalar_agreements.std(axis=1), color='red', alpha=0.25, **PLOT_KWARGS)
+        theta_lr_scalar_ax.plot(theta_lr_scalar_vals, theta_lr_scalar_agreements.mean(axis=1), color='red', marker='.', linestyle='none', **PLOT_KWARGS)
+
+        print(etat_lr_scalar_sweep)
+        etat_lr_scalar_vals = np.array(list(etat_lr_scalar_sweep[dataset_name].keys()))
+        etat_lr_scalar_agreements = np.stack(list(etat_lr_scalar_sweep[dataset_name].values()))
+        sorted_indices = np.argsort(etat_lr_scalar_vals)
+        etat_lr_scalar_vals = etat_lr_scalar_vals[sorted_indices]
+        etat_lr_scalar_agreements = etat_lr_scalar_agreements[sorted_indices]
+        etat_lr_scalar_ax.fill_between(etat_lr_scalar_vals, etat_lr_scalar_agreements.mean(axis=1)-etat_lr_scalar_agreements.std(axis=1), etat_lr_scalar_agreements.mean(axis=1)+etat_lr_scalar_agreements.std(axis=1), color='green', alpha=0.25, **PLOT_KWARGS)
+        etat_lr_scalar_ax.plot(etat_lr_scalar_vals, etat_lr_scalar_agreements.mean(axis=1), color='green', marker='.', linestyle='none', **PLOT_KWARGS)
+
+        theta_lr_scalar_ax.set_xlabel(r'Learning rate of $\boldsymbol{\theta}$', color='red')
+        etat_lr_scalar_ax.set_xlabel(r'Learning rate of $\tilde{\boldsymbol{\eta}}$', color='green')
+        theta_lr_scalar_ax.set_xscale('log')
+        etat_lr_scalar_ax.set_xscale('log')
+    fig.tight_layout()
+    fig.savefig(dest, **SAVEFIG_KWARGS)
+    plt.close(fig)
+
 def get_assessments(base_dir):
     dataset_names = list(DATASET_NAMES.keys())
     assessments = {dataset_name: defaultdict(list) for dataset_name in dataset_names}
@@ -159,7 +245,7 @@ def get_assessments(base_dir):
     for dataset_name in dataset_names:
         for seed in [55, 56, 57, 58, 59]:
             sup_dir = os.path.join(base_dir, dataset_name, 'supervised_models_for_attribution', 'classification', f'seed={seed}')
-            for method_name in ['gradvis', 'inputxgrad', 'lrp', 'occpoi', 'saliency', '1-second-order-occlusion', *[f'{m}-occlusion' for m in np.arange(1, 21, 2)]]:
+            for method_name in ['gradvis', 'inputxgrad', 'lrp', 'occpoi', 'saliency', '1-second-order-occlusion', f'{OPTIMAL_WINDOW_SIZES[dataset_name]}-second-order-occlusion', *[f'{m}-occlusion' for m in np.arange(1, 21, 2)]]:
                 assessment_path = os.path.join(sup_dir, f'{method_name}.npz')
                 if not os.path.exists(assessment_path):
                     print(f'Skipping file because it does not exist: {assessment_path}')
@@ -205,9 +291,11 @@ def get_oracle_agreement_vals(base_dir):
             agreement_vals = np.array([get_oracle_agreement(_assessment, oracle_assessment) for _assessment in assessment])
             if assessment_name in data[dataset_name].keys():
                 data[dataset_name][assessment_name] = agreement_vals
-            if assessment_name.split('-')[-1] == 'occlusion':
+            if assessment_name.split('-')[-1] == 'occlusion' and 'second-order' not in assessment_name:
                 if data[dataset_name]['m-occlusion'] is None or agreement_vals.mean() >= data[dataset_name]['m-occlusion'].mean():
                     data[dataset_name]['m-occlusion'] = agreement_vals
+            if assessment_name == f'{OPTIMAL_WINDOW_SIZES[dataset_name]}-second-order-occlusion':
+                data[dataset_name]['m-second-order-occlusion'] = agreement_vals
             print(f'\t{assessment_name}: {agreement_vals.mean()} +/- {agreement_vals.std()}')
     return data
 
@@ -319,8 +407,83 @@ def create_performance_comparison_table(base_dir, dest, data):
     full_table = build_full_tabular(latex_body, n_rows=len(table))
     Path(dest).write_text(full_table)
 
+def create_toy_gaussian_plot(base_dir, dest):
+    def get_negative_rank(assessment):
+        return np.sum(assessment[1:] <= assessment[0]) / len(assessment)
+    def plot_trace(d, ax, **kwargs):
+        leaky_points = np.array(list(d.keys()))
+        negative_ranks = np.stack(list(d.values()))
+        #_kwargs = copy(kwargs)
+        #_kwargs['marker'] = 'none'
+        #ax.plot(2**leaky_points, np.median(negative_ranks, axis=1), linestyle='-', linewidth=0.25, **_kwargs)
+        ax.errorbar(
+            2**leaky_points, np.median(negative_ranks, axis=1), yerr=(np.median(negative_ranks, axis=1)-negative_ranks.min(axis=1), negative_ranks.max(axis=1)-np.median(negative_ranks, axis=1)),
+            linewidth=0.25, elinewidth=0.25, capsize=2, **kwargs
+        )
+        #for _negative_ranks in negative_ranks.transpose():
+        #    ax.plot(2**leaky_points, _negative_ranks, linestyle='none', alpha=0.25, **kwargs)
+    negative_ranks = defaultdict(lambda: defaultdict(list))
+    for seed in [0, 1, 2, 3, 4]:
+        for leaky_point_count in range(14):
+            data_dir = os.path.join(base_dir, 'toy_gaussian', 'first_order', f'seed={seed}', f'leaky_pair_count={leaky_point_count}')
+            if not os.path.exists(path := os.path.join(data_dir, 'parametric', 'param_assessments.npz')):
+                print(f'Skipping path because it does not exist: {path}')
+            param_assessments = np.load(path, allow_pickle=True)
+            for key, val in param_assessments.items():
+                negative_ranks[key][leaky_point_count].append(get_negative_rank(val))
+            if not os.path.exists(path := os.path.join(data_dir, 'advll', 'leakage_assessment.npy')):
+                print(f'Skipping path because it does not exist: {path}')
+            all_assessment = np.load(path)
+            negative_ranks['all'][leaky_point_count].append(get_negative_rank(all_assessment))
+            if not os.path.exists(path := os.path.join(data_dir, 'supervised', 'early_stop_leakage_assessments.npz')):
+                print(f'Skipping path because it does not exist: {path}')
+            sup_assessments = np.load(path, allow_pickle=True)
+            for key, val in sup_assessments.items():
+                negative_ranks[key][leaky_point_count].append(get_negative_rank(val))
+    negative_ranks = {method: {k: np.stack(v) for k, v in negative_ranks[method].items()} for method in negative_ranks.keys()}
+    fig, ax = plt.subplots(1, 1, figsize=(PLOT_WIDTH, PLOT_WIDTH))
+    ax.axhline(0.0, color='black', linestyle='--', label='Oracle')
+    ax.axhline(0.5, color='red', linestyle='--', label='Random')
+    groups = {
+        'parametric': ['snr', 'sosd', 'cpa'],
+        'gradient': ['gradvis', 'saliency', 'lrp', 'inputxgrad'],
+        'occlusion': [f'{m}-occlusion' for m in np.arange(1, 21, 2)],
+        'occpoi': ['occpoi'],
+        'all': ['all']
+    }
+    to_kwargs = {
+        'parametric': {'color': 'green', 'label': 'Best parametric', 'markersize': 5, 'marker': 'o'},
+        'gradient': {'color': 'purple', 'label': 'Best gradient-based', 'markersize': 3, 'marker': 's'},
+        'occlusion': {'color': 'cyan', 'label': r'Best $m$-occlusion', 'markersize': 5, 'marker': 'X'},
+        'occpoi': {'color': 'orange', 'label': 'OccPOI', 'markersize': 3, 'marker': 'v'},
+        'all': {'color': 'blue', 'label': 'ALL (ours)', 'markersize': 5, 'marker': '^'}
+    }
+    def get_trace_for_group(group):
+        best_trace = {leaky_point_count: np.full((5,), np.inf, dtype=np.float32) for leaky_point_count in range(14)}
+        for leaky_point_count in range(14):
+            for method in group:
+                if not leaky_point_count in negative_ranks[method]:
+                    continue
+                vals = negative_ranks[method][leaky_point_count]
+                if vals.mean() < best_trace[leaky_point_count].mean():
+                    best_trace[leaky_point_count] = vals
+            if not np.all(np.isfinite(best_trace[leaky_point_count])):
+                del best_trace[leaky_point_count]
+        return best_trace
+    for group_name, group in groups.items():
+        trace = get_trace_for_group(group)
+        plot_trace(trace, ax, **to_kwargs[group_name], **PLOT_KWARGS)
+    ax.set_xlabel(r'Number of second-order leaky pairs: $D$')
+    ax.set_ylabel(r'False negative rate $\downarrow$')
+    ax.set_xscale('log')
+    ax.legend(ncol=2, loc='upper left', framealpha=0.5, fontsize='x-small')
+    fig.tight_layout()
+    fig.savefig(dest, **SAVEFIG_KWARGS)
+
 def do_analysis_for_paper():
     fig_dir = os.path.join(OUTPUT_DIR, 'plots_for_paper')
+    create_toy_gaussian_plot(OUTPUT_DIR, os.path.join(fig_dir, 'toy_gaussian_plot.pdf'))
+    plot_all_sensitivity_analysis(OUTPUT_DIR, os.path.join(fig_dir, 'all_sensitivity_analysis.png'))
     os.makedirs(fig_dir, exist_ok=True)
     print('Plotting attack curves...')
     plot_attack_curves(OUTPUT_DIR, os.path.join(fig_dir, 'attack_curves.pdf'))
@@ -331,8 +494,8 @@ def do_analysis_for_paper():
     print('Creating oracle agreement table...')
     create_performance_comparison_table(OUTPUT_DIR, os.path.join(fig_dir, 'oracle_agreement_table'), get_oracle_agreement_vals(OUTPUT_DIR))
     print()
-    print('Creating DNN occlusion AUC table...')
+    r"""print('Creating DNN occlusion AUC table...')
     fwd_dnno_data, rev_dnno_data = get_dnn_occlusion_curves(OUTPUT_DIR)
     create_performance_comparison_table(OUTPUT_DIR, os.path.join(fig_dir, 'fwd_dnno_auc_table'), fwd_dnno_data)
     create_performance_comparison_table(OUTPUT_DIR, os.path.join(fig_dir, 'rev_dnno_auc_table'), rev_dnno_data)
-    print()
+    print()"""

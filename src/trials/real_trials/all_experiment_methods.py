@@ -133,7 +133,8 @@ def train_all_model(
     seed: int = 0,
     reference_leakage_assessment: Optional[np.ndarray] = None,
     pretrain_max_steps: int = 0,
-    pretrain_kwargs: Optional[Dict[str, Any]] = None
+    pretrain_kwargs: Optional[Dict[str, Any]] = None,
+    pretrain_classifiers_dir: Optional[str] = None
 ):
     if training_kwargs is None:
         training_kwargs = {}
@@ -144,7 +145,7 @@ def train_all_model(
     start_event = torch.cuda.Event(enable_timing=True)
     end_event = torch.cuda.Event(enable_timing=True)
     start_event.record()
-    if pretrain_max_steps > 0:
+    if (pretrain_max_steps > 0) and (pretrain_classifiers_dir is None):
         if pretrain_kwargs is None:
             pretrain_kwargs = {}
         kwargs = copy(training_kwargs)
@@ -154,9 +155,10 @@ def train_all_model(
             max_steps=pretrain_max_steps,
             override_kwargs=kwargs
         )
+        pretrain_classifiers_dir = os.path.join(output_dir, 'classifier_pretraining')
     trainer.run(
         os.path.join(output_dir, 'all_training'),
-        pretrained_classifiers_logging_dir=os.path.join(output_dir, 'classifier_pretraining') if pretrain_max_steps > 0 else None,
+        pretrained_classifiers_logging_dir=pretrain_classifiers_dir,
         max_steps=max_steps,
         anim_gammas=False,
         reference=reference_leakage_assessment
@@ -176,7 +178,8 @@ def evaluate_all_hparam_sensitivity(
     seed: int = 0,
     reference_leakage_assessment: Optional[np.ndarray] = None,
     pretrain_max_steps: int = 0,
-    pretrain_kwargs: Optional[Dict[str, Any]] = None
+    pretrain_kwargs: Optional[Dict[str, Any]] = None,
+    pretrain_classifiers_dir: str = None
 ):
     gamma_bar_vals = np.arange(0.05, 1.0, 0.05)
     theta_lr_scalar_vals = np.logspace(-2, 2, 19)
@@ -187,7 +190,7 @@ def evaluate_all_hparam_sensitivity(
         hparams.update({'gamma_bar': gamma_bar_val})
         train_all_model(
             trial_dir, profiling_dataset, attack_dataset, hparams, max_steps=max_steps, seed=seed, reference_leakage_assessment=reference_leakage_assessment,
-            pretrain_max_steps=pretrain_max_steps, pretrain_kwargs=pretrain_kwargs
+            pretrain_max_steps=pretrain_max_steps, pretrain_kwargs=pretrain_kwargs, pretrain_classifiers_dir=pretrain_classifiers_dir
         )
     for theta_lr_scalar_val in theta_lr_scalar_vals:
         trial_dir = os.path.join(output_dir, f'theta_lr_scalar={theta_lr_scalar_val}')
@@ -195,7 +198,7 @@ def evaluate_all_hparam_sensitivity(
         hparams['theta_lr'] *= theta_lr_scalar_val
         train_all_model(
             trial_dir, profiling_dataset, attack_dataset, hparams, max_steps=max_steps, seed=seed, reference_leakage_assessment=reference_leakage_assessment,
-            pretrain_max_steps=pretrain_max_steps, pretrain_kwargs=pretrain_kwargs
+            pretrain_max_steps=pretrain_max_steps, pretrain_kwargs=pretrain_kwargs, pretrain_classifiers_dir=pretrain_classifiers_dir
         )
     for etat_lr_scalar_val in etat_lr_scalar_vals:
         trial_dir = os.path.join(output_dir, f'etat_lr_scalar={etat_lr_scalar_val}')
@@ -203,5 +206,5 @@ def evaluate_all_hparam_sensitivity(
         hparams['etat_lr'] *= etat_lr_scalar_val
         train_all_model(
             trial_dir, profiling_dataset, attack_dataset, hparams, max_steps=max_steps, seed=seed, reference_leakage_assessment=reference_leakage_assessment,
-            pretrain_max_steps=pretrain_max_steps, pretrain_kwargs=pretrain_kwargs
+            pretrain_max_steps=pretrain_max_steps, pretrain_kwargs=pretrain_kwargs, pretrain_classifiers_dir=pretrain_classifiers_dir
         )

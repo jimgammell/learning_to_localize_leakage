@@ -1,8 +1,9 @@
 import os
 from pathlib import Path
 from collections import defaultdict
-from math import floor, log10
+from math import floor, log10, ceil
 from copy import copy
+import pickle
 
 import numpy as np
 import pandas as pd
@@ -42,6 +43,15 @@ OPTIMAL_WINDOW_SIZES = {
     'aes_hd': 19,
     'otiait': 3,
     'otp': 5
+}
+
+OPTIMAL_ALL_HPARAMS = {
+    'ascadv1_fixed': {'theta_lr': 7e-5,'etat_lr': 0.0049, 'gamma_bar': 0.9},
+    'ascadv1_variable': {'theta_lr': 0.0004, 'etat_lr': 0.016, 'gamma_bar': 0.6},
+    'dpav4': {'theta_lr': 9e-6, 'etat_lr': 0.00045, 'gamma_bar': 0.8},
+    'aes_hd': {'theta_lr': 0.0001, 'gamma_bar': 0.85, 'etat_lr': 0.0003},
+    'otiait': {'theta_lr': 5e-6, 'etat_lr': 0.0025, 'gamma_bar': 0.8},
+    'otp': {'theta_lr': 7e-5, 'etat_lr': 0.0049, 'gamma_bar': 0.9}
 }
 
 def load_attack_curves(base_dir):
@@ -144,8 +154,8 @@ def plot_m_occlusion_oracle_agreement_scores(base_dir, dest):
             ax = axes_r[idx+1]
             assessment = occlusion_assessments[dataset_name][window_size]
             mean_assessment, std_assessment = np.mean(assessment, axis=0), np.std(assessment, axis=0)
-            ax.fill_between(np.arange(len(mean_assessment)), mean_assessment-std_assessment, mean_assessment+std_assessment, color='blue', alpha=0.25)
-            ax.plot(np.arange(len(mean_assessment)), mean_assessment, color='blue')
+            ax.fill_between(np.arange(len(mean_assessment)), mean_assessment-std_assessment, mean_assessment+std_assessment, color='blue', alpha=0.25, **PLOT_KWARGS)
+            ax.plot(np.arange(len(mean_assessment)), mean_assessment, color='blue', **PLOT_KWARGS)
             ax.set_xlabel(r'Timestep $t$')
             ax.set_ylabel(r'Estimated leakiness of $X_t$')
             ax.set_title(f'Window size: {window_size}')
@@ -153,15 +163,95 @@ def plot_m_occlusion_oracle_agreement_scores(base_dir, dest):
     fig.savefig(dest, **SAVEFIG_KWARGS)
     plt.close(fig)
 
-def plot_all_sensitivity_analysis(base_dir, dest):
+def plot_leakiness_assessments(base_dir, dest, only_ascadv1_variable: bool = False):
+    dataset_names = list(DATASET_NAMES.keys()) if not only_ascadv1_variable else ['ascadv1_variable']
+    cols = ceil(len(dataset_names)/2)
+    rows = ceil(len(dataset_names)/cols)
+    fig, axes = plt.subplots(rows, cols, figsize=(cols*PLOT_WIDTH, rows*PLOT_WIDTH))
+    if only_ascadv1_variable:
+        axes = np.array([axes])
+    oracle_assessments = get_oracle_assessments(base_dir)
+    for idx, dataset_name in enumerate(dataset_names):
+        ax = axes.flatten()[idx]
+        tax = ax.twinx()
+        oracle_assessment = oracle_assessments[dataset_name]
+        all_path = os.path.join(base_dir, dataset_name, 'all_runs', 'fair', 'seed=50', 'all_training', 'leakage_assessment.npy')
+        all_assessment = np.load(all_path)
+        ax.plot(oracle_assessment, all_assessment, color='blue', linestyle='none', marker='s', markersize=5, alpha=0.5, label='ALL (ours)', **PLOT_KWARGS)
+        occl_path = os.path.join(base_dir, dataset_name, 'supervised_models_for_attribution', 'classification', 'seed=55', f'{OPTIMAL_WINDOW_SIZES[dataset_name]}-occlusion.npz')
+        occl = np.load(occl_path, allow_pickle=True)['attribution']
+        tax.plot(oracle_assessment, occl, color='red', linestyle='none', marker='o', markersize=5, alpha=0.3, label=r'$m^*$-occlusion', **PLOT_KWARGS)
+        occl2_path = os.path.join(base_dir, dataset_name, 'supervised_models_for_attribution', 'classification', 'seed=55', f'{OPTIMAL_WINDOW_SIZES[dataset_name]}-second-order-occlusion.npz')
+        occl2 = np.load(occl2_path, allow_pickle=True)['attribution']
+        occl2 += occl.min() - occl2.min()
+        tax.plot(oracle_assessment, occl2, color='purple', linestyle='none', marker='+', markersize=6, alpha=0.5, label=r'$m^*$-occlusion$^2$', **PLOT_KWARGS)
+        occpoi_path = os.path.join(base_dir, dataset_name, 'supervised_models_for_attribution', 'classification', 'seed=55', 'occpoi.npz')
+        occpoi = np.load(occpoi_path, allow_pickle=True)['attribution']
+        tax.plot(oracle_assessment, occpoi, color='orange', linestyle='none', marker='v', markersize=7, alpha=1, label='OccPOI', **PLOT_KWARGS)
+        ax.set_xlabel('Oracle leakiness values', fontsize=16)
+        ax.set_ylabel('ALL (ours) predictions', color='blue', fontsize=16)
+        tax.set_ylabel('Baseline (w/ scale + shift) predictions', fontsize=16)
+        ax.set_xscale('log')
+        tax.set_yscale('log')
+        h1, l1 = ax.get_legend_handles_labels()
+        h2, l2 = tax.get_legend_handles_labels()
+        handles = h1 + h2
+        labels = l1 + l2
+        tax.legend(handles, labels, loc='lower right', fontsize=10, framealpha=0.85)
+    fig.tight_layout()
+    fig.savefig(dest, **SAVEFIG_KWARGS)
+    plt.close(fig)
+
+def load_traces_over_time(base_dir):
+    traces = defaultdict(lambda: defaultdict(list))
+    for dataset_name in DATASET_NAMES.keys():
+        for seed in [50, 51, 52, 53, 54]:
+            all_curves_path = os.path.join(base_dir, dataset_name, 'all_runs', 'fair', f'seed={seed}', 'all_training', 'training_curves.pickle')
+            if not os.path.exists(all_curves_path):
+                print(f'Skipping file because it does not exist: {all_curves_path}')
+                continue
+            with open(all_curves_path, 'rb') as f:
+                all_curves = pickle.load(f)
+            oracle_agreement = all_curves['oracle_snr_corr'][-1]
+            traces[dataset_name]['all'].append(oracle_agreement)
+    traces = {dataset_name: {k: np.stack(v) for k, v in traces[dataset_name].items()} for dataset_name in DATASET_NAMES.keys()}
+    return traces
+
+def plot_traces_over_time(full_traces, dest, oracle_agreement_vals, only_ascadv1_variable: bool = False):
+    dataset_names = list(DATASET_NAMES.keys()) if not only_ascadv1_variable else ['ascadv1_variable']
+    cols = ceil(len(dataset_names)/2)
+    rows = ceil(len(dataset_names)/cols)
+    fig, axes = plt.subplots(rows, cols, figsize=(cols*PLOT_WIDTH, rows*PLOT_WIDTH))
+    if only_ascadv1_variable:
+        axes = np.array([axes])
+    for idx, dataset_name in enumerate(dataset_names):
+        traces = full_traces[dataset_name]
+        ax = axes.flatten()[idx]
+        timesteps = traces['all'].shape[1]
+        for method_name, method_val in oracle_agreement_vals[dataset_name].items():
+            if method_name in ['prof_oracle', 'all']:
+                continue
+            ax.fill_between([1, timesteps], np.mean(method_val)-np.std(method_val), np.mean(method_val)+np.std(method_val), label=method_name, alpha=0.25)
+        for method_name, method_trace in traces.items():
+            ax.fill_between(np.linspace(1, timesteps, method_trace.shape[1]), method_trace.mean(axis=0)-method_trace.std(axis=0), method_trace.mean(axis=0)+method_trace.std(axis=0), color='blue', alpha=0.25)
+            ax.plot(np.linspace(1, timesteps, method_trace.shape[1]), method_trace.mean(axis=0), color='blue')
+        ax.set_xlabel('Training steps')
+        ax.set_ylabel('Oracle agreement')
+        ax.legend()
+    fig.tight_layout()
+    fig.savefig(dest)
+    plt.close(fig)
+
+def load_all_sensitivity_analysis_data(base_dir):
     gamma_bar_sweep = defaultdict(lambda: defaultdict(list))
     theta_lr_scalar_sweep = defaultdict(lambda: defaultdict(list))
     etat_lr_scalar_sweep = defaultdict(lambda: defaultdict(list))
     oracle_assessments = get_oracle_assessments(base_dir)
-    for dataset_name in DATASET_NAMES.keys():
+    dataset_names = list(DATASET_NAMES.keys())
+    for dataset_name in dataset_names:
         oracle_assessment = oracle_assessments[dataset_name]
         trial_dir = os.path.join(base_dir, dataset_name, 'all_sensitivity_analysis')
-        for seed in [55, 56]: # FIXME
+        for seed in [55, 56, 57, 58, 59]:
             if not os.path.exists(os.path.join(trial_dir, f'seed={seed}')):
                 print(f'Skipping directory {os.path.join(trial_dir, f"seed={seed}")} because it does not exist')
                 continue
@@ -184,7 +274,7 @@ def plot_all_sensitivity_analysis(base_dir, dest):
                     print(f'Skipping path {path} because it does not exist')
                     continue
                 oracle_agreement = get_oracle_agreement(assessment, oracle_assessment)
-                theta_lr_scalar_sweep[dataset_name][theta_lr_scalar].append(oracle_agreement)
+                theta_lr_scalar_sweep[dataset_name][round(theta_lr_scalar, 3)].append(oracle_agreement)
             etat_lr_sweep_subdirs = [x for x in os.listdir(os.path.join(trial_dir, f'seed={seed}')) if x.split('=')[0] == 'etat_lr_scalar']
             for x in etat_lr_sweep_subdirs:
                 etat_lr_scalar = float(x.split('=')[1])
@@ -194,44 +284,62 @@ def plot_all_sensitivity_analysis(base_dir, dest):
                     print(f'Skipping path {path} because it does not exist')
                     continue
                 oracle_agreement = get_oracle_agreement(assessment, oracle_assessment)
-                etat_lr_scalar_sweep[dataset_name][etat_lr_scalar].append(oracle_agreement)
-    fig, axes = plt.subplots(2, 3, figsize=(3*PLOT_WIDTH, 2*PLOT_WIDTH))
-    for dataset_name, ax in zip(DATASET_NAMES.keys(), axes.flatten()):
-        ax.set_title(f'Dataset: {DATASET_NAMES[dataset_name]}')
+                etat_lr_scalar_sweep[dataset_name][round(etat_lr_scalar, 3)].append(oracle_agreement)
+    for dataset_name in dataset_names:
+        n = min(len(x) for x in gamma_bar_sweep[dataset_name].values())
+        x = np.array(list(gamma_bar_sweep[dataset_name].keys()))
+        y = np.stack([x[:n] for x in gamma_bar_sweep[dataset_name].values()])
+        gamma_bar_sweep[dataset_name] = (x, y)
+        n = min(len(x) for x in theta_lr_scalar_sweep[dataset_name].values())
+        x = np.array(list(theta_lr_scalar_sweep[dataset_name].keys()))
+        y = np.stack([x[:n] for x in theta_lr_scalar_sweep[dataset_name].values()])
+        theta_lr_scalar_sweep[dataset_name] = (x, y)
+        n = min(len(x) for x in etat_lr_scalar_sweep[dataset_name].values())
+        x = np.array(list(etat_lr_scalar_sweep[dataset_name].keys()))
+        y = np.stack([x[:n] for x in etat_lr_scalar_sweep[dataset_name].values()])
+        etat_lr_scalar_sweep[dataset_name] = (x, y)
+    return gamma_bar_sweep, theta_lr_scalar_sweep, etat_lr_scalar_sweep
+    
+def plot_all_sensitivity_analysis(gamma_bar_sweep, theta_lr_scalar_sweep, etat_lr_scalar_sweep, dest, only_ascadv1_variable: bool = False):
+    dataset_names = ['ascadv1_variable'] if only_ascadv1_variable else list(DATASET_NAMES.keys())
+    cols = ceil(len(dataset_names)/2)
+    rows = ceil(len(dataset_names)/cols)
+    fig, axes = plt.subplots(rows, cols, figsize=(cols*PLOT_WIDTH, rows*PLOT_WIDTH))
+    if only_ascadv1_variable:
+        axes = np.array([axes])
+    for dataset_name, ax in zip(dataset_names, axes.flatten()):
+        if not only_ascadv1_variable:
+            ax.set_title(f'Dataset: {DATASET_NAMES[dataset_name]}')
         theta_lr_scalar_ax = ax.twiny()
         etat_lr_scalar_ax = ax.twiny()
         etat_lr_scalar_ax.spines['top'].set_position(('outward', 40))
+        ax.axhline(0., color='black', linestyle='--')
 
-        gamma_bar_vals = np.array(list(gamma_bar_sweep[dataset_name].keys()))
-        gamma_bar_agreements = np.stack(list(gamma_bar_sweep[dataset_name].values()))
+        gamma_bar_vals, gamma_bar_agreements = gamma_bar_sweep[dataset_name]
         sorted_indices = np.argsort(gamma_bar_vals)
         gamma_bar_vals = gamma_bar_vals[sorted_indices]
         gamma_bar_agreements = gamma_bar_agreements[sorted_indices]
-        ax.axhline(0., color='black', linestyle='--')
         ax.fill_between(gamma_bar_vals, gamma_bar_agreements.mean(axis=1)-gamma_bar_agreements.std(axis=1), gamma_bar_agreements.mean(axis=1)+gamma_bar_agreements.std(axis=1), color='blue', alpha=0.25, **PLOT_KWARGS)
         ax.plot(gamma_bar_vals, gamma_bar_agreements.mean(axis=1), color='blue', marker='.', linestyle='none', **PLOT_KWARGS)
-        ax.set_xlabel(r'Budget hyperparameter $\overline{\gamma}$', color='blue')
-        ax.set_ylabel('Oracle agreement')
+        ax.set_xlabel(r'Budget hyperparameter $\overline{\gamma}$', color='blue', fontsize=16)
+        ax.set_ylabel('Oracle agreement', fontsize=16)
 
-        theta_lr_scalar_vals = np.array(list(theta_lr_scalar_sweep[dataset_name].keys()))
-        theta_lr_scalar_agreements = np.stack(list(theta_lr_scalar_sweep[dataset_name].values()))
+        theta_lr_scalar_vals, theta_lr_scalar_agreements = theta_lr_scalar_sweep[dataset_name]
         sorted_indices = np.argsort(theta_lr_scalar_vals)
-        theta_lr_scalar_vals = theta_lr_scalar_vals[sorted_indices]
+        theta_lr_vals = theta_lr_scalar_vals[sorted_indices]*OPTIMAL_ALL_HPARAMS[dataset_name]['theta_lr']
         theta_lr_scalar_agreements = theta_lr_scalar_agreements[sorted_indices]
-        theta_lr_scalar_ax.fill_between(theta_lr_scalar_vals, theta_lr_scalar_agreements.mean(axis=1)-theta_lr_scalar_agreements.std(axis=1), theta_lr_scalar_agreements.mean(axis=1)+theta_lr_scalar_agreements.std(axis=1), color='red', alpha=0.25, **PLOT_KWARGS)
-        theta_lr_scalar_ax.plot(theta_lr_scalar_vals, theta_lr_scalar_agreements.mean(axis=1), color='red', marker='.', linestyle='none', **PLOT_KWARGS)
+        theta_lr_scalar_ax.fill_between(theta_lr_vals, theta_lr_scalar_agreements.mean(axis=1)-theta_lr_scalar_agreements.std(axis=1), theta_lr_scalar_agreements.mean(axis=1)+theta_lr_scalar_agreements.std(axis=1), color='red', alpha=0.25, **PLOT_KWARGS)
+        theta_lr_scalar_ax.plot(theta_lr_vals, theta_lr_scalar_agreements.mean(axis=1), color='red', marker='.', linestyle='none', **PLOT_KWARGS)
 
-        print(etat_lr_scalar_sweep)
-        etat_lr_scalar_vals = np.array(list(etat_lr_scalar_sweep[dataset_name].keys()))
-        etat_lr_scalar_agreements = np.stack(list(etat_lr_scalar_sweep[dataset_name].values()))
+        etat_lr_scalar_vals, etat_lr_scalar_agreements = etat_lr_scalar_sweep[dataset_name]
         sorted_indices = np.argsort(etat_lr_scalar_vals)
-        etat_lr_scalar_vals = etat_lr_scalar_vals[sorted_indices]
+        etat_lr_vals = etat_lr_scalar_vals[sorted_indices]*OPTIMAL_ALL_HPARAMS[dataset_name]['etat_lr']
         etat_lr_scalar_agreements = etat_lr_scalar_agreements[sorted_indices]
-        etat_lr_scalar_ax.fill_between(etat_lr_scalar_vals, etat_lr_scalar_agreements.mean(axis=1)-etat_lr_scalar_agreements.std(axis=1), etat_lr_scalar_agreements.mean(axis=1)+etat_lr_scalar_agreements.std(axis=1), color='green', alpha=0.25, **PLOT_KWARGS)
-        etat_lr_scalar_ax.plot(etat_lr_scalar_vals, etat_lr_scalar_agreements.mean(axis=1), color='green', marker='.', linestyle='none', **PLOT_KWARGS)
+        etat_lr_scalar_ax.fill_between(etat_lr_vals, etat_lr_scalar_agreements.mean(axis=1)-etat_lr_scalar_agreements.std(axis=1), etat_lr_scalar_agreements.mean(axis=1)+etat_lr_scalar_agreements.std(axis=1), color='green', alpha=0.25, **PLOT_KWARGS)
+        etat_lr_scalar_ax.plot(etat_lr_vals, etat_lr_scalar_agreements.mean(axis=1), color='green', marker='.', linestyle='none', **PLOT_KWARGS)
 
-        theta_lr_scalar_ax.set_xlabel(r'Learning rate of $\boldsymbol{\theta}$', color='red')
-        etat_lr_scalar_ax.set_xlabel(r'Learning rate of $\tilde{\boldsymbol{\eta}}$', color='green')
+        theta_lr_scalar_ax.set_xlabel(r'Learning rate of $\boldsymbol{\theta}$', color='red', fontsize=16)
+        etat_lr_scalar_ax.set_xlabel(r'Learning rate of $\tilde{\boldsymbol{\eta}}$', color='green', fontsize=16)
         theta_lr_scalar_ax.set_xscale('log')
         etat_lr_scalar_ax.set_xscale('log')
     fig.tight_layout()
@@ -285,7 +393,7 @@ def get_oracle_agreement_vals(base_dir):
         oracle_assessment = oracle_assessments[dataset_name]
         profiling_oracle_assessment = profiling_oracle_assessments[dataset_name]
         data[dataset_name]['random'] = np.stack([get_oracle_agreement(np.random.rand(oracle_assessment.shape[-1]), oracle_assessment) for _ in range(5)])
-        data[dataset_name]['prof_oracle'] = get_oracle_agreement(oracle_assessment, profiling_oracle_assessment).reshape(1, -1)
+        #data[dataset_name]['prof_oracle'] = get_oracle_agreement(oracle_assessment, profiling_oracle_assessment).reshape(1, -1)
         per_method_assessments = assessments[dataset_name]
         for assessment_name, assessment in per_method_assessments.items():
             agreement_vals = np.array([get_oracle_agreement(_assessment, oracle_assessment) for _assessment in assessment])
@@ -389,7 +497,7 @@ def create_performance_comparison_table(base_dir, dest, data):
         methods_to_highlight = [
             method_name for method_name, method_data in subdata.items()
             if (method_data is not None)
-            and (method_data.mean()+method_data.std() >= best_data.mean()-best_data.std())
+            and (method_data.mean() >= best_data.mean()-best_data.std())
             and method_name != 'prof_oracle'
         ]
         for method_name, method_data in subdata.items():
@@ -482,9 +590,16 @@ def create_toy_gaussian_plot(base_dir, dest):
 
 def do_analysis_for_paper():
     fig_dir = os.path.join(OUTPUT_DIR, 'plots_for_paper')
-    create_toy_gaussian_plot(OUTPUT_DIR, os.path.join(fig_dir, 'toy_gaussian_plot.pdf'))
-    plot_all_sensitivity_analysis(OUTPUT_DIR, os.path.join(fig_dir, 'all_sensitivity_analysis.png'))
     os.makedirs(fig_dir, exist_ok=True)
+    plot_leakiness_assessments(OUTPUT_DIR, os.path.join(fig_dir, 'qualitative_relationship_with_oracle.pdf'))
+    plot_leakiness_assessments(OUTPUT_DIR, os.path.join(fig_dir, 'ascadv1_variable_relationship_with_oracle.pdf'), only_ascadv1_variable=True)
+    oracle_agreement_vals = get_oracle_agreement_vals(OUTPUT_DIR)
+    traces = load_traces_over_time(OUTPUT_DIR)
+    plot_traces_over_time(traces, os.path.join(fig_dir, 'traces_over_time.png'), oracle_agreement_vals, only_ascadv1_variable=True)
+    create_toy_gaussian_plot(OUTPUT_DIR, os.path.join(fig_dir, 'toy_gaussian_plot.pdf'))
+    gamma_bar_sweep, theta_lr_scalar_sweep, etat_lr_scalar_sweep = load_all_sensitivity_analysis_data(OUTPUT_DIR)
+    plot_all_sensitivity_analysis(gamma_bar_sweep, theta_lr_scalar_sweep, etat_lr_scalar_sweep, os.path.join(fig_dir, 'all_sensitivity_analysis.pdf'))
+    plot_all_sensitivity_analysis(gamma_bar_sweep, theta_lr_scalar_sweep, etat_lr_scalar_sweep, os.path.join(fig_dir, 'ascadv1_variable_sensitivity_analysis.pdf'), only_ascadv1_variable=True)
     print('Plotting attack curves...')
     plot_attack_curves(OUTPUT_DIR, os.path.join(fig_dir, 'attack_curves.pdf'))
     print()
@@ -492,7 +607,7 @@ def do_analysis_for_paper():
     plot_m_occlusion_oracle_agreement_scores(OUTPUT_DIR, os.path.join(fig_dir, 'occl_window_size_sweep.pdf'))
     print()
     print('Creating oracle agreement table...')
-    create_performance_comparison_table(OUTPUT_DIR, os.path.join(fig_dir, 'oracle_agreement_table'), get_oracle_agreement_vals(OUTPUT_DIR))
+    create_performance_comparison_table(OUTPUT_DIR, os.path.join(fig_dir, 'oracle_agreement_table'), oracle_agreement_vals)
     print()
     r"""print('Creating DNN occlusion AUC table...')
     fwd_dnno_data, rev_dnno_data = get_dnn_occlusion_curves(OUTPUT_DIR)

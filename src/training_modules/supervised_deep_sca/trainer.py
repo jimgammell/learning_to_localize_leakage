@@ -17,20 +17,21 @@ from utils.baseline_assessments import NeuralNetAttribution
 from utils.baseline_assessments.occpoi import OccPOI
 
 OPTIMAL_WINDOW_SIZES = {
-    'ascadv1_fixed': 3,
-    'ascadv1_variable': 7,
+    'ascadv1-fixed': 3,
+    'ascadv1-variable': 7,
     'dpav4': 19,
-    'aes_hd': 19,
+    'aes-hd': 19,
     'otiait': 3,
     'otp': 5
 }
 
 class ComputeLeakageAssessmentsCallback(Callback):
-    def __init__(self, reference_assessment: np.ndarray, total_steps: int, measurements: int = 10):
+    def __init__(self, reference_assessment: np.ndarray, total_steps: int, measurements: int = 10, dataset_name: Optional[str] = None):
         super().__init__()
         self.reference_assessment = reference_assessment
         self.total_steps = total_steps
         self.measurement_steps = [idx*self.total_steps//measurements for idx in range(measurements)] + [self.total_steps-1]
+        self.dataset_name = dataset_name
     
     def on_train_batch_end(self, trainer, pl_module, outputs, batch, batch_idx):
         if trainer.global_step in self.measurement_steps:
@@ -42,9 +43,10 @@ class ComputeLeakageAssessmentsCallback(Callback):
                 'saliency': attributor.compute_saliency(),
                 'lrp': attributor.compute_lrp(),
                 'inputxgrad': attributor.compute_inputxgrad(),
-                '1-occlusion': attributor.compute_n_occlusion(1),
-                'm-occlusion': attributor.compute_n_occlusion(OPTIMAL_WINDOW_SIZES[trainer.dataset_name])
+                '1-occlusion': attributor.compute_n_occlusion(1)
             }
+            if self.dataset_name is not None:
+                assessments.update({'m-occlusion': attributor.compute_n_occlusion(OPTIMAL_WINDOW_SIZES[self.dataset_name])})
             for assessment_name, assessment in assessments.items():
                 corr = spearmanr(self.reference_assessment, assessment.reshape(-1)).statistic
                 if np.isnan(corr): # this happens if the leakage assessment is constant -- tends to happen for poorly-fit models
@@ -107,7 +109,7 @@ class Trainer:
             )]
             if plot_metrics_over_time:
                 assert self.reference_leakage_assessment is not None
-                compute_assessments_callback = ComputeLeakageAssessmentsCallback(self.reference_leakage_assessment, total_steps=max_steps)
+                compute_assessments_callback = ComputeLeakageAssessmentsCallback(self.reference_leakage_assessment, total_steps=max_steps, dataset_name=self.dataset_name)
                 callbacks.append(compute_assessments_callback)
             trainer = LightningTrainer(
                 max_steps=max_steps,

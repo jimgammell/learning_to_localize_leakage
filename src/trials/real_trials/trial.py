@@ -35,12 +35,17 @@ class Trial:
         dataset_name: Literal['ascadv1-fixed', 'ascadv1-variable', 'dpav4', 'aes-hd', 'otiait', 'otp'],
         trial_config: Dict[str, Any],
         seed_count: int = 1,
-        logging_dir: Optional[str] = None
+        logging_dir: Optional[str] = None,
+        run_particular_seeds: List[int] = []
     ):
         self.dataset_name = dataset_name
         self.trial_config = trial_config
         self.seed_count = seed_count
         self.logging_dir = logging_dir or dataset_name.replace('-', '_')
+        self.run_particular_seeds = run_particular_seeds
+        if len(self.run_particular_seeds) == 0:
+            self.run_particular_seeds = list(range(self.seed_count))
+        self.run_particular_seeds = np.array(self.run_particular_seeds)
         if 'data_dir' in self.trial_config:
             self.data_dir = self.trial_config['data_dir']
         else:
@@ -65,6 +70,7 @@ class Trial:
         self.all_dir = os.path.join(self.logging_dir, 'all_runs')
         self.all_sensitivity_analysis_dir = os.path.join(self.logging_dir, 'all_sensitivity_analysis')
         self.plots_for_paper_dir = os.path.join(self.logging_dir, 'plots_for_paper')
+        self.attr_over_time_dir = os.path.join(self.logging_dir, 'attr_over_time')
 
         if self.dataset_name in ['ascadv1-fixed', 'ascadv1-variable']:
             self.oracle_targets = [ # based on Egger (2021) findings
@@ -275,13 +281,30 @@ class Trial:
         best_supervised_hparams = supervised_experiment_methods.get_best_supervised_model_hparams(
             self.supervised_hparam_sweep_dir, self.profiling_dataset, self.attack_dataset, self.dataset_name, self.load_oracle_assessment()
         )
-        for seed in range(base_seed, base_seed + self.seed_count):
+        for seed in base_seed + self.run_particular_seeds:
             best_classification_kwargs = copy(base_supervised_kwargs)
             best_classification_kwargs.update(best_supervised_hparams['classification'])
             supervised_experiment_methods.train_supervised_model(
                 os.path.join(self.supervised_selection_dir, f'seed={seed}'), self.profiling_dataset, self.attack_dataset, training_kwargs=best_classification_kwargs,
                 max_steps=self.trial_config['supervised_train_steps'], seed=seed
             )
+            base_seed += 1
+        print('Running extra trials for last-minute issues')
+        for seed in base_seed + self.run_particular_seeds:
+            best_classification_kwargs = copy(base_supervised_kwargs)
+            best_classification_kwargs.update(best_supervised_hparams['classification'])
+            subdir = os.path.join(self.attr_over_time_dir, f'seed={seed}')
+            supervised_experiment_methods.train_supervised_model(
+                subdir, self.profiling_dataset, self.attack_dataset, training_kwargs=best_classification_kwargs, dataset_name=self.dataset_name,
+                max_steps=self.trial_config['supervised_train_steps'], seed=seed, reference_leakage_assessment=self.load_oracle_assessment()
+            )
+            if self.dataset_name in ['dpav4', 'aes-hd']:
+                supervised_experiment_methods.attribute_neural_net(
+                    subdir, self.profiling_dataset, self.attack_dataset, self.dataset_name,
+                    compute_gradvis=False, compute_saliency=False, compute_inputxgrad=False,
+                    compute_lrp=False, compute_occlusion=np.arange(1, 51, 2), compute_second_order_occlusion=[],
+                    compute_occpoi=False, compute_extended_occpoi=False
+                )
             base_seed += 1
         for name, hparams in best_supervised_hparams.items():
             if name != 'classification': # FIXME
@@ -362,7 +385,7 @@ class Trial:
                 )
         base_seed += self.seed_count
         print('Evaluating the sensitivity of ALL to hyperparameters.')
-        for seed in range(base_seed+3, base_seed+self.seed_count): # FIXME -- hack so I can split trials across multiple machines
+        for seed in base_seed + self.run_particular_seeds:
             hparams = copy(base_all_kwargs)
             if best_pretrain_hparams is not None:
                 kwargs.update(best_pretrain_hparams)
@@ -370,67 +393,9 @@ class Trial:
             all_experiment_methods.evaluate_all_hparam_sensitivity(
                 os.path.join(self.all_sensitivity_analysis_dir, f'seed={seed}'), self.profiling_dataset, self.attack_dataset,
                 training_kwargs=kwargs, max_steps=self.trial_config['all_train_steps'], seed=seed, reference_leakage_assessment=self.load_oracle_assessment(),
-                pretrain_max_steps=self.trial_config['all_classifiers_pretrain_steps'], pretrain_kwargs=best_pretrain_hparams
+                pretrain_max_steps=self.trial_config['all_classifiers_pretrain_steps'], pretrain_kwargs=best_pretrain_hparams,
+                pretrain_classifiers_dir=os.path.join(self.all_dir, 'oracle', f'seed={seed-self.seed_count}', 'classifier_pretraining')
             )
-    
-    # Random hyperparameter search for the supervised models. Search space is hard-coded in training_modules/supervised_deep_sca/trainer.py because I'm lazy.
-    def run_supervised_hparam_sweep(self):
-        os.makedirs(self.supervised_hparam_sweep_dir, exist_ok=True)
-        print('Running supervised hparam sweep')
-        kwargs = copy(self.trial_config['default_kwargs'])
-        kwargs.update(self.trial_config['supervised_training_kwargs'])
-        supervised_trainer = SupervisedTrainer(
-            self.profiling_dataset, self.attack_dataset, default_training_module_kwargs=kwargs, reference_leakage_assessment=self.load_oracle_assessment()
-        )
-        supervised_trainer.hparam_tune(
-            self.supervised_hparam_sweep_dir,
-            trial_count=self.trial_config['supervised_htune_trial_count'],
-            max_steps=self.trial_config['supervised_train_steps'],
-            starting_seed=5 # to avoid overlap with other trials
-        )
-        with open(os.path.join(self.supervised_hparam_sweep_dir, 'results.pickle'), 'rb') as f:
-            results = pickle.load(f)
-        mean_leakage_assessments = defaultdict(lambda: np.zeros((self.profiling_dataset.timesteps_per_trace,), dtype=np.float32))
-        for trial_idx in range(self.trial_config['supervised_htune_trial_count']):
-            leakage_assessments = np.load(os.path.join(self.supervised_hparam_sweep_dir, f'trial_{trial_idx}', 'early_stop_leakage_assessments.npz'), allow_pickle=True)
-            for key, val in leakage_assessments.items():
-                mean_leakage_assessments[key] += val
-        mean_leakage_assessments = {key: val/self.trial_config['supervised_htune_trial_count'] for key, val in mean_leakage_assessments.items()}
-        osnr_vals, agreement_vals = defaultdict(list), defaultdict(list)
-        for trial_idx in range(self.trial_config['supervised_htune_trial_count']):
-            leakage_assessments = np.load(os.path.join(self.supervised_hparam_sweep_dir, f'trial_{trial_idx}', 'early_stop_leakage_assessments.npz'), allow_pickle=True)
-            for key, val in leakage_assessments.items():
-                osnr_vals[key].append(self.compute_oracle_snr_corr(val))
-                agreement_vals[key].append(spearmanr(val, mean_leakage_assessments[key]).statistic)
-        osnr_vals = {key: np.array(val) for key, val in osnr_vals.items()}
-        agreement_vals = {key: np.array(val) for key, val in agreement_vals.items()}
-        fig, ax = plt.subplots(1, 1, figsize=(PLOT_WIDTH, PLOT_WIDTH))
-        ax.plot(results['min_rank'], results['early_stop_gradvis'], linestyle='none', marker='.', label='GradVis', **PLOT_KWARGS)
-        ax.plot(results['min_rank'], results['early_stop_saliency'], linestyle='none', marker='.', label='Saliency', **PLOT_KWARGS)
-        ax.plot(results['min_rank'], results['early_stop_lrp'], linestyle='none', marker='.', label='LRP', **PLOT_KWARGS)
-        ax.plot(results['min_rank'], results['early_stop_inputxgrad'], linestyle='none', marker='.', label='Input x Grad', **PLOT_KWARGS)
-        ax.set_xlabel(r'Best validation rank $\downarrow$')
-        ax.set_ylabel(r'oSNR agreement $\uparrow$')
-        ax.legend()
-        fig.tight_layout()
-        fig.savefig(os.path.join(self.supervised_hparam_sweep_dir, 'performance_based_model_selection.png'), **SAVEFIG_KWARGS)
-        plt.close(fig)
-        fig, ax = plt.subplots(1, 1, figsize=(PLOT_WIDTH, PLOT_WIDTH))
-        for (k1, v1), (k2, v2) in zip(osnr_vals.items(), agreement_vals.items()):
-            assert k1 == k2
-            sorted_indices = np.argsort(v1)
-            ax.plot(v1[sorted_indices], v2[sorted_indices], label=k1, linestyle='none', marker='.')
-        ax.set_ylabel('Agreement with mean leakiness assessment')
-        ax.set_xlabel(r'oSNR agreement $\uparrow$')
-        ax.legend()
-        fig.tight_layout()
-        fig.savefig(os.path.join(self.supervised_hparam_sweep_dir, 'mean_agreement_based_model_selection.png'), **SAVEFIG_KWARGS)
-        plt.close(fig)
-
-        best_idx = np.argmax(agreement_vals)
-        best_trial_dir = os.path.join(self.supervised_hparam_sweep_dir, f'trial_{best_idx}')
-        best_leakage_assessment = np.load(os.path.join(best_trial_dir, 'early_stop_leakage_assessments.npz'))['inputxgrad']
-        self.plot_assessment_vs_oracle_leakage(best_leakage_assessment, os.path.join(self.supervised_hparam_sweep_dir, 'visualization.png'))
     
     # Returns the hyperparameters which yielded the best classification performance
     def get_optimal_supervised_kwargs(self):
@@ -850,8 +815,7 @@ class Trial:
             self.run_supervised_trials()
         if run_all_trials:
             self.run_all_trials()
-        r"""if run_supervised_hparam_sweep:
-            self.run_supervised_hparam_sweep()
+        r"""
         if do_supervised_training:
             self.run_supervised_trials_for_attribution()
             self.run_supervised_trials_for_selection()

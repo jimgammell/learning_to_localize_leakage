@@ -16,6 +16,9 @@ def main():
         '--seed-count', default=1, action='store', type=int, help='Trials will be repeated for this number of seeds.'
     )
     parser.add_argument(
+        '--run-particular-seeds', default=[], nargs='*', type=int, help='Run only particular seeds instead of every seed -- for splitting work across machines'
+    )
+    parser.add_argument(
         '--config-file', default=None, action='store', help=f'Configuration file specifying the settings of this trial. Expected to exist at `{os.path.join(CONFIG_DIR, "<CONFIG_FILE>.yaml")}`.',
         choices=[x.split('.')[0] for x in os.listdir(CONFIG_DIR) if x not in ['global_variables.yaml']]
     )
@@ -74,7 +77,8 @@ def main():
                 dataset_name=config['dataset'],
                 trial_config=config,
                 seed_count=seed_count,
-                logging_dir=trial_dir
+                logging_dir=trial_dir,
+                run_particular_seeds=clargs.run_particular_seeds
             )
             sub_assessment_flags = {key: getattr(clargs, key) for key in real_sub_assessments}
             if all(val == False for val in sub_assessment_flags.values()):

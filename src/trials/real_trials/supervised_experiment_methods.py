@@ -31,6 +31,7 @@ def load_trained_supervised_model(
     model_dir: str, as_lightning_module: bool = False
 ):
     checkpoint_path = os.path.join(model_dir, 'early_stop_checkpoint.ckpt')
+    assert os.path.exists(checkpoint_path)
     lightning_module = SupervisedModule.load_from_checkpoint(checkpoint_path, map_location='cpu')
     if as_lightning_module:
         return lightning_module
@@ -248,11 +249,13 @@ def evaluate_leakage_assessments(
         for attr_filename in attr_filenames:
             if os.path.exists(os.path.join(model_dir, f'{attr_filename}.npz')):
                 res = np.load(os.path.join(model_dir, f'{attr_filename}.npz'), allow_pickle=True)
-                assessments[attr_filename].append(res['attribution'])
-                elapsed_times[attr_filename].append(res['elapsed_time'])
+                assessment = res['attribution']
+                elapsed_time = res['elapsed_time']
+                assessments[attr_filename].append(assessment)
+                elapsed_times[attr_filename].append(elapsed_time)
         with open(os.path.join(model_dir, 'training_curves.pickle'), 'rb') as f:
             training_curves = pickle.load(f)
-        for method in ['gradvis', 'inputxgrad', 'lrp', 'saliency']:
+        for method in ['gradvis', 'inputxgrad', 'lrp', 'saliency', '1-occlusion']:
             assessments_over_time[method].append(training_curves[f'{method}_oracle_agreement'][1])
     assessments = {key: np.stack(val) for key, val in assessments.items()}
     elapsed_times = {key: np.stack(val) for key, val in elapsed_times.items()}

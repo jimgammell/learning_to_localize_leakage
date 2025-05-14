@@ -133,7 +133,7 @@ def train_all_model(
     seed: int = 0,
     reference_leakage_assessment: Optional[np.ndarray] = None,
     pretrain_max_steps: int = 0,
-    pretrain_kwargs: Optional[Dict[str, Any]] = None,
+    pretrain_kwargs: Optional[Dict[str, Any]] = None
 ):
     if training_kwargs is None:
         training_kwargs = {}
@@ -175,6 +175,33 @@ def evaluate_all_hparam_sensitivity(
     max_steps: int = 1000,
     seed: int = 0,
     reference_leakage_assessment: Optional[np.ndarray] = None,
+    pretrain_max_steps: int = 0,
+    pretrain_kwargs: Optional[Dict[str, Any]] = None
 ):
     gamma_bar_vals = np.arange(0.05, 1.0, 0.05)
-    
+    theta_lr_scalar_vals = np.logspace(-2, 2, 19)
+    etat_lr_scalar_vals = np.logspace(-2, 2, 19)
+    for gamma_bar_val in gamma_bar_vals:
+        trial_dir = os.path.join(output_dir, f'gamma_bar={gamma_bar_val}')
+        hparams = copy(training_kwargs)
+        hparams.update({'gamma_bar': gamma_bar_val})
+        train_all_model(
+            trial_dir, profiling_dataset, attack_dataset, hparams, max_steps=max_steps, seed=seed, reference_leakage_assessment=reference_leakage_assessment,
+            pretrain_max_steps=pretrain_max_steps, pretrain_kwargs=pretrain_kwargs
+        )
+    for theta_lr_scalar_val in theta_lr_scalar_vals:
+        trial_dir = os.path.join(output_dir, f'theta_lr_scalar={theta_lr_scalar_val}')
+        hparams = copy(training_kwargs)
+        hparams['theta_lr'] *= theta_lr_scalar_val
+        train_all_model(
+            trial_dir, profiling_dataset, attack_dataset, hparams, max_steps=max_steps, seed=seed, reference_leakage_assessment=reference_leakage_assessment,
+            pretrain_max_steps=pretrain_max_steps, pretrain_kwargs=pretrain_kwargs
+        )
+    for etat_lr_scalar_val in etat_lr_scalar_vals:
+        trial_dir = os.path.join(output_dir, f'etat_lr_scalar={etat_lr_scalar_val}')
+        hparams = copy(training_kwargs)
+        hparams['etat_lr'] *= etat_lr_scalar_val
+        train_all_model(
+            trial_dir, profiling_dataset, attack_dataset, hparams, max_steps=max_steps, seed=seed, reference_leakage_assessment=reference_leakage_assessment,
+            pretrain_max_steps=pretrain_max_steps, pretrain_kwargs=pretrain_kwargs
+        )

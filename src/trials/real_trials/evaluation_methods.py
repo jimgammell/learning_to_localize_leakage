@@ -20,10 +20,11 @@ def get_oracle_agreement(leakage_assessment, oracle_assessment):
 @torch.no_grad()
 def run_dnn_occlusion_test(
     leakage_assessment, model, traces, labels,
+    dataloader: Optional[DataLoader] = None,
     performance_metric: Literal['mean_rank', 'traces_to_disclosure'] = 'mean_rank',
     direction: Literal['forward', 'reverse'] = 'reverse',
     dataset_name: Optional[Literal['dpav4', 'aes-hd', 'ascasdv1-fixed', 'ascadv1-variable']] = None,
-    parallel_pass_count: int = 50
+    parallel_pass_count: int = 25
 ):
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
     model = model.to(device)
@@ -52,13 +53,12 @@ def run_dnn_occlusion_test(
         if performance_metric == 'mean_rank':
             logits_batch = model(masked_trace_batch).reshape(_parallel_pass_count, batch_size, -1).cpu()
             for logits in logits_batch:
-                rank = get_rank(logits, labels)
+                rank = get_rank(logits, labels).mean()
                 performance.append(rank)
         elif performance_metric == 'traces_to_disclosure':
-            assert parallel_pass_count == 1
+            parallel_pass_count = 1
+            #assert parallel_pass_count == 1
             assert dataset_name is not None
-            dataset = TensorDataset(masked_traces, labels)
-            dataloader = DataLoader(dataset, batch_size=len(traces))
             evaluator = AESMultiTraceEvaluator(dataloader, model, seed=0, device=device, dataset_name=dataset_name)
             rank_over_time = evaluator()
             traces_to_disclosure = np.nonzero(rank_over_time-1)[0][-1] + 1 if len(np.nonzero(rank_over_time-1)) > 0 else 1
@@ -67,18 +67,38 @@ def run_dnn_occlusion_test(
             assert False
     return np.array(performance)
 
-def get_forward_dnno_criterion(leakage_assessment, model, dataloader):
+def get_forward_dnno_criterion(
+        leakage_assessment, model, dataloader,
+        reduce: bool = True,
+        pass_through_dataloader: bool = False,
+        **kwargs
+    ):
     batches = list(dataloader)
     traces = torch.cat([x[0] for x in batches], dim=0)
     labels = torch.cat([x[1] for x in batches], dim=0)
-    return run_dnn_occlusion_test(
-        leakage_assessment, model, traces, labels, performance_metric='mean_rank', direction='forward'
-    ).mean()
+    if pass_through_dataloader:
+        kwargs['dataloader'] = dataloader
+    rv = run_dnn_occlusion_test(
+        leakage_assessment, model, traces, labels, direction='forward', **kwargs
+    )
+    if reduce:
+        rv = rv.mean()
+    return rv
 
-def get_reverse_dnno_criterion(leakage_assessment, model, dataloader):
+def get_reverse_dnno_criterion(
+        leakage_assessment, model, dataloader,
+        reduce: bool = True,
+        pass_through_dataloader: bool = False,
+        **kwargs
+    ):
     batches = list(dataloader)
     traces = torch.cat([x[0] for x in batches], dim=0)
     labels = torch.cat([x[1] for x in batches], dim=0)
-    return run_dnn_occlusion_test(
-        leakage_assessment, model, traces, labels, performance_metric='mean_rank', direction='reverse'
-    ).mean()
+    if pass_through_dataloader:
+        kwargs['dataloader'] = dataloader
+    rv = run_dnn_occlusion_test(
+        leakage_assessment, model, traces, labels, direction='reverse', **kwargs
+    )
+    if reduce:
+        rv = rv.mean()
+    return rv

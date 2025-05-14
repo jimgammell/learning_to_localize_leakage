@@ -14,6 +14,16 @@ from datasets.data_module import DataModule
 from .module import Module
 from .plot_things import *
 from utils.baseline_assessments import NeuralNetAttribution
+from utils.baseline_assessments.occpoi import OccPOI
+
+OPTIMAL_WINDOW_SIZES = {
+    'ascadv1_fixed': 3,
+    'ascadv1_variable': 7,
+    'dpav4': 19,
+    'aes_hd': 19,
+    'otiait': 3,
+    'otp': 5
+}
 
 class ComputeLeakageAssessmentsCallback(Callback):
     def __init__(self, reference_assessment: np.ndarray, total_steps: int, measurements: int = 10):
@@ -31,7 +41,9 @@ class ComputeLeakageAssessmentsCallback(Callback):
                 'gradvis': attributor.compute_gradvis(),
                 'saliency': attributor.compute_saliency(),
                 'lrp': attributor.compute_lrp(),
-                'inputxgrad': attributor.compute_inputxgrad()
+                'inputxgrad': attributor.compute_inputxgrad(),
+                '1-occlusion': attributor.compute_n_occlusion(1),
+                'm-occlusion': attributor.compute_n_occlusion(OPTIMAL_WINDOW_SIZES[trainer.dataset_name])
             }
             for assessment_name, assessment in assessments.items():
                 corr = spearmanr(self.reference_assessment, assessment.reshape(-1)).statistic

@@ -7,8 +7,6 @@ import torch
 from torch import nn
 from torch.utils.data import Subset, DataLoader
 
-from training_modules.supervised_deep_sca import SupervisedModule
-from models.zaid_wouters_nets import pretrained_models
 from utils.metrics.rank import get_rank
 
 class ReshapeOutput(nn.Module):
@@ -29,16 +27,6 @@ class AESMultiTraceEvaluator:
             base_dataset = base_dataset.dataset
         self.base_dataset = base_dataset
         self.base_dataset.return_metadata = True
-        if isinstance(model, (str, os.PathLike)):
-            if 'ZaidNet' in model or 'Wouters' in model:
-                model_class = getattr(pretrained_models, model)
-                assert seed is not None
-                model = model_class(pretrained_seed=seed)
-            else:
-                logging_dir = model
-                assert os.path.exists(os.path.join(logging_dir, 'best_checkpoint.ckpt'))
-                training_module = SupervisedModule.load_from_checkpoint(os.path.join(logging_dir, 'best_checkpoint.ckpt'))
-                model = training_module.classifier
         self.base_model = model
         self.device = device if device is not None else 'cuda' if torch.cuda.is_available() else 'cpu'
         self.base_model.eval()

@@ -12,8 +12,6 @@ import torch
 from torch import nn
 from torch.utils.data import DataLoader, Subset
 
-from training_modules.supervised_deep_sca import SupervisedModule
-from models.zaid_wouters_nets import pretrained_models
 from utils.aes_multi_trace_eval import AESMultiTraceEvaluator
 from utils.metrics import get_rank
 
@@ -58,16 +56,6 @@ class OccPOI:
         attack_traces = len(attack_dataset)
         #attack_dataset.dataset.traces = torch.from_numpy(attack_dataset.dataset.traces).to(device)
         self.attack_dataloader = DataLoader(attack_dataset, batch_size=attack_traces)
-        if isinstance(model, str):
-            if 'ZaidNet' in model or 'Wouters' in model:
-                model_class = getattr(pretrained_models, model)
-                assert seed is not None
-                model = model_class(pretrained_seed=seed)
-            else:
-                logging_dir = model
-                assert os.path.exists(os.path.join(logging_dir, 'best_checkpoint.ckpt'))
-                training_module = SupervisedModule.load_from_checkpoint(os.path.join(logging_dir, 'best_checkpoint.ckpt'))
-                model = training_module.classifier
         self.base_model = model
         self.base_model.eval()
         self.base_model.requires_grad_(False)

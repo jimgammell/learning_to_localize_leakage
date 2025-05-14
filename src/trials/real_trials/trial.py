@@ -18,7 +18,17 @@ from datasets.data_module import DataModule
 from training_modules.supervised_deep_sca import SupervisedTrainer, SupervisedModule
 from training_modules.adversarial_leakage_localization import ALLTrainer, ALLModule
 from . import supervised_experiment_methods
+from . import evaluation_methods
 from . import all_experiment_methods
+
+OPTIMAL_WINDOW_SIZES = {
+    'ascadv1_fixed': 3,
+    'ascadv1_variable': 7,
+    'dpav4': 19,
+    'aes_hd': 19,
+    'otiait': 3,
+    'otp': 5
+}
 
 class Trial:
     def __init__(self,
@@ -274,6 +284,8 @@ class Trial:
             )
             base_seed += 1
         for name, hparams in best_supervised_hparams.items():
+            if name != 'classification': # FIXME
+                continue
             model_dir = os.path.join(self.supervised_attribution_dir, name)
             print(f'Running experiments for {model_dir} with hparams {hparams}')
             for seed in range(base_seed, base_seed + self.seed_count):
@@ -288,11 +300,25 @@ class Trial:
                 supervised_experiment_methods.attribute_neural_net(
                     subdir, self.profiling_dataset, self.attack_dataset, self.dataset_name,
                     compute_gradvis=True, compute_saliency=True, compute_inputxgrad=True,
-                    compute_lrp=True, compute_occlusion=np.arange(1, 23, 2), compute_second_order_occlusion=[1],
+                    compute_lrp=True, compute_occlusion=np.arange(1, 21, 2), compute_second_order_occlusion=[1, OPTIMAL_WINDOW_SIZES[self.dataset_name]],
                     compute_occpoi=True, compute_extended_occpoi=False
                 )
-            supervised_experiment_methods.evaluate_model_performance(model_dir)
-            supervised_experiment_methods.evaluate_leakage_assessments(model_dir, self.load_oracle_assessment())
+                if name == 'classification': # compute DNN occlusion tests
+                    eval_model = supervised_experiment_methods.load_trained_supervised_model(os.path.join(self.supervised_selection_dir, f'seed={seed-5}'))
+                    dataloader = supervised_experiment_methods.get_dataloader(self.profiling_dataset, self.attack_dataset, split='attack')
+                    for method_name in ['gradvis', 'inputxgrad', 'lrp', 'occpoi', 'saliency', '1-second-order-occlusion', *[f'{m}-occlusion' for m in np.arange(1, 51, 2)]]:
+                        path = os.path.join(self.supervised_attribution_dir, 'classification', f'seed={seed}', f'{method_name}_dnno.npz')
+                        if not os.path.exists(path):
+                            assessment = np.load(os.path.join(self.supervised_attribution_dir, 'classification', f'seed={seed}', f'{method_name}.npz'), allow_pickle=True)['attribution']
+                            metric = 'traces_to_disclosure' if self.dataset_name in ['ascadv1-fixed', 'ascadv1-variable', 'dpav4', 'aes-hd'] else 'mean_rank'
+                            fwd_dnno = evaluation_methods.get_forward_dnno_criterion(assessment, eval_model, dataloader)
+                            rev_dnno = evaluation_methods.get_reverse_dnno_criterion(assessment, eval_model, dataloader)
+                            print(f'Method: {method_name}, seed: {seed}')
+                            print(f'\tForward DNNO AUC: {fwd_dnno.mean()}')
+                            print(f'\tReverse DNNO AUC: {rev_dnno.mean()}')
+                            np.savez(path, fwd_dnno=fwd_dnno, rev_dnno=rev_dnno)
+            #supervised_experiment_methods.evaluate_model_performance(model_dir)
+            #supervised_experiment_methods.evaluate_leakage_assessments(model_dir, self.load_oracle_assessment())
     
     def run_all_trials(self):
         base_seed = 0
@@ -334,7 +360,18 @@ class Trial:
                     max_steps=self.trial_config['all_train_steps'], seed=seed, reference_leakage_assessment=self.load_oracle_assessment(),
                     pretrain_max_steps=self.trial_config['all_classifiers_pretrain_steps'], pretrain_kwargs=best_pretrain_hparams
                 )
-
+        base_seed += self.seed_count
+        print('Evaluating the sensitivity of ALL to hyperparameters.')
+        for seed in range(base_seed, base_seed+self.seed_count):
+            hparams = copy(base_all_kwargs)
+            if best_pretrain_hparams is not None:
+                kwargs.update(best_pretrain_hparams)
+            kwargs.update(best_all_hparams['oracle'])
+            all_experiment_methods.evaluate_all_hparam_sensitivity(
+                os.path.join(self.all_sensitivity_analysis_dir, f'seed={seed}'), self.profiling_dataset, self.attack_dataset,
+                training_kwargs=kwargs, max_steps=self.trial_config['all_train_steps'], seed=seed, reference_leakage_assessment=self.load_oracle_assessment(),
+                pretrain_max_steps=self.trial_config['all_classifiers_pretrain_steps'], pretrain_kwargs=best_pretrain_hparams
+            )
     
     # Random hyperparameter search for the supervised models. Search space is hard-coded in training_modules/supervised_deep_sca/trainer.py because I'm lazy.
     def run_supervised_hparam_sweep(self):

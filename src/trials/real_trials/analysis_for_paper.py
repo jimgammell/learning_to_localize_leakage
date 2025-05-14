@@ -22,16 +22,25 @@ DATASET_NAMES = {
 METHOD_NAMES = {
     'random': 'Random',
     'prof_oracle': 'Oracle (train set)',
-    'gradvis': 'GradVis',
-    'saliency': 'Saliency',
-    'inputxgrad': r'Input $*$ Grad',
-    'lrp': 'LRP',
-    'occpoi': 'OccPOI',
-    '1-occlusion': '1-Occlusion',
-    'm-occlusion': r'$m^*$-Occlusion',
-    '1-second-order-occlusion': r'$1$-$2^{\mathrm{nd}}$-order Occlusion',
-    'm-second-order-occlusion': r'$m^*$-$2^{\mathrm{nd}}$-order Occlusion',
+    'gradvis': 'GradVis~\\cite{masure2019}',
+    'saliency': 'Saliency~\\cite{simonyan2014, hettwer2020}',
+    'inputxgrad': r'Input $*$ Grad~\cite{shrikumar2017, wouters2020}',
+    'lrp': 'LRP~\\cite{bach2015, hettwer2020}',
+    'occpoi': 'OccPOI~\\cite{yap2025}',
+    '1-occlusion': '1-Occlusion~\\cite{zeiler2014, hettwer2020}',
+    'm-occlusion': r'$m^*$-Occlusion~\cite{schamberger2023}',
+    '1-second-order-occlusion': r'$1$-Occlusion$^2$~\cite{schamberger2023}',
+    'm-second-order-occlusion': r'$m^*$-Occlusion$^2$~\cite{schamberger2023}',
     'all': 'ALL (ours)'
+}
+
+OPTIMAL_WINDOW_SIZES = {
+    'ascadv1_fixed': 3,
+    'ascadv1_variable': 7,
+    'dpav4': 19,
+    'aes_hd': 19,
+    'otiait': 3,
+    'otp': 5
 }
 
 def load_attack_curves(base_dir):
@@ -123,7 +132,6 @@ def plot_m_occlusion_oracle_agreement_scores(base_dir, dest):
     fig, axes = plt.subplots(6, 4, figsize=(4*PLOT_WIDTH, 6*PLOT_WIDTH))
     for idx, dataset_name in enumerate(oracle_agreement_scores.keys()):
         axes_r = axes[idx, :]
-        assessments = np.stack([occlusion_assessments[dataset_name][window_size] for window_size in window_sizes], axis=1)
         agreement_scores = np.stack([oracle_agreement_scores[dataset_name][window_size] for window_size in window_sizes], axis=1)
         mean_score, std_score = agreement_scores.mean(axis=0), agreement_scores.std(axis=0)
         axes_r[0].fill_between(window_sizes, mean_score-std_score, mean_score+std_score, color='blue', alpha=0.25, **PLOT_KWARGS)
@@ -181,8 +189,62 @@ def get_assessments(base_dir):
     assessment_runtimes = {dataset_name: {key: np.stack(val) for key, val in assessment_runtimes[dataset_name].items()} for dataset_name in dataset_names}
     return assessments, assessment_runtimes
 
+def get_oracle_agreement_vals(base_dir):
+    assessments, _ = get_assessments(base_dir)
+    oracle_assessments = get_oracle_assessments(base_dir)
+    profiling_oracle_assessments = get_oracle_assessments(base_dir, phase='profiling')
+    data = {dataset_name: {method_name: None for method_name in METHOD_NAMES.keys()} for dataset_name in DATASET_NAMES.keys()}
+    for dataset_name in DATASET_NAMES.keys():
+        print(f'Dataset: {dataset_name}')
+        oracle_assessment = oracle_assessments[dataset_name]
+        profiling_oracle_assessment = profiling_oracle_assessments[dataset_name]
+        data[dataset_name]['random'] = np.stack([get_oracle_agreement(np.random.rand(oracle_assessment.shape[-1]), oracle_assessment) for _ in range(5)])
+        data[dataset_name]['prof_oracle'] = get_oracle_agreement(oracle_assessment, profiling_oracle_assessment).reshape(1, -1)
+        per_method_assessments = assessments[dataset_name]
+        for assessment_name, assessment in per_method_assessments.items():
+            agreement_vals = np.array([get_oracle_agreement(_assessment, oracle_assessment) for _assessment in assessment])
+            if assessment_name in data[dataset_name].keys():
+                data[dataset_name][assessment_name] = agreement_vals
+            if assessment_name.split('-')[-1] == 'occlusion':
+                if data[dataset_name]['m-occlusion'] is None or agreement_vals.mean() >= data[dataset_name]['m-occlusion'].mean():
+                    data[dataset_name]['m-occlusion'] = agreement_vals
+            print(f'\t{assessment_name}: {agreement_vals.mean()} +/- {agreement_vals.std()}')
+    return data
+
+def get_dnn_occlusion_curves(base_dir):
+    fwd_base_data = {dataset_name: defaultdict(list) for dataset_name in DATASET_NAMES.keys()}
+    fwd_data = {dataset_name: {method_name: None for method_name in METHOD_NAMES.keys()} for dataset_name in DATASET_NAMES.keys()}
+    rev_base_data = {dataset_name: defaultdict(list) for dataset_name in DATASET_NAMES.keys()}
+    rev_data = {dataset_name: {method_name: None for method_name in METHOD_NAMES.keys()} for dataset_name in DATASET_NAMES.keys()}
+    for dataset_name in DATASET_NAMES.keys():
+        print(f'Dataset: {dataset_name}')
+        for seed in [55, 56, 57, 58, 59]:
+            subdir = os.path.join(base_dir, dataset_name, 'supervised_models_for_attribution', 'classification', f'seed={seed}')
+            method_names = [x.split('_dnno')[0] for x in os.listdir(subdir) if x.split('_')[-1] == 'dnno.npz']
+            for method_name in method_names:
+                rv = np.load(os.path.join(subdir, f'{method_name}_dnno.npz'), allow_pickle=True)
+                fwd_dnno = rv['fwd_dnno']
+                rev_dnno = rv['rev_dnno']
+                print(f'\tFWD AUC for {method_name}: {fwd_dnno.mean()} +/- {fwd_dnno.std()}')
+                print(f'\tREV AUC for {method_name}: {rev_dnno.mean()} +/- {rev_dnno.std()}')
+                fwd_base_data[dataset_name][method_name].append(rv['fwd_dnno'])
+                rev_base_data[dataset_name][method_name].append(rv['rev_dnno'])
+    for dataset_name in DATASET_NAMES:
+        for k, v in fwd_base_data[dataset_name].items():
+            print(dataset_name, k, [x.shape for x in v])
+    fwd_base_data = {dataset_name: {k: np.stack(v) for k, v in fwd_base_data[dataset_name].items()} for dataset_name in DATASET_NAMES.keys()}
+    rev_base_data = {dataset_name: {k: np.stack(v) for k, v in rev_base_data[dataset_name].items()} for dataset_name in DATASET_NAMES.keys()}
+    for dataset_name in DATASET_NAMES.keys():
+        for method_name in fwd_base_data[dataset_name].keys():
+            if method_name in METHOD_NAMES.keys():
+                fwd_data[dataset_name][method_name] = fwd_base_data[dataset_name][method_name]
+                rev_data[dataset_name][method_name] = rev_base_data[dataset_name][method_name]
+            fwd_data[dataset_name]['m-occlusion'] = fwd_base_data[dataset_name][f'{OPTIMAL_WINDOW_SIZES[dataset_name]}-occlusion']
+            rev_data[dataset_name]['m-occlusion'] = rev_base_data[dataset_name][f'{OPTIMAL_WINDOW_SIZES[dataset_name]}-occlusion']
+    return fwd_data, rev_data
+
 # done with the help of ChatGPT
-def create_oracle_agreement_table(base_dir, dest):
+def create_performance_comparison_table(base_dir, dest, data):
     def to_one_sigfig(x):
         if x == 0 or np.isnan(x):
             return 0.
@@ -231,26 +293,7 @@ def create_oracle_agreement_table(base_dir, dest):
         body_lines = [f"& {ln.lstrip()}" for ln in body_lines]
         footer = "\\bottomrule\n\\end{tabular}\n"
         return header + "\n".join(body_lines) + footer
-    assessments, _ = get_assessments(base_dir)
-    oracle_assessments = get_oracle_assessments(base_dir)
-    profiling_oracle_assessments = get_oracle_assessments(base_dir, phase='profiling')
     table = pd.DataFrame(index=list(METHOD_NAMES.values()), columns=list(DATASET_NAMES.values()))
-    data = {dataset_name: {method_name: None for method_name in METHOD_NAMES.keys()} for dataset_name in DATASET_NAMES.keys()}
-    for dataset_name in DATASET_NAMES.keys():
-        print(f'Dataset: {dataset_name}')
-        oracle_assessment = oracle_assessments[dataset_name]
-        profiling_oracle_assessment = profiling_oracle_assessments[dataset_name]
-        data[dataset_name]['random'] = np.stack([get_oracle_agreement(np.random.rand(oracle_assessment.shape[-1]), oracle_assessment) for _ in range(5)])
-        data[dataset_name]['prof_oracle'] = get_oracle_agreement(oracle_assessment, profiling_oracle_assessment).reshape(1, -1)
-        per_method_assessments = assessments[dataset_name]
-        for assessment_name, assessment in per_method_assessments.items():
-            agreement_vals = np.array([get_oracle_agreement(_assessment, oracle_assessment) for _assessment in assessment])
-            if assessment_name in data[dataset_name].keys():
-                data[dataset_name][assessment_name] = agreement_vals
-            if assessment_name.split('-')[-1] == 'occlusion':
-                if data[dataset_name]['m-occlusion'] is None or agreement_vals.mean() >= data[dataset_name]['m-occlusion'].mean():
-                    data[dataset_name]['m-occlusion'] = agreement_vals
-            print(f'\t{assessment_name}: {agreement_vals.mean()} +/- {agreement_vals.std()}')
     for dataset_name, subdata in data.items():
         best_method_idx = np.argmax([x.mean() if (x is not None and name != 'prof_oracle') else -np.inf for name, x in subdata.items()])
         best_name = list(subdata.keys())[best_method_idx]
@@ -286,4 +329,10 @@ def do_analysis_for_paper():
     plot_m_occlusion_oracle_agreement_scores(OUTPUT_DIR, os.path.join(fig_dir, 'occl_window_size_sweep.pdf'))
     print()
     print('Creating oracle agreement table...')
-    create_oracle_agreement_table(OUTPUT_DIR, os.path.join(fig_dir, 'oracle_agreement_table'))
+    create_performance_comparison_table(OUTPUT_DIR, os.path.join(fig_dir, 'oracle_agreement_table'), get_oracle_agreement_vals(OUTPUT_DIR))
+    print()
+    print('Creating DNN occlusion AUC table...')
+    fwd_dnno_data, rev_dnno_data = get_dnn_occlusion_curves(OUTPUT_DIR)
+    create_performance_comparison_table(OUTPUT_DIR, os.path.join(fig_dir, 'fwd_dnno_auc_table'), fwd_dnno_data)
+    create_performance_comparison_table(OUTPUT_DIR, os.path.join(fig_dir, 'rev_dnno_auc_table'), rev_dnno_data)
+    print()

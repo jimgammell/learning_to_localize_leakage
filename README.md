@@ -1,9 +1,17 @@
 # Learning to Localize Leakage of Cryptographic Sensitive Variables
-By Jimmy Gammell, Anand Raghunathan, Abolfazl Hashemi, and Kaushik Roy
+By REDACTED
 
-IN PROGRESS: writing README and updating code so that it is usable by other people.
+README is in progress. Need to clean things up so that it is easy to use. Here are a few of the salient files:
+- `./training_modules/adversarial_leakage_localization`: the implementation of our algorithm. Lightning module is in the `module.py` file.
+- `./training_modules/supervised_deep_sca`: our supervised learning trainer for the deep learning baselines.
+- `./utils/baseline_assessments/first_order_statistics.py`: our implementation of the SNR, SOSD, CPA baselines.
+- `./utils/baseline_assessments/neural_net_attribution.py`: implementations of all the deep learning baselines apart from OccPOI and second-order occlusion.
+- `./utils/baseline_assessments/occpoi.py`: implementation of OccPOI.
+- `./utils/baseline_assessments/second_order_occlusion.py`: implementation of second-order occlusion.
+- `./datasets`: contains code for the datasets we use.
+- `./models/mpl_1d.py`: the neural net architecture used in our experiments.
 
-Our paper can be found [here](https://arxiv.org/abs/2503.07464).
+Our paper can be found REDACTED.
 
 ## Installation
 
@@ -29,14 +37,4 @@ If not already present, datasets will be auto-downloaded to the directory specif
 ## Citation
 
 Please cite the following paper if you use our work:
-```
-@misc{gammell2025learninglocalizeleakagecryptographic,
-      title={Learning to Localize Leakage of Cryptographic Sensitive Variables}, 
-      author={Jimmy Gammell and Anand Raghunathan and Abolfazl Hashemi and Kaushik Roy},
-      year={2025},
-      eprint={2503.07464},
-      archivePrefix={arXiv},
-      primaryClass={cs.LG},
-      url={https://arxiv.org/abs/2503.07464}, 
-}
-```
+REDACTED

@@ -22,10 +22,10 @@ from . import evaluation_methods
 from . import all_experiment_methods
 
 OPTIMAL_WINDOW_SIZES = {
-    'ascadv1_fixed': 3,
-    'ascadv1_variable': 7,
-    'dpav4': 19,
-    'aes_hd': 19,
+    'ascadv1-fixed': 3,
+    'ascadv1-variable': 7,
+    'dpav4': 41,
+    'aes-hd': 31,
     'otiait': 3,
     'otp': 5
 }
@@ -289,7 +289,7 @@ class Trial:
                 max_steps=self.trial_config['supervised_train_steps'], seed=seed
             )
             base_seed += 1
-        print('Running extra trials for last-minute issues')
+        r"""print('Running extra trials for last-minute issues')
         for seed in base_seed + self.run_particular_seeds:
             best_classification_kwargs = copy(base_supervised_kwargs)
             best_classification_kwargs.update(best_supervised_hparams['classification'])
@@ -305,7 +305,7 @@ class Trial:
                     compute_lrp=False, compute_occlusion=np.arange(1, 51, 2), compute_second_order_occlusion=[],
                     compute_occpoi=False, compute_extended_occpoi=False
                 )
-            base_seed += 1
+            base_seed += 1"""
         for name, hparams in best_supervised_hparams.items():
             if name != 'classification': # FIXME
                 continue
@@ -323,7 +323,7 @@ class Trial:
                 supervised_experiment_methods.attribute_neural_net(
                     subdir, self.profiling_dataset, self.attack_dataset, self.dataset_name,
                     compute_gradvis=True, compute_saliency=True, compute_inputxgrad=True,
-                    compute_lrp=True, compute_occlusion=np.arange(1, 21, 2), compute_second_order_occlusion=[1, OPTIMAL_WINDOW_SIZES[self.dataset_name]],
+                    compute_lrp=True, compute_occlusion=np.arange(1, 51, 2), compute_second_order_occlusion=[1, OPTIMAL_WINDOW_SIZES[self.dataset_name]],
                     compute_occpoi=True, compute_extended_occpoi=False
                 )
                 if name == 'classification': # compute DNN occlusion tests

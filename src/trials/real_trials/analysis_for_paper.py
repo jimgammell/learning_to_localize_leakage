@@ -23,7 +23,7 @@ DATASET_NAMES = {
 
 METHOD_NAMES = {
     'random': 'Random',
-    'prof_oracle': 'Oracle (train set)',
+    #'prof_oracle': 'Oracle (train set)',
     'gradvis': 'GradVis~\\cite{masure2019}',
     'saliency': 'Saliency~\\cite{simonyan2014, hettwer2020}',
     'inputxgrad': r'Input $*$ Grad~\cite{shrikumar2017, wouters2020}',
@@ -39,8 +39,8 @@ METHOD_NAMES = {
 OPTIMAL_WINDOW_SIZES = {
     'ascadv1_fixed': 3,
     'ascadv1_variable': 7,
-    'dpav4': 19,
-    'aes_hd': 19,
+    'dpav4': 41,
+    'aes_hd': 31,
     'otiait': 3,
     'otp': 5
 }
@@ -124,7 +124,8 @@ def load_m_occlusion_oracle_agreement_scores(base_dir):
     for dataset_name in dataset_names:
         oracle_assessment = oracle_assessments[dataset_name]
         for seed in [55, 56, 57, 58, 59]:
-            for window_size in np.arange(1, 21, 2):
+            window_sizes = np.arange(1, 21, 2) if dataset_name in ['ascadv1_fixed', 'ascadv1_variable', 'otiait', 'otp'] else np.arange(1, 51, 2)
+            for window_size in window_sizes:
                 assessment_path = os.path.join(base_dir, dataset_name, 'supervised_models_for_attribution', 'classification', f'seed={seed}', f'{window_size}-occlusion.npz')
                 if not os.path.exists(assessment_path):
                     print(f'Skipping file because it does not exist: {assessment_path}')
@@ -133,15 +134,25 @@ def load_m_occlusion_oracle_agreement_scores(base_dir):
                 oracle_agreement = get_oracle_agreement(assessment, oracle_assessment)
                 occlusion_assessments[dataset_name][window_size].append(assessment)
                 performance_vs_window_size[dataset_name][window_size].append(oracle_agreement)
-    occlusion_assessments = {dataset_name: {window_size: np.stack(occlusion_assessments[dataset_name][window_size]) for window_size in np.arange(1, 21, 2)} for dataset_name in dataset_names}
-    performance_vs_window_size = {dataset_name: {window_size: np.stack(performance_vs_window_size[dataset_name][window_size]) for window_size in np.arange(1, 21, 2)} for dataset_name in dataset_names}
+    occlusion_assessments = {dataset_name: 
+        {window_size: np.stack(occlusion_assessments[dataset_name][window_size]) for window_size in np.arange(1, 51, 2) if len(occlusion_assessments[dataset_name][window_size]) > 0}
+    for dataset_name in dataset_names}
+    performance_vs_window_size = {dataset_name: 
+        {window_size: np.stack(performance_vs_window_size[dataset_name][window_size]) for window_size in np.arange(1, 51, 2) if len(performance_vs_window_size[dataset_name][window_size]) > 0}
+    for dataset_name in dataset_names}
+    max_key, max_val, vall = None, -float('inf'), None
+    for key, val in performance_vs_window_size['aes_hd'].items():
+        if val.mean() > max_val:
+            max_val = val.mean()
+            max_key = key
+            vall = val
     return performance_vs_window_size, occlusion_assessments
 
 def plot_m_occlusion_oracle_agreement_scores(base_dir, dest):
     oracle_agreement_scores, occlusion_assessments = load_m_occlusion_oracle_agreement_scores(base_dir)
-    window_sizes = np.arange(1, 21, 2)
     fig, axes = plt.subplots(6, 4, figsize=(4*PLOT_WIDTH, 6*PLOT_WIDTH))
     for idx, dataset_name in enumerate(oracle_agreement_scores.keys()):
+        window_sizes = np.arange(1, 51, 2) if dataset_name in ['aes_hd', 'dpav4'] else np.arange(1, 21, 2)
         axes_r = axes[idx, :]
         agreement_scores = np.stack([oracle_agreement_scores[dataset_name][window_size] for window_size in window_sizes], axis=1)
         mean_score, std_score = agreement_scores.mean(axis=0), agreement_scores.std(axis=0)
@@ -177,7 +188,7 @@ def plot_leakiness_assessments(base_dir, dest, only_ascadv1_variable: bool = Fal
         oracle_assessment = oracle_assessments[dataset_name]
         all_path = os.path.join(base_dir, dataset_name, 'all_runs', 'fair', 'seed=50', 'all_training', 'leakage_assessment.npy')
         all_assessment = np.load(all_path)
-        ax.plot(oracle_assessment, all_assessment, color='blue', linestyle='none', marker='s', markersize=5, alpha=0.5, label='ALL (ours)', **PLOT_KWARGS)
+        ax.plot(oracle_assessment, all_assessment, color='blue', linestyle='none', marker='s', markersize=5, alpha=0.5, label=r'\textbf{ALL (ours)}', **PLOT_KWARGS)
         occl_path = os.path.join(base_dir, dataset_name, 'supervised_models_for_attribution', 'classification', 'seed=55', f'{OPTIMAL_WINDOW_SIZES[dataset_name]}-occlusion.npz')
         occl = np.load(occl_path, allow_pickle=True)['attribution']
         tax.plot(oracle_assessment, occl, color='red', linestyle='none', marker='o', markersize=5, alpha=0.3, label=r'$m^*$-occlusion', **PLOT_KWARGS)
@@ -213,11 +224,35 @@ def load_traces_over_time(base_dir):
             with open(all_curves_path, 'rb') as f:
                 all_curves = pickle.load(f)
             oracle_agreement = all_curves['oracle_snr_corr'][-1]
+            if dataset_name in ['ascadv1_fixed', 'ascadv1_variable', 'aes_hd']: # there is a pretraining phase
+                oracle_agreement = np.concatenate([np.zeros(len(oracle_agreement)), oracle_agreement])
             traces[dataset_name]['all'].append(oracle_agreement)
+        for seed in [55, 56, 57, 58, 59]:
+            sup_curves_path = os.path.join(base_dir, dataset_name, 'attr_over_time', f'seed={seed}', 'training_curves.pickle')
+            if not os.path.exists(sup_curves_path):
+                print(f'Skipping file because it does not exist: {sup_curves_path}')
+                continue
+            with open(sup_curves_path, 'rb') as f:
+                sup_curves = pickle.load(f)
+            for method_name in ['gradvis', 'saliency', 'lrp', 'inputxgrad', '1-occlusion', 'm-occlusion']:
+                oracle_agreement = sup_curves[f'{method_name}_oracle_agreement'][1]
+                oracle_agreement = oracle_agreement[np.concatenate(([True], oracle_agreement[1:] != oracle_agreement[:-1]))]
+                traces[dataset_name][method_name].append(oracle_agreement)
     traces = {dataset_name: {k: np.stack(v) for k, v in traces[dataset_name].items()} for dataset_name in DATASET_NAMES.keys()}
     return traces
 
 def plot_traces_over_time(full_traces, dest, oracle_agreement_vals, only_ascadv1_variable: bool = False):
+    to_kwargs = {
+        'all': {'color': 'blue', 'label': r'\textbf{ALL (ours)}'},
+        'gradvis': {'color': 'green', 'label': 'Gradient-based methods', 'markersize': 5, 'marker': 'o', 'alpha': 0.5},
+        'saliency': {'color': 'green', 'markersize': 5, 'marker': 'o', 'alpha': 0.5},
+        'lrp': {'color': 'green', 'markersize': 5, 'marker': 'o', 'alpha': 0.5},
+        'inputxgrad': {'color': 'green', 'markersize': 5, 'marker': 'o', 'alpha': 0.5},
+        '1-occlusion': {'color': 'red', 'label': '1-occlusion', 'markersize': 5, 'marker': 's', 'alpha': 0.8},
+        'm-occlusion': {'color': 'red', 'label': r'$m^*$-occlusion', 'markersize': 5, 'marker': '.', 'alpha': 1.0},
+        'occpoi': {'color': 'orange', 'label': 'OccPOI (final)'},
+        'm-second-order-occlusion': {'color': 'purple', 'label': r'$m^*$-occlusion$^2$ (final)'}
+    }
     dataset_names = list(DATASET_NAMES.keys()) if not only_ascadv1_variable else ['ascadv1_variable']
     cols = ceil(len(dataset_names)/2)
     rows = ceil(len(dataset_names)/cols)
@@ -227,19 +262,32 @@ def plot_traces_over_time(full_traces, dest, oracle_agreement_vals, only_ascadv1
     for idx, dataset_name in enumerate(dataset_names):
         traces = full_traces[dataset_name]
         ax = axes.flatten()[idx]
-        timesteps = traces['all'].shape[1]
-        for method_name, method_val in oracle_agreement_vals[dataset_name].items():
-            if method_name in ['prof_oracle', 'all']:
-                continue
-            ax.fill_between([1, timesteps], np.mean(method_val)-np.std(method_val), np.mean(method_val)+np.std(method_val), label=method_name, alpha=0.25)
+        timesteps = 40000 if dataset_name == 'ascadv1_variable' else traces['all'].shape[1]
         for method_name, method_trace in traces.items():
-            ax.fill_between(np.linspace(1, timesteps, method_trace.shape[1]), method_trace.mean(axis=0)-method_trace.std(axis=0), method_trace.mean(axis=0)+method_trace.std(axis=0), color='blue', alpha=0.25)
-            ax.plot(np.linspace(1, timesteps, method_trace.shape[1]), method_trace.mean(axis=0), color='blue')
-        ax.set_xlabel('Training steps')
-        ax.set_ylabel('Oracle agreement')
-        ax.legend()
+            if method_name == 'all':
+                ax.fill_between(
+                    np.linspace(1, timesteps, method_trace.shape[1]), method_trace.mean(axis=0)-method_trace.std(axis=0), method_trace.mean(axis=0)+method_trace.std(axis=0), 
+                    color='blue', alpha=0.25, **PLOT_KWARGS
+                )
+                ax.plot(np.linspace(1, timesteps, method_trace.shape[1]), method_trace.mean(axis=0), **to_kwargs['all'], **PLOT_KWARGS)
+            else:
+                ax.errorbar(np.linspace(1, timesteps, method_trace.shape[1]), method_trace.mean(axis=0), method_trace.std(axis=0), linewidth=2, elinewidth=2, capsize=5, **to_kwargs[method_name], **PLOT_KWARGS)
+        ax.axhspan(
+            ymin=oracle_agreement_vals[dataset_name]['occpoi'].mean()-oracle_agreement_vals[dataset_name]['occpoi'].std(),
+            ymax=oracle_agreement_vals[dataset_name]['occpoi'].mean()+oracle_agreement_vals[dataset_name]['occpoi'].std(),
+            alpha=0.25, xmin=0.0, xmax=1.0, **to_kwargs['occpoi'], **PLOT_KWARGS
+        )
+        ax.axhspan(
+            ymin=oracle_agreement_vals[dataset_name]['m-second-order-occlusion'].mean()-oracle_agreement_vals[dataset_name]['m-second-order-occlusion'].std(),
+            ymax=oracle_agreement_vals[dataset_name]['m-second-order-occlusion'].mean()+oracle_agreement_vals[dataset_name]['m-second-order-occlusion'].std(),
+            alpha=0.25, xmin=0.0, xmax=1.0, **to_kwargs['m-second-order-occlusion'], **PLOT_KWARGS
+        )
+        ax.axhline(0.0, color='black', linestyle='--', label='Random', **PLOT_KWARGS)
+        ax.set_xlabel('Training steps', fontsize=16)
+        ax.set_ylabel(r'Oracle agreement $\uparrow$', fontsize=16)
+        ax.legend(loc='upper left', ncol=2, fontsize='x-small', framealpha=0.5)
     fig.tight_layout()
-    fig.savefig(dest)
+    fig.savefig(dest, **SAVEFIG_KWARGS)
     plt.close(fig)
 
 def load_all_sensitivity_analysis_data(base_dir):
@@ -322,7 +370,7 @@ def plot_all_sensitivity_analysis(gamma_bar_sweep, theta_lr_scalar_sweep, etat_l
         ax.fill_between(gamma_bar_vals, gamma_bar_agreements.mean(axis=1)-gamma_bar_agreements.std(axis=1), gamma_bar_agreements.mean(axis=1)+gamma_bar_agreements.std(axis=1), color='blue', alpha=0.25, **PLOT_KWARGS)
         ax.plot(gamma_bar_vals, gamma_bar_agreements.mean(axis=1), color='blue', marker='.', linestyle='none', **PLOT_KWARGS)
         ax.set_xlabel(r'Budget hyperparameter $\overline{\gamma}$', color='blue', fontsize=16)
-        ax.set_ylabel('Oracle agreement', fontsize=16)
+        ax.set_ylabel(r'Oracle agreement $\uparrow$', fontsize=16)
 
         theta_lr_scalar_vals, theta_lr_scalar_agreements = theta_lr_scalar_sweep[dataset_name]
         sorted_indices = np.argsort(theta_lr_scalar_vals)
@@ -353,7 +401,10 @@ def get_assessments(base_dir):
     for dataset_name in dataset_names:
         for seed in [55, 56, 57, 58, 59]:
             sup_dir = os.path.join(base_dir, dataset_name, 'supervised_models_for_attribution', 'classification', f'seed={seed}')
-            for method_name in ['gradvis', 'inputxgrad', 'lrp', 'occpoi', 'saliency', '1-second-order-occlusion', f'{OPTIMAL_WINDOW_SIZES[dataset_name]}-second-order-occlusion', *[f'{m}-occlusion' for m in np.arange(1, 21, 2)]]:
+            for method_name in [
+                'gradvis', 'inputxgrad', 'lrp', 'occpoi', 'saliency', '1-second-order-occlusion', f'{OPTIMAL_WINDOW_SIZES[dataset_name]}-second-order-occlusion',
+                '1-occlusion', f'{OPTIMAL_WINDOW_SIZES[dataset_name]}-occlusion'
+            ]:
                 assessment_path = os.path.join(sup_dir, f'{method_name}.npz')
                 if not os.path.exists(assessment_path):
                     print(f'Skipping file because it does not exist: {assessment_path}')
@@ -446,7 +497,7 @@ def create_performance_comparison_table(base_dir, dest, data):
             return 0.
         exp = int(floor(log10(abs(x))))
         return round(x, -exp)
-    def fmt(mean, std, should_highlight=False):
+    def fmt(mean, std, should_highlight=False, should_underline=False):
         if mean is None or std is None:
             return r'n/a'
         error = to_one_sigfig(std)
@@ -463,30 +514,31 @@ def create_performance_comparison_table(base_dir, dest, data):
         rv = '$' + rv + '$'
         if should_highlight:
             rv = f'\\best{{{rv}}}'
+        if should_underline:
+            rv = f'\\underline{{{rv}}}'
         return rv
     def build_full_tabular(latex_body, n_rows):
         header = (
-            "\\begin{tabular}{clcccccc}\n"
+            "\\begin{tabular}{lcccccc}\n"
             "\\toprule\n"
-            "& & \\multicolumn{2}{c}{\\textbf{2nd-order datasets}} "
-            "& \\multicolumn{4}{c}{\\textbf{1st-order datasets}} \\\\\n"
-            "& \\textbf{Method} & ASCADv1 (fixed)~\\cite{benadjila2020} "
+            "& \\multicolumn{2}{c}{\\textbf{2nd-order datasets}} "
+            "\\multicolumn{4}{c}{\\textbf{1st-order datasets}} \\\\\n"
+            "\\textbf{Method} & ASCADv1 (fixed)~\\cite{benadjila2020} "
             "& ASCADv1 (random)~\\cite{benadjila2020} "
             "& DPAv4 (Zaid vsn.)~\\cite{bhasin2014, zaid2020} "
             "& AES-HD~\\cite{bhasin2020} "
             "& OTiAiT~\\cite{weissbart2019} "
             "& OTP (1024-bit)~\\cite{saito2022} \\\\\n"
-            "\\cmidrule{2-2} \\cmidrule(lr){3-4} \\cmidrule(lr){5-8}\n"
-            f"\\multirow{{{n_rows}}}{{2cm}}{{Spearman's rank correlation with oracle leakiness}}\n"
+            "\\cmidrule{1-1} \\cmidrule(lr){2-3} \\cmidrule(lr){4-7}\n"
         )
         lines = latex_body.splitlines()
         start = next(i for i, ln in enumerate(lines) if ln.strip() == r"\midrule") + 1
         end   = next(i for i, ln in enumerate(lines[::-1]) if ln.strip() == r"\bottomrule")
         body_lines = lines[start: len(lines) - end - 1]
         for idx, body_line in enumerate(body_lines):
-            if ('Oracle' in body_line) or (r'$m^*$-$2^{\mathrm{nd}}$-order Occlusion' in body_line):
-                body_lines[idx] += '\\cmidrule{2-8}'
-        body_lines = [f"& {ln.lstrip()}" for ln in body_lines]
+            if ('Random' in body_line) or (r'$m^*$-Occlusion$^2$' in body_line):
+                body_lines[idx] += '\\midrule'
+        body_lines = [f"{ln.lstrip()}" for ln in body_lines]
         footer = "\\bottomrule\n\\end{tabular}\n"
         return header + "\n".join(body_lines) + footer
     table = pd.DataFrame(index=list(METHOD_NAMES.values()), columns=list(DATASET_NAMES.values()))
@@ -494,21 +546,23 @@ def create_performance_comparison_table(base_dir, dest, data):
         best_method_idx = np.argmax([x.mean() if (x is not None and name != 'prof_oracle') else -np.inf for name, x in subdata.items()])
         best_name = list(subdata.keys())[best_method_idx]
         best_data = subdata[best_name]
-        methods_to_highlight = [
+        methods_to_underline = [
             method_name for method_name, method_data in subdata.items()
             if (method_data is not None)
-            and (method_data.mean() >= best_data.mean()-best_data.std())
+            and (method_name != best_name)
+            and (method_data.mean()+method_data.std() >= best_data.mean()-best_data.std())
             and method_name != 'prof_oracle'
         ]
         for method_name, method_data in subdata.items():
-            should_highlight = method_name in methods_to_highlight
+            should_highlight = method_name == best_name
+            should_underline = method_name in methods_to_underline
             table.at[METHOD_NAMES[method_name], DATASET_NAMES[dataset_name]] = (
-                fmt(method_data.mean(), method_data.std(), should_highlight=should_highlight) if method_data is not None
+                fmt(method_data.mean(), method_data.std(), should_highlight=should_highlight, should_underline=should_underline) if method_data is not None
                 else fmt(None, None, should_highlight=should_highlight)
             )
     latex_body = table.to_latex(
         escape=False,
-        column_format='clcccccc',
+        column_format='lcccccc',
         index_names=False,
         header=False
     )
@@ -550,8 +604,6 @@ def create_toy_gaussian_plot(base_dir, dest):
                 negative_ranks[key][leaky_point_count].append(get_negative_rank(val))
     negative_ranks = {method: {k: np.stack(v) for k, v in negative_ranks[method].items()} for method in negative_ranks.keys()}
     fig, ax = plt.subplots(1, 1, figsize=(PLOT_WIDTH, PLOT_WIDTH))
-    ax.axhline(0.0, color='black', linestyle='--', label='Oracle')
-    ax.axhline(0.5, color='red', linestyle='--', label='Random')
     groups = {
         'parametric': ['snr', 'sosd', 'cpa'],
         'gradient': ['gradvis', 'saliency', 'lrp', 'inputxgrad'],
@@ -564,7 +616,7 @@ def create_toy_gaussian_plot(base_dir, dest):
         'gradient': {'color': 'purple', 'label': 'Best gradient-based', 'markersize': 3, 'marker': 's'},
         'occlusion': {'color': 'cyan', 'label': r'Best $m$-occlusion', 'markersize': 5, 'marker': 'X'},
         'occpoi': {'color': 'orange', 'label': 'OccPOI', 'markersize': 3, 'marker': 'v'},
-        'all': {'color': 'blue', 'label': 'ALL (ours)', 'markersize': 5, 'marker': '^'}
+        'all': {'color': 'blue', 'label': r'\textbf{ALL (ours)}', 'markersize': 5, 'marker': '^'}
     }
     def get_trace_for_group(group):
         best_trace = {leaky_point_count: np.full((5,), np.inf, dtype=np.float32) for leaky_point_count in range(14)}
@@ -581,6 +633,8 @@ def create_toy_gaussian_plot(base_dir, dest):
     for group_name, group in groups.items():
         trace = get_trace_for_group(group)
         plot_trace(trace, ax, **to_kwargs[group_name], **PLOT_KWARGS)
+    ax.axhline(0.0, color='black', linestyle='--', label='Oracle')
+    ax.axhline(0.5, color='red', linestyle='--', label='Random')
     ax.set_xlabel(r'Number of second-order leaky pairs: $D$')
     ax.set_ylabel(r'False negative rate $\downarrow$')
     ax.set_xscale('log')
@@ -591,23 +645,23 @@ def create_toy_gaussian_plot(base_dir, dest):
 def do_analysis_for_paper():
     fig_dir = os.path.join(OUTPUT_DIR, 'plots_for_paper')
     os.makedirs(fig_dir, exist_ok=True)
-    plot_leakiness_assessments(OUTPUT_DIR, os.path.join(fig_dir, 'qualitative_relationship_with_oracle.pdf'))
-    plot_leakiness_assessments(OUTPUT_DIR, os.path.join(fig_dir, 'ascadv1_variable_relationship_with_oracle.pdf'), only_ascadv1_variable=True)
-    oracle_agreement_vals = get_oracle_agreement_vals(OUTPUT_DIR)
-    traces = load_traces_over_time(OUTPUT_DIR)
-    plot_traces_over_time(traces, os.path.join(fig_dir, 'traces_over_time.png'), oracle_agreement_vals, only_ascadv1_variable=True)
-    create_toy_gaussian_plot(OUTPUT_DIR, os.path.join(fig_dir, 'toy_gaussian_plot.pdf'))
-    gamma_bar_sweep, theta_lr_scalar_sweep, etat_lr_scalar_sweep = load_all_sensitivity_analysis_data(OUTPUT_DIR)
-    plot_all_sensitivity_analysis(gamma_bar_sweep, theta_lr_scalar_sweep, etat_lr_scalar_sweep, os.path.join(fig_dir, 'all_sensitivity_analysis.pdf'))
-    plot_all_sensitivity_analysis(gamma_bar_sweep, theta_lr_scalar_sweep, etat_lr_scalar_sweep, os.path.join(fig_dir, 'ascadv1_variable_sensitivity_analysis.pdf'), only_ascadv1_variable=True)
-    print('Plotting attack curves...')
-    plot_attack_curves(OUTPUT_DIR, os.path.join(fig_dir, 'attack_curves.pdf'))
-    print()
     print('Plotting occlusion window size sweeps...')
     plot_m_occlusion_oracle_agreement_scores(OUTPUT_DIR, os.path.join(fig_dir, 'occl_window_size_sweep.pdf'))
     print()
+    plot_leakiness_assessments(OUTPUT_DIR, os.path.join(fig_dir, 'qualitative_relationship_with_oracle.pdf'))
+    plot_leakiness_assessments(OUTPUT_DIR, os.path.join(fig_dir, 'ascadv1_variable_relationship_with_oracle.pdf'), only_ascadv1_variable=True)
+    oracle_agreement_vals = get_oracle_agreement_vals(OUTPUT_DIR)
     print('Creating oracle agreement table...')
     create_performance_comparison_table(OUTPUT_DIR, os.path.join(fig_dir, 'oracle_agreement_table'), oracle_agreement_vals)
+    print()
+    create_toy_gaussian_plot(OUTPUT_DIR, os.path.join(fig_dir, 'toy_gaussian_plot.pdf'))
+    gamma_bar_sweep, theta_lr_scalar_sweep, etat_lr_scalar_sweep = load_all_sensitivity_analysis_data(OUTPUT_DIR)
+    plot_all_sensitivity_analysis(gamma_bar_sweep, theta_lr_scalar_sweep, etat_lr_scalar_sweep, os.path.join(fig_dir, 'ascadv1_variable_sensitivity_analysis.pdf'), only_ascadv1_variable=True)
+    plot_all_sensitivity_analysis(gamma_bar_sweep, theta_lr_scalar_sweep, etat_lr_scalar_sweep, os.path.join(fig_dir, 'all_sensitivity_analysis.pdf'))
+    traces = load_traces_over_time(OUTPUT_DIR)
+    plot_traces_over_time(traces, os.path.join(fig_dir, 'traces_over_time.pdf'), oracle_agreement_vals, only_ascadv1_variable=True)
+    print('Plotting attack curves...')
+    plot_attack_curves(OUTPUT_DIR, os.path.join(fig_dir, 'attack_curves.pdf'))
     print()
     r"""print('Creating DNN occlusion AUC table...')
     fwd_dnno_data, rev_dnno_data = get_dnn_occlusion_curves(OUTPUT_DIR)

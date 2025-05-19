@@ -34,17 +34,16 @@ class OccPOI:
         attack_dataloader, model: Union[nn.Module, str], seed: Optional[int] = None, device: Optional[str] = None,
         dataset_name: Literal['dpav4', 'aes-hd', 'ascadv1-fixed', 'ascadv1-variable'] = None
     ):
-        # Setting these values to approximately the 'traces to disclosure' shown on pg. 35 of my paper.
-        #  Note that having fewer attack traces actually seems to make the method perform better.
+        # Setting these to about 10x the traces to disclosure for the model because otherwise this will take forever
         assert dataset_name is not None
         if dataset_name == 'dpav4':
-            attack_traces = 100
+            attack_traces = 140
         elif dataset_name == 'ascadv1-fixed':
-            attack_traces = 1000
+            attack_traces = 1800
         elif dataset_name == 'ascadv1-variable':
-            attack_traces = 10000
+            attack_traces = 2880
         elif dataset_name == 'aes-hd':
-            attack_traces = 10000
+            attack_traces = 25000 # 10x traces to disclosure is more than we have available
         elif dataset_name == 'otiait':
             attack_traces = 100
         elif dataset_name == 'otp':

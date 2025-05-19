@@ -56,6 +56,15 @@ OPTIMAL_ALL_HPARAMS = {
     'otp': {'theta_lr': 7e-5, 'etat_lr': 0.0049, 'gamma_bar': 0.9}
 }
 
+STEPS = {
+    'ascadv1_fixed': 20000,
+    'ascadv1_variable': 40000,
+    'aes_hd': 20000,
+    'dpav4': 10000,
+    'otiait': 1000,
+    'otp': 1000
+}
+
 def load_attack_curves(base_dir):
     attack_curves = defaultdict(lambda: defaultdict(list))
     collected_training_curves = defaultdict(list)
@@ -157,6 +166,59 @@ def plot_attack_curves(base_dir, dest):
             axes_r[2].set_title(f'Dataset: {DATASET_NAMES[dataset_name]}', fontsize=fontsize+2)
     fig.tight_layout()
     fig.savefig(dest, **SAVEFIG_KWARGS)
+    plt.close(fig)
+
+def plot_all_training_curves(base_dir, dest):
+    fontsize=16
+    curvess = {}
+    for dataset_name in DATASET_NAMES.keys():
+        curves = defaultdict(list)
+        for seed in [50, 51, 52, 53, 54]:
+            model_dir = os.path.join(base_dir, dataset_name, 'all_runs', 'fair', f'seed={seed}')
+            if dataset_name in ['ascadv1_fixed', 'ascadv1_variable', 'aes_hd']:
+                with open(os.path.join(model_dir, 'classifier_pretraining', 'training_curves.pickle'), 'rb') as f:
+                    pretrain_curves = pickle.load(f)
+                with open(os.path.join(model_dir, 'all_training', 'training_curves.pickle'), 'rb') as f:
+                    train_curves = pickle.load(f)
+                for mname in ['train_theta_loss', 'val_theta_loss', 'train_theta_rank', 'val_theta_rank', 'oracle_snr_corr']:
+                    curves[mname].append(np.concatenate([
+                        pretrain_curves[mname][-1] if mname in pretrain_curves else pretrain_curves[f'{mname}_step'][-1] if mname != 'oracle_snr_corr' else np.zeros(len(train_curves['oracle_snr_corr'][1])),
+                        train_curves[mname][-1] if mname in train_curves else train_curves[f'{mname}_step'][-1]
+                    ]))
+            else:
+                with open(os.path.join(model_dir, 'all_training', 'training_curves.pickle'), 'rb') as f:
+                    train_curves = pickle.load(f)
+                for mname in ['train_theta_loss', 'val_theta_loss', 'train_theta_rank', 'val_theta_rank', 'oracle_snr_corr']:
+                    curves[mname].append(train_curves[mname][-1] if mname in train_curves else train_curves[f'{mname}_step'][-1])
+        curves = {k: np.stack(v) for k, v in curves.items()}
+        curvess[dataset_name] = curves
+    fig, axes = plt.subplots(6, 3, figsize=(3*PLOT_WIDTH, 6*PLOT_WIDTH))
+    linestyles = ['solid', 'dotted', 'dashed', 'dashdot', (5, (10, 3))]
+    for dataset_name, axes_r in zip(DATASET_NAMES.keys(), axes):
+        curves = curvess[dataset_name]
+        if dataset_name in ['ascadv1_fixed', 'ascadv1_variable', 'aes_hd']:
+            axes_r[0].axvspan(0, STEPS[dataset_name]/2, color='gray', alpha=0.1)
+            axes_r[1].axvspan(0, STEPS[dataset_name]/2, color='gray', alpha=0.1)
+            axes_r[2].axvspan(0, STEPS[dataset_name]/2, color='gray', alpha=0.1)
+        for sidx in range(5):
+            axes_r[0].plot(np.linspace(1, STEPS[dataset_name], len(curves['train_theta_loss'][sidx, :])), -curves['train_theta_loss'][sidx, :], color='blue', linestyle=linestyles[sidx], alpha=0.25, label='train' if sidx==0 else None)
+            axes_r[0].plot(np.linspace(1, STEPS[dataset_name], len(curves['val_theta_loss'][sidx, :])), -curves['val_theta_loss'][sidx, :], color='blue', linestyle=linestyles[sidx], label='val' if sidx==0 else None)
+            axes_r[1].plot(np.linspace(1, STEPS[dataset_name], len(curves['train_theta_rank'][sidx, :])), curves['train_theta_rank'][sidx, :], color='blue', linestyle=linestyles[sidx], alpha=0.25, label='train' if sidx==0 else None)
+            axes_r[1].plot(np.linspace(1, STEPS[dataset_name], len(curves['val_theta_rank'][sidx, :])), curves['val_theta_rank'][sidx, :], color='blue', linestyle=linestyles[sidx], label='val' if sidx==0 else None)
+            axes_r[2].plot(np.linspace(1, STEPS[dataset_name], len(curves['oracle_snr_corr'][sidx, :])), curves['oracle_snr_corr'][sidx, :], color='blue', linestyle=linestyles[sidx])
+        axes_r[0].set_xlabel('Training step', fontsize=fontsize)
+        axes_r[0].set_ylabel(r'MC estimate of $\mathcal{L}(\boldsymbol{\theta}, \tilde{\boldsymbol{\eta}})$ $\updownarrow$', fontsize=fontsize)
+        axes_r[1].set_xlabel('Training step', fontsize=fontsize)
+        axes_r[1].set_ylabel(r'Classifier mean rank $\downarrow$', fontsize=fontsize)
+        axes_r[2].set_xlabel('Training step', fontsize=fontsize)
+        axes_r[2].set_ylabel(r'Oracle agreement $\uparrow$', fontsize=fontsize)
+        axes_r[0].legend(loc='upper right', fontsize=fontsize-2)
+        axes_r[1].legend(loc='upper right', fontsize=fontsize-2)
+        axes_r[0].set_title(f'Dataset: {DATASET_NAMES[dataset_name]}', fontsize=fontsize+2)
+        axes_r[1].set_title(f'Dataset: {DATASET_NAMES[dataset_name]}', fontsize=fontsize+2)
+        axes_r[2].set_title(f'Dataset: {DATASET_NAMES[dataset_name]}', fontsize=fontsize+2)
+    fig.tight_layout()
+    fig.savefig(dest)
     plt.close(fig)
 
 def load_snr_assessments(base_dir):
@@ -892,9 +954,51 @@ def plot_leakiness_assessment_comparison_with_oracle(base_dir, dest):
     fig.savefig(dest, **SAVEFIG_KWARGS)
     plt.close(fig)
 
+def plot_model_selection_criteria(base_dir, dest):
+    resultss = defaultdict(lambda: defaultdict(list))
+    for dataset_name in DATASET_NAMES.keys():
+        all_hsweep_dir = os.path.join(base_dir, dataset_name, 'all_hparam_sweep')
+        for subdir in os.listdir(all_hsweep_dir):
+            if not subdir.split('_')[0] == 'trial':
+                continue
+            metrics_path = os.path.join(all_hsweep_dir, subdir, 'metrics.npz')
+            metrics = np.load(metrics_path, allow_pickle=True)
+            for key, val in metrics.items():
+                resultss[dataset_name][key].append(val)
+        resultss[dataset_name] = {key: np.stack(val) for key, val in resultss[dataset_name].items()}
+    fig, axes = plt.subplots(6, 4, figsize=(3*PLOT_WIDTH, 4.5*PLOT_WIDTH))
+    for axes_r, dataset_name in zip(axes, DATASET_NAMES.keys()):
+        results = resultss[dataset_name]
+        composite_criterion = (
+            results['fwd_dnno_criterion'].argsort().argsort()
+            + (-results['rev_dnno_criterion']).argsort().argsort()
+            + (-results['mean_agreement']).argsort().argsort()
+        )
+        axes_r[0].plot(results['oracle_agreement'], results['fwd_dnno_criterion'], color='blue', marker='.', linestyle='none')
+        axes_r[1].plot(results['oracle_agreement'], results['rev_dnno_criterion'], color='blue', marker='.', linestyle='none')
+        axes_r[2].plot(results['oracle_agreement'], results['mean_agreement'], color='blue', marker='.', linestyle='none')
+        axes_r[3].plot(results['oracle_agreement'], composite_criterion, color='blue', marker='.', linestyle='none')
+        axes_r[0].set_xlabel(r'Oracle agreement $\uparrow$')
+        axes_r[1].set_xlabel(r'Oracle agreement $\uparrow$')
+        axes_r[2].set_xlabel(r'Oracle agreement $\uparrow$')
+        axes_r[3].set_xlabel(r'Oracle agreement $\uparrow$')
+        axes_r[0].set_ylabel(r'Forward DNNO criterion')
+        axes_r[1].set_ylabel(r'Reverse DNNO criterion')
+        axes_r[2].set_ylabel(r'Mean agreement')
+        axes_r[3].set_ylabel(r'Composite criterion')
+        axes_r[0].set_title(f'Dataset: {DATASET_NAMES[dataset_name]}')
+        axes_r[1].set_title(f'Dataset: {DATASET_NAMES[dataset_name]}')
+        axes_r[2].set_title(f'Dataset: {DATASET_NAMES[dataset_name]}')
+        axes_r[3].set_title(f'Dataset: {DATASET_NAMES[dataset_name]}')
+    fig.tight_layout()
+    fig.savefig(dest)
+    plt.close(fig)
+
 def do_analysis_for_paper():
     fig_dir = os.path.join(OUTPUT_DIR, 'plots_for_paper')
     os.makedirs(fig_dir, exist_ok=True)
+    plot_model_selection_criteria(OUTPUT_DIR, os.path.join(fig_dir, 'model_selection_criterion.pdf'))
+    plot_all_training_curves(OUTPUT_DIR, os.path.join(fig_dir, 'all_training_curves.pdf'))
     traces = load_traces_over_time(OUTPUT_DIR)
     oracle_agreement_vals = get_oracle_agreement_vals(OUTPUT_DIR)
     plot_traces_over_time(traces, os.path.join(fig_dir, 'traces_over_time.pdf'), oracle_agreement_vals)

@@ -30,21 +30,12 @@ def main():
     plot_parser = subparsers.add_parser('create-plots')
     real_parser = subparsers.add_parser('run-real-trials')
     real_sub_assessments = [
-        'compute_random', 'compute_1o_parametric_stats', 'run_supervised_trials', 'run_all_trials',
-        'run_supervised_hparam_sweep', 'do_supervised_training', 'run_supervised_attribution',
-        'run_all_hparam_sweep', 'run_all', 'eval_all_sensitivity'
+        'run_parametric_trials', 'run_supervised_trials', 'run_all_trials'
     ]
     real_sub_hints = [
-        'Compute and save the random leakage assessment baseline',
         'Compute and save the first-order parametric statistics-based leakage assessments',
         'Train supervised models to use for the neural net attribution methods',
-        'Do all the ALL-related experiments',
-        'Do a random hyperparameter search for supervised training of the models we will use for the neural net attribution baselines.',
-        'Train supervised models using the optimal hyperparameters found through the random search',
-        'Run the neural network attribution methods on the trained supervised models',
-        'Do a random hyperparameter search for Adversarial Leakage Localization.',
-        'Select the best ALL hyperparameters and do multiple runs with them.',
-        'Perturb the optimal ALL hyperparameters to evaluate sensitivity.'
+        'Do all the ALL-related experiments'
     ]
     for real_sub_assessment, real_sub_hint in zip(real_sub_assessments, real_sub_hints):
         real_parser.add_argument(f'--{real_sub_assessment.replace("_", "-")}', action='store_true', default=False, help=real_sub_hint)

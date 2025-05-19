@@ -111,4 +111,4 @@ class FirstOrderStatistics:
     
     def compute_cpa(self):
         cpa_vals = {key: self.unnormalized_correlation[key] / np.sqrt(self.trace_variance*self.hamming_weight_variance[key]) for *_, key in self.get_key_iterator()}
-        self.cpa_vals = cpa_vals
+        self.cpa_vals = {key: np.abs(val) for key, val in cpa_vals.items()}

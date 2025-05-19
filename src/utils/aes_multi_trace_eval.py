@@ -58,14 +58,18 @@ class AESMultiTraceEvaluator:
         return np.mean(losses), np.mean(ranks)
 
     @torch.no_grad()
-    def get_key_predictions(self):
+    def get_key_predictions(self, input_logits: Optional[torch.Tensor] = None):
         key_logitss = np.full((len(self.dataloader.dataset), 256), np.nan, dtype=np.float32)
         ground_truth_keys = np.full((len(self.dataloader.dataset),), -1, dtype=np.int64)
         losses = []
-        for batch_idx, (trace, label, metadata) in enumerate(self.dataloader):
+        for batch_idx, batch in enumerate(self.dataloader):
+            trace, label, metadata = batch
             trace = trace.to(self.device)
             batch_size = trace.shape[0]
-            logits = self.model(trace).cpu()
+            if input_logits is None:
+                logits = self.model(trace).cpu()
+            else:
+                logits = input_logits[self.dataloader.batch_size*batch_idx:self.dataloader.batch_size*batch_idx+batch_size, ...]
             loss = nn.functional.cross_entropy(logits, label)
             losses.append(loss.detach().cpu().item())
             logits = logits.numpy()
@@ -116,9 +120,9 @@ class AESMultiTraceEvaluator:
         assert np.all(np.isfinite(accumulated_predictions)) and np.all(rank_over_time > -1)
         return rank_over_time
     
-    def __call__(self, get_rank_over_time: bool = True):
+    def __call__(self, get_rank_over_time: bool = True, logits: Optional[torch.Tensor] = None):
         if get_rank_over_time:
-            logitss, ground_truth_keys = self.get_key_predictions()
+            logitss, ground_truth_keys = self.get_key_predictions(input_logits=logits)
             rank_over_time = self.get_rank_over_time(logitss, ground_truth_keys)
             return rank_over_time
         else:

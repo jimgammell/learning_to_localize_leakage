@@ -219,8 +219,10 @@ def attribute_neural_net(
     model_dir, profiling_dataset: Dataset, attack_dataset: Dataset, dataset_name: str,
     compute_gradvis: bool = False, compute_saliency: bool = False, compute_inputxgrad: bool = False,
     compute_lrp: bool = False, compute_occlusion: List[int] = [], compute_second_order_occlusion: List[int] = [],
-    compute_occpoi: bool = False, compute_extended_occpoi: bool = False
+    compute_occpoi: bool = False, compute_extended_occpoi: bool = False, output_dir: str = None
 ):
+    if output_dir is None:
+        output_dir = model_dir
     profiling_dataloader = None
     attack_dataloader = None
     model = None
@@ -239,10 +241,10 @@ def attribute_neural_net(
             else:
                 assert False
     def compute_attribution(attribution_fn: Callable, filename: str, mode: Literal['attr', 'occpoi'] = 'attr'):
-        if os.path.exists(os.path.join(model_dir, filename)):
+        if os.path.exists(os.path.join(output_dir, filename)):
             return
         init(mode=mode)
-        if not os.path.exists(os.path.join(model_dir, filename)):
+        if not os.path.exists(os.path.join(output_dir, filename)):
             set_seed(0)
             start_event = torch.cuda.Event(enable_timing=True)
             end_event = torch.cuda.Event(enable_timing=True)
@@ -252,7 +254,7 @@ def attribute_neural_net(
             torch.cuda.synchronize()
             elapsed_time = start_event.elapsed_time(end_event)
             rv = {'attribution': attribution, 'elapsed_time': elapsed_time}
-            np.savez(os.path.join(model_dir, filename), **rv)
+            np.savez(os.path.join(output_dir, filename), **rv)
     if compute_gradvis:
         compute_attribution(lambda: neural_net_attributor.compute_gradvis(), 'gradvis.npz')
     if compute_saliency:

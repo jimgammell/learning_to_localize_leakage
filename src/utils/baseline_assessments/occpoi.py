@@ -37,10 +37,10 @@ class OccPOI:
         # Setting these values to approximately the 'traces to disclosure' shown on pg. 35 of my paper.
         #  Note that having fewer attack traces actually seems to make the method perform better.
         assert dataset_name is not None
-        r"""if dataset_name == 'dpav4':
-            attack_traces = 10
-        elif dataset_name == 'ascadv1-fixed':
+        if dataset_name == 'dpav4':
             attack_traces = 100
+        elif dataset_name == 'ascadv1-fixed':
+            attack_traces = 1000
         elif dataset_name == 'ascadv1-variable':
             attack_traces = 10000
         elif dataset_name == 'aes-hd':
@@ -51,9 +51,7 @@ class OccPOI:
             attack_traces = 100
         else:
             assert False
-        attack_dataset = Subset(attack_dataloader.dataset, np.arange(attack_traces))"""
-        attack_dataset = attack_dataloader.dataset
-        attack_traces = len(attack_dataset)
+        attack_dataset = Subset(attack_dataloader.dataset, np.arange(attack_traces))
         #attack_dataset.dataset.traces = torch.from_numpy(attack_dataset.dataset.traces).to(device)
         self.attack_dataloader = DataLoader(attack_dataset, batch_size=attack_traces)
         self.base_model = model

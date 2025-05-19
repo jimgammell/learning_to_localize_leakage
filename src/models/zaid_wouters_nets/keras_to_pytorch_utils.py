@@ -27,6 +27,7 @@ def keras_to_torch_param(keras_param, torch_param, transpose=False, dtype=np.flo
     param = np.array(keras_param, dtype=dtype)
     if transpose:
         param = param.transpose()
+    assert torch_param.data.shape == param.shape, (torch_param.data.shape, param.shape)
     torch_param.data = torch.from_numpy(param)
 
 def keras_to_torch_mod(keras_mod, torch_mod):

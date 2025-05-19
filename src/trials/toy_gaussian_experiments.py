@@ -50,7 +50,7 @@ class Trial:
     def run_first_order_experiments(self, logging_dir, max_leaky_pair_count: int = 13, run_baselines: bool = True):
         leakage_assessments = {key: defaultdict(list) for key in ['gradvis', 'saliency', 'lrp', 'inputxgrad', '1-occlusion', 'snr', 'sosd', 'cpa', 'all']}
         for seed in range(self.seed_count):
-            for leaky_pair_count in range(max_leaky_pair_count+1):
+            for leaky_pair_count in list(range(max_leaky_pair_count+1))[::-1]:
                 print(f'Running trial {leaky_pair_count}...')
                 trial_dir = os.path.join(logging_dir, f'seed={seed}', f'leaky_pair_count={leaky_pair_count}', 'parametric')
                 os.makedirs(trial_dir, exist_ok=True)
@@ -68,7 +68,7 @@ class Trial:
                 else:
                     param_assessments = np.load(os.path.join(trial_dir, 'leakage_assessments.npz'), allow_pickle=True)
                 trial_dir = os.path.join(logging_dir, f'seed={seed}', f'leaky_pair_count={leaky_pair_count}', 'advll')
-                if False: #not os.path.exists(os.path.join(trial_dir, 'leakage_assessment.npy')):
+                if not os.path.exists(os.path.join(trial_dir, 'leakage_assessment.npy')):
                     set_seed(seed)
                     profiling_dataset = SimpleGaussianDataset(random_count=1, first_order_count=0, second_order_pair_count=2**leaky_pair_count, repeat_dataset=True, buffer_size=10000)
                     attack_dataset = SimpleGaussianDataset(random_count=1, first_order_count=0, second_order_pair_count=2**leaky_pair_count, repeat_dataset=True, buffer_size=10000)
@@ -87,9 +87,9 @@ class Trial:
                     ax.plot(leakage_assessment.flatten())
                     fig.savefig(os.path.join(trial_dir, 'res.png'))
                     plt.close(fig)
-                #else:
-                #    all_assessment = np.load(os.path.join(trial_dir, 'leakage_assessment.npy'))
-                #leakage_assessments['all'][leaky_pair_count].append(all_assessment)
+                else:
+                    all_assessment = np.load(os.path.join(trial_dir, 'leakage_assessment.npy'))
+                leakage_assessments['all'][leaky_pair_count].append(all_assessment)
                 trial_dir = os.path.join(logging_dir, f'seed={seed}', f'leaky_pair_count={leaky_pair_count}', 'supervised')
                 if not os.path.exists(os.path.join(trial_dir, 'leakage_assessments.npz')):
                     set_seed(seed)

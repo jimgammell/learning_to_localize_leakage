@@ -136,12 +136,13 @@ def train_all_model(
     pretrain_kwargs: Optional[Dict[str, Any]] = None,
     pretrain_classifiers_dir: Optional[str] = None
 ):
+    if os.path.exists(os.path.join(output_dir, 'leakage_assessment.npy')):
+        return
     if training_kwargs is None:
         training_kwargs = {}
     trainer = ALLTrainer(
         profiling_dataset, attack_dataset, default_training_module_kwargs=training_kwargs, reference_leakage_assessment=reference_leakage_assessment
     )
-    set_seed(seed)
     start_event = torch.cuda.Event(enable_timing=True)
     end_event = torch.cuda.Event(enable_timing=True)
     start_event.record()
@@ -150,12 +151,14 @@ def train_all_model(
             pretrain_kwargs = {}
         kwargs = copy(training_kwargs)
         kwargs.update(pretrain_kwargs)
+        set_seed(seed) # important: we set the seed twice so both training phases will get the same train/val split. Stupid hacky solution but I'm lazy so it's what I'm doing.
         trainer.pretrain_classifiers(
             os.path.join(output_dir, 'classifier_pretraining'),
             max_steps=pretrain_max_steps,
             override_kwargs=kwargs
         )
         pretrain_classifiers_dir = os.path.join(output_dir, 'classifier_pretraining')
+    set_seed(seed)
     trainer.run(
         os.path.join(output_dir, 'all_training'),
         pretrained_classifiers_logging_dir=pretrain_classifiers_dir,

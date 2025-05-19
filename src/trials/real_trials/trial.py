@@ -71,6 +71,7 @@ class Trial:
         self.all_sensitivity_analysis_dir = os.path.join(self.logging_dir, 'all_sensitivity_analysis')
         self.plots_for_paper_dir = os.path.join(self.logging_dir, 'plots_for_paper')
         self.attr_over_time_dir = os.path.join(self.logging_dir, 'attr_over_time')
+        self.pretrained_model_experiment_dir = os.path.join(self.logging_dir, 'pretrained_model_experiments')
 
         if self.dataset_name in ['ascadv1-fixed', 'ascadv1-variable']:
             self.oracle_targets = [ # based on Egger (2021) findings
@@ -288,51 +289,89 @@ class Trial:
                 os.path.join(self.supervised_selection_dir, f'seed={seed}'), self.profiling_dataset, self.attack_dataset, training_kwargs=best_classification_kwargs,
                 max_steps=self.trial_config['supervised_train_steps'], seed=seed
             )
-            base_seed += 1
-        r"""print('Running extra trials for last-minute issues')
-        for seed in base_seed + self.run_particular_seeds:
-            best_classification_kwargs = copy(base_supervised_kwargs)
-            best_classification_kwargs.update(best_supervised_hparams['classification'])
-            subdir = os.path.join(self.attr_over_time_dir, f'seed={seed}')
-            supervised_experiment_methods.train_supervised_model(
-                subdir, self.profiling_dataset, self.attack_dataset, training_kwargs=best_classification_kwargs, dataset_name=self.dataset_name,
-                max_steps=self.trial_config['supervised_train_steps'], seed=seed, reference_leakage_assessment=self.load_oracle_assessment()
-            )
-            if self.dataset_name in ['dpav4', 'aes-hd']:
-                supervised_experiment_methods.attribute_neural_net(
-                    subdir, self.profiling_dataset, self.attack_dataset, self.dataset_name,
-                    compute_gradvis=False, compute_saliency=False, compute_inputxgrad=False,
-                    compute_lrp=False, compute_occlusion=np.arange(1, 51, 2), compute_second_order_occlusion=[],
-                    compute_occpoi=False, compute_extended_occpoi=False
-                )
-            base_seed += 1"""
+        base_seed += 5
         for name, hparams in best_supervised_hparams.items():
             if name != 'classification': # FIXME
                 continue
             model_dir = os.path.join(self.supervised_attribution_dir, name)
             print(f'Running experiments for {model_dir} with hparams {hparams}')
-            for seed in range(base_seed, base_seed + self.seed_count):
+            for seed in base_seed + self.run_particular_seeds:
+                occlusion_windows = np.arange(1, 51, 2) if self.dataset_name in ['dpav4', 'aes-hd'] else np.arange(1, 21, 2)
                 subdir = os.path.join(model_dir, f'seed={seed}')
                 kwargs = copy(base_supervised_kwargs)
                 kwargs.update(hparams)
                 supervised_experiment_methods.train_supervised_model(
-                    subdir, self.profiling_dataset, self.attack_dataset, training_kwargs=kwargs,
+                    subdir, self.profiling_dataset, self.attack_dataset, training_kwargs=kwargs, dataset_name=self.dataset_name,
                     max_steps=self.trial_config['supervised_train_steps'], seed=seed, reference_leakage_assessment=self.load_oracle_assessment()
                 )
                 supervised_experiment_methods.eval_on_attack_dataset(subdir, self.profiling_dataset, self.attack_dataset, self.dataset_name)
+                # experiments with some publicly-released pretrained weights
+                if self.dataset_name == 'ascadv1-fixed':
+                    supervised_experiment_methods.eval_on_attack_dataset(
+                        os.path.join(RESOURCE_DIR, 'ascadv1-fixed', 'ASCAD_data', 'ASCAD_trained_models', 'cnn_best_ascad_desync0_epochs75_classes256_batchsize200.h5'),
+                        self.profiling_dataset, self.attack_dataset, self.dataset_name, os.path.join(self.pretrained_model_experiment_dir, 'benadjila_cnn_best')
+                    )
+                    supervised_experiment_methods.eval_on_attack_dataset(
+                        os.path.join(RESOURCE_DIR, 'ascadv1-fixed', 'ASCAD_data', 'ASCAD_trained_models', 'mlp_best_ascad_desync0_node200_layernb6_epochs200_classes256_batchsize100.h5'),
+                        self.profiling_dataset, self.attack_dataset, self.dataset_name, os.path.join(self.pretrained_model_experiment_dir, 'benadjila_mlp_best')
+                    )
+                    supervised_experiment_methods.eval_on_attack_dataset(
+                        os.path.join(RESOURCE_DIR, 'zaid_wouters_pretrained', 'pretrained_models', 'models', f'noConv1_ascad_desync_0_feature_standardization_{seed-base_seed}.h5'),
+                        self.profiling_dataset, self.attack_dataset, self.dataset_name, os.path.join(self.pretrained_model_experiment_dir, 'wouters', f'seed={seed-base_seed}')
+                    )
+                    supervised_experiment_methods.eval_on_attack_dataset(
+                        os.path.join(RESOURCE_DIR, 'zaid_wouters_pretrained', 'pretrained_models', 'models', f'zaid_ascad_desync_0_feature_standardization_{seed-base_seed}.h5'),
+                        self.profiling_dataset, self.attack_dataset, self.dataset_name, os.path.join(self.pretrained_model_experiment_dir, 'zaid', f'seed={seed-base_seed}')
+                    )
+                elif self.dataset_name == 'ascadv1-variable':
+                    supervised_experiment_methods.eval_on_attack_dataset(
+                        os.path.join(RESOURCE_DIR, 'ascadv1-variable', 'cnn2-ascad-desync0.h5'),
+                        self.profiling_dataset, self.attack_dataset, self.dataset_name, os.path.join(self.pretrained_model_experiment_dir, 'benadjila')
+                    )
+                elif self.dataset_name == 'aes-hd':
+                    supervised_experiment_methods.eval_on_attack_dataset(
+                        os.path.join(RESOURCE_DIR, 'zaid_wouters_pretrained', 'pretrained_models', 'models', f'noConv1_aes_hd_feature_standardization_{seed-base_seed}.h5'),
+                        self.profiling_dataset, self.attack_dataset, self.dataset_name, os.path.join(self.pretrained_model_experiment_dir, 'wouters', f'seed={seed-base_seed}')
+                    )
+                    supervised_experiment_methods.eval_on_attack_dataset(
+                        os.path.join(RESOURCE_DIR, 'zaid_wouters_pretrained', 'pretrained_models', 'models', f'zaid_aes_hd_feature_standardization_{seed-base_seed}.h5'),
+                        self.profiling_dataset, self.attack_dataset, self.dataset_name, os.path.join(self.pretrained_model_experiment_dir, 'zaid', f'seed={seed-base_seed}')
+                    )
+                elif self.dataset_name == 'dpav4':
+                    supervised_experiment_methods.eval_on_attack_dataset(
+                        os.path.join(RESOURCE_DIR, 'zaid_wouters_pretrained', 'pretrained_models', 'models', f'noConv1_dpav4_feature_standardization_{seed-base_seed}.h5'),
+                        self.profiling_dataset, self.attack_dataset, self.dataset_name, os.path.join(self.pretrained_model_experiment_dir, 'wouters', f'seed={seed-base_seed}')
+                    )
+                    supervised_experiment_methods.eval_on_attack_dataset(
+                        os.path.join(RESOURCE_DIR, 'zaid_wouters_pretrained', 'pretrained_models', 'models', f'zaid_dpav4_feature_standardization_{seed-base_seed}.h5'),
+                        self.profiling_dataset, self.attack_dataset, self.dataset_name, os.path.join(self.pretrained_model_experiment_dir, 'zaid', f'seed={seed-base_seed}')
+                    )
+                supervised_experiment_methods.attribute_neural_net(
+                    subdir, self.profiling_dataset, self.attack_dataset, self.dataset_name,
+                    compute_gradvis=False, compute_saliency=False, compute_inputxgrad=False,
+                    compute_lrp=False, compute_occlusion=[], compute_second_order_occlusion=[],
+                    compute_occpoi=False, compute_extended_occpoi=False
+                )
                 supervised_experiment_methods.attribute_neural_net(
                     subdir, self.profiling_dataset, self.attack_dataset, self.dataset_name,
                     compute_gradvis=True, compute_saliency=True, compute_inputxgrad=True,
-                    compute_lrp=True, compute_occlusion=np.arange(1, 51, 2), compute_second_order_occlusion=[1, OPTIMAL_WINDOW_SIZES[self.dataset_name]],
-                    compute_occpoi=True, compute_extended_occpoi=False
+                    compute_lrp=True, compute_occlusion=occlusion_windows, compute_second_order_occlusion=[], # FIXME: disabled computation of second-order occlusion and OccPOI
+                    compute_occpoi=False, compute_extended_occpoi=False
                 )
                 if name == 'classification': # compute DNN occlusion tests
                     eval_model = supervised_experiment_methods.load_trained_supervised_model(os.path.join(self.supervised_selection_dir, f'seed={seed-5}'))
                     dataloader = supervised_experiment_methods.get_dataloader(self.profiling_dataset, self.attack_dataset, split='attack')
-                    for method_name in ['gradvis', 'inputxgrad', 'lrp', 'occpoi', 'saliency', '1-second-order-occlusion', *[f'{m}-occlusion' for m in np.arange(1, 51, 2)]]:
+                    for method_name in [
+                        'gradvis', 'inputxgrad', 'lrp', 'occpoi', 'saliency', '1-second-order-occlusion', f'{OPTIMAL_WINDOW_SIZES[self.dataset_name]}-second-order-occlusion',
+                        '1-occlusion', f'{OPTIMAL_WINDOW_SIZES[self.dataset_name]}-occlusion'
+                    ]:
                         path = os.path.join(self.supervised_attribution_dir, 'classification', f'seed={seed}', f'{method_name}_dnno.npz')
                         if not os.path.exists(path):
-                            assessment = np.load(os.path.join(self.supervised_attribution_dir, 'classification', f'seed={seed}', f'{method_name}.npz'), allow_pickle=True)['attribution']
+                            assessment_path = os.path.join(self.supervised_attribution_dir, 'classification', f'seed={seed}', f'{method_name}.npz')
+                            if not os.path.exists(assessment_path):
+                                print(f'Skipping evaluation of {assessment_path} because it does not exist.')
+                                continue
+                            assessment = np.load(assessment_path, allow_pickle=True)['attribution']
                             metric = 'traces_to_disclosure' if self.dataset_name in ['ascadv1-fixed', 'ascadv1-variable', 'dpav4', 'aes-hd'] else 'mean_rank'
                             fwd_dnno = evaluation_methods.get_forward_dnno_criterion(assessment, eval_model, dataloader)
                             rev_dnno = evaluation_methods.get_reverse_dnno_criterion(assessment, eval_model, dataloader)
@@ -340,8 +379,8 @@ class Trial:
                             print(f'\tForward DNNO AUC: {fwd_dnno.mean()}')
                             print(f'\tReverse DNNO AUC: {rev_dnno.mean()}')
                             np.savez(path, fwd_dnno=fwd_dnno, rev_dnno=rev_dnno)
-            #supervised_experiment_methods.evaluate_model_performance(model_dir)
-            #supervised_experiment_methods.evaluate_leakage_assessments(model_dir, self.load_oracle_assessment())
+            supervised_experiment_methods.evaluate_model_performance(model_dir)
+            supervised_experiment_methods.evaluate_leakage_assessments(model_dir, self.load_oracle_assessment())
     
     def run_all_trials(self):
         base_seed = 0
@@ -369,6 +408,8 @@ class Trial:
             best_pretrain_hparams = all_experiment_methods.get_best_all_pretrain_hparams(os.path.join(self.all_hparam_sweep_dir, 'classifiers_pretraining'))
         else:
             best_pretrain_hparams = None
+        print(f'Best ALL hparams: {best_all_hparams}')
+        print(f'Best ALL pretrain hparams: {best_pretrain_hparams}')
         for name, hparams in best_all_hparams.items():
             model_dir = os.path.join(self.all_dir, name)
             print(f'Running experiments for {model_dir} with hparams {hparams}')
@@ -383,7 +424,8 @@ class Trial:
                     max_steps=self.trial_config['all_train_steps'], seed=seed, reference_leakage_assessment=self.load_oracle_assessment(),
                     pretrain_max_steps=self.trial_config['all_classifiers_pretrain_steps'], pretrain_kwargs=best_pretrain_hparams
                 )
-        base_seed += self.seed_count
+        base_seed += 5
+        assert False
         print('Evaluating the sensitivity of ALL to hyperparameters.')
         for seed in base_seed + self.run_particular_seeds:
             hparams = copy(base_all_kwargs)

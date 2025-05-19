@@ -30,13 +30,55 @@ def get_dataloader(profiling_dataset: Dataset, attack_dataset: Dataset, split: L
 def load_trained_supervised_model(
     model_dir: str, as_lightning_module: bool = False
 ):
-    checkpoint_path = os.path.join(model_dir, 'early_stop_checkpoint.ckpt')
-    assert os.path.exists(checkpoint_path)
-    lightning_module = SupervisedModule.load_from_checkpoint(checkpoint_path, map_location='cpu')
-    if as_lightning_module:
-        return lightning_module
-    else:
-        return lightning_module.classifier
+    if model_dir.split('.')[-1] == 'h5': # this is the path of a pretrained Tensorflow model we have downloaded
+        assert not as_lightning_module
+        if 'cnn_best' in model_dir:
+            from models.benadjila_models import CNNBest
+            model = CNNBest((1, 700))
+            model.load_pretrained_keras_params(model_dir)
+        elif 'cnn2-ascad' in model_dir:
+            from models.benadjila_models import CNNBest
+            model = CNNBest((1, 1400))
+            model.load_pretrained_keras_params(model_dir)
+        elif 'mlp_best' in model_dir:
+            from models.benadjila_models import MLPBest
+            model = MLPBest((1, 700))
+            model.load_pretrained_keras_params(model_dir)
+        elif 'noConv1' in model_dir:
+            seed = int(model_dir.split('_')[-1].split('.')[0])
+            if 'aes_hd' in model_dir:
+                from models.zaid_wouters_nets.pretrained_models import WoutersNet__AES_HD
+                model = WoutersNet__AES_HD(pretrained_seed=seed)
+            elif 'ascad' in model_dir:
+                from models.zaid_wouters_nets.pretrained_models import WoutersNet__ASCADv1f
+                model = WoutersNet__ASCADv1f(pretrained_seed=seed)
+            elif 'dpav4' in model_dir:
+                from models.zaid_wouters_nets.pretrained_models import WoutersNet__DPAv4
+                model = WoutersNet__DPAv4(pretrained_seed=seed)
+        elif 'zaid' in model_dir:
+            seed = int(model_dir.split('_')[-1].split('.')[0])
+            if 'aes_hd' in model_dir:
+                from models.zaid_wouters_nets.pretrained_models import ZaidNet__AES_HD
+                model = ZaidNet__AES_HD(pretrained_seed=seed)
+            elif 'ascad' in model_dir:
+                from models.zaid_wouters_nets.pretrained_models import ZaidNet__ASCADv1f
+                model = ZaidNet__ASCADv1f(pretrained_seed=seed)
+            elif 'dpav4' in model_dir:
+                from models.zaid_wouters_nets.pretrained_models import ZaidNet__DPAv4
+                model = ZaidNet__DPAv4(pretrained_seed=seed)
+            else:
+                assert False
+        else:
+            raise NotImplementedError
+        return model
+    else: # this is a model we have trained
+        checkpoint_path = os.path.join(model_dir, 'early_stop_checkpoint.ckpt')
+        assert os.path.exists(checkpoint_path)
+        lightning_module = SupervisedModule.load_from_checkpoint(checkpoint_path, map_location='cpu')
+        if as_lightning_module:
+            return lightning_module
+        else:
+            return lightning_module.classifier
 
 def train_supervised_model(
     output_dir: str,
@@ -138,16 +180,22 @@ def get_best_supervised_model_hparams(sweep_dir: str, profiling_dataset: Dataset
     return best_hparams
 
 # Create plots showing the performance of a trained supervised model
-def eval_on_attack_dataset(model_dir: str, profile_dataset: Dataset, attack_dataset: Dataset, dataset_name: str):
+def eval_on_attack_dataset(model_dir: str, profile_dataset: Dataset, attack_dataset: Dataset, dataset_name: str, output_dir: Optional[str] = None):
+    if output_dir is None:
+        output_dir = model_dir
+    os.makedirs(output_dir, exist_ok=True)
     if dataset_name in ['ascadv1-fixed', 'ascadv1-variable', 'aes-hd', 'dpav4']:
-        if os.path.exists(os.path.join(model_dir, 'attack_performance.npy')):
-            rv = np.load(os.path.join(model_dir, 'attack_performance.npy'))
+        if os.path.exists(os.path.join(output_dir, 'attack_performance.npy')):
+            rv = np.load(os.path.join(output_dir, 'attack_performance.npy'))
         else:
-            dataloader = get_dataloader(profile_dataset, attack_dataset, split='attack')
+            set_seed(0)
+            dataloader = get_dataloader(
+                profile_dataset, attack_dataset, split='attack',
+                **({'data_mean': torch.tensor(0.0), 'data_var': torch.tensor(1.0)} if any(x in model_dir for x in ['cnn_best', 'mlp_best', 'cnn2-ascad']) else {})) # Benadjila models don't seem to have normalized data for training
             model = load_trained_supervised_model(model_dir, as_lightning_module=False)
             evaluator = AESMultiTraceEvaluator(dataloader, model, seed=0, dataset_name=dataset_name)
             rv = evaluator(get_rank_over_time=True)
-            np.save(os.path.join(model_dir, 'attack_performance.npy'), rv)
+            np.save(os.path.join(output_dir, 'attack_performance.npy'), rv)
         fig, ax = plt.subplots(1, 1, figsize=(PLOT_WIDTH, PLOT_WIDTH))
         ax.plot(np.arange(1, len(rv)+1), rv, color='blue')
         ax.set_xlabel('Traces seen')
@@ -155,16 +203,16 @@ def eval_on_attack_dataset(model_dir: str, profile_dataset: Dataset, attack_data
         ax.set_xscale('log')
         ax.set_yscale('log')
         fig.tight_layout()
-        fig.savefig(os.path.join(model_dir, 'attack_performance.png'))
+        fig.savefig(os.path.join(output_dir, 'attack_performance.png'))
         plt.close(fig)
-    if os.path.exists(os.path.join(model_dir, 'attack_rank_and_loss.npy')):
-        loss, rank = np.load(os.path.join(model_dir, 'attack_rank_and_loss.npy'))
+    if os.path.exists(os.path.join(output_dir, 'attack_rank_and_loss.npy')):
+        loss, rank = np.load(os.path.join(output_dir, 'attack_rank_and_loss.npy'))
     else:
         dataloader = get_dataloader(profile_dataset, attack_dataset, split='attack')
         model = load_trained_supervised_model(model_dir, as_lightning_module=False)
         evaluator = AESMultiTraceEvaluator(dataloader, model, seed=0, dataset_name=dataset_name)
         loss, rank = evaluator(get_rank_over_time=False)
-        np.save(os.path.join(model_dir, 'attack_rank_and_loss.npy'), np.array([loss, rank]))
+        np.save(os.path.join(output_dir, 'attack_rank_and_loss.npy'), np.array([loss, rank]))
 
 # Compute various neural net attribution leakage assessments given a trained model directory
 def attribute_neural_net(
@@ -173,12 +221,27 @@ def attribute_neural_net(
     compute_lrp: bool = False, compute_occlusion: List[int] = [], compute_second_order_occlusion: List[int] = [],
     compute_occpoi: bool = False, compute_extended_occpoi: bool = False
 ):
-    profiling_dataloader = get_dataloader(profiling_dataset, attack_dataset, split='profile')
-    attack_dataloader = get_dataloader(attack_dataset, attack_dataset, split='profile')
-    model = load_trained_supervised_model(model_dir, as_lightning_module=False)
+    profiling_dataloader = None
+    attack_dataloader = None
+    model = None
     neural_net_attributor = None
     occpoi_computor = None
-    def compute_attribution(attribution_fn: Callable, filename: str):
+    def init(mode: Literal['occpoi', 'attr'] = 'attr'):
+        nonlocal profiling_dataloader, attack_dataloader, model, neural_net_attributor, occpoi_computor
+        if profiling_dataloader is None:
+            profiling_dataloader = profiling_dataloader or get_dataloader(profiling_dataset, attack_dataset, split='profile')
+            attack_dataloader = attack_dataloader or get_dataloader(attack_dataset, attack_dataset, split='profile')
+            model = model or load_trained_supervised_model(model_dir, as_lightning_module=False)
+            if mode == 'attr':
+                neural_net_attributor = neural_net_attributor or NeuralNetAttribution(profiling_dataloader, model, seed=0, device='cuda' if torch.cuda.is_available() else 'cpu')
+            elif mode == 'occpoi':
+                occpoi_computor = occpoi_computor or OccPOI(attack_dataloader, model, seed=0, device='cuda' if torch.cuda.is_available() else 'cpu', dataset_name=dataset_name)
+            else:
+                assert False
+    def compute_attribution(attribution_fn: Callable, filename: str, mode: Literal['attr', 'occpoi'] = 'attr'):
+        if os.path.exists(os.path.join(model_dir, filename)):
+            return
+        init(mode=mode)
         if not os.path.exists(os.path.join(model_dir, filename)):
             set_seed(0)
             start_event = torch.cuda.Event(enable_timing=True)
@@ -191,28 +254,20 @@ def attribute_neural_net(
             rv = {'attribution': attribution, 'elapsed_time': elapsed_time}
             np.savez(os.path.join(model_dir, filename), **rv)
     if compute_gradvis:
-        neural_net_attributor = neural_net_attributor or NeuralNetAttribution(profiling_dataloader, model, seed=0, device='cuda' if torch.cuda.is_available() else 'cpu')
-        compute_attribution(neural_net_attributor.compute_gradvis, 'gradvis.npz')
+        compute_attribution(lambda: neural_net_attributor.compute_gradvis(), 'gradvis.npz')
     if compute_saliency:
-        neural_net_attributor = neural_net_attributor or NeuralNetAttribution(profiling_dataloader, model, seed=0, device='cuda' if torch.cuda.is_available() else 'cpu')
-        compute_attribution(neural_net_attributor.compute_saliency, 'saliency.npz')
+        compute_attribution(lambda: neural_net_attributor.compute_saliency(), 'saliency.npz')
     if compute_inputxgrad:
-        neural_net_attributor = neural_net_attributor or NeuralNetAttribution(profiling_dataloader, model, seed=0, device='cuda' if torch.cuda.is_available() else 'cpu')
-        compute_attribution(neural_net_attributor.compute_inputxgrad, 'inputxgrad.npz')
+        compute_attribution(lambda: neural_net_attributor.compute_inputxgrad(), 'inputxgrad.npz')
     if compute_lrp:
-        neural_net_attributor = neural_net_attributor or NeuralNetAttribution(profiling_dataloader, model, seed=0, device='cuda' if torch.cuda.is_available() else 'cpu')
-        compute_attribution(neural_net_attributor.compute_lrp, 'lrp.npz')
+        compute_attribution(lambda: neural_net_attributor.compute_lrp(), 'lrp.npz')
     for window_size in compute_occlusion:
-        neural_net_attributor = neural_net_attributor or NeuralNetAttribution(profiling_dataloader, model, seed=0, device='cuda' if torch.cuda.is_available() else 'cpu')
         compute_attribution(lambda: neural_net_attributor.compute_n_occlusion(window_size), f'{window_size}-occlusion.npz')
-        neural_net_attributor = neural_net_attributor or NeuralNetAttribution(profiling_dataloader, model, seed=0, device='cuda' if torch.cuda.is_available() else 'cpu')
     for window_size in compute_second_order_occlusion:
         compute_attribution(lambda: neural_net_attributor.compute_second_order_occlusion(window_size=window_size), f'{window_size}-second-order-occlusion.npz')
     if compute_occpoi:
-        occpoi_computor = occpoi_computor or OccPOI(attack_dataloader, model, seed=0, device='cuda' if torch.cuda.is_available() else 'cpu', dataset_name=dataset_name)
-        compute_attribution(lambda: occpoi_computor(extended=False), 'occpoi.npz')
+        compute_attribution(lambda: occpoi_computor(extended=False), 'occpoi.npz', mode='occpoi')
     if False: #compute_extended_occpoi:
-        occpoi_computor = occpoi_computor or OccPOI(attack_dataloader, model, seed=0, device='cuda' if torch.cuda.is_available() else 'cpu', dataset_name=dataset_name)
         compute_attribution(lambda: occpoi_computor(extended=True), 'extended-occpoi.npz')
 
 def evaluate_model_performance(
@@ -254,10 +309,10 @@ def evaluate_leakage_assessments(
                 elapsed_time = res['elapsed_time']
                 assessments[attr_filename].append(assessment)
                 elapsed_times[attr_filename].append(elapsed_time)
-        with open(os.path.join(model_dir, 'training_curves.pickle'), 'rb') as f:
-            training_curves = pickle.load(f)
-        for method in ['gradvis', 'inputxgrad', 'lrp', 'saliency', '1-occlusion']:
-            assessments_over_time[method].append(training_curves[f'{method}_oracle_agreement'][1])
+        #with open(os.path.join(model_dir, 'training_curves.pickle'), 'rb') as f:
+        #    training_curves = pickle.load(f)
+        #for method in ['gradvis', 'inputxgrad', 'lrp', 'saliency', '1-occlusion']:
+        #    assessments_over_time[method].append(training_curves[f'{method}_oracle_agreement'][1])
     assessments = {key: np.stack(val) for key, val in assessments.items()}
     elapsed_times = {key: np.stack(val) for key, val in elapsed_times.items()}
     model_training_times = np.array(model_training_times)
@@ -294,7 +349,7 @@ def evaluate_leakage_assessments(
     fig.savefig(os.path.join(base_dir, 'assessments.png'))
     plt.close(fig)
 
-    fig, ax = plt.subplots(1, 1, figsize=(PLOT_WIDTH, PLOT_WIDTH))
+    r"""fig, ax = plt.subplots(1, 1, figsize=(PLOT_WIDTH, PLOT_WIDTH))
     colors = ['red', 'green', 'blue', 'purple']
     for (assessment_name, assessment), color in zip(assessments_over_time.items(), colors):
         mean, std = assessment.mean(axis=0), assessment.std(axis=0)
@@ -305,4 +360,4 @@ def evaluate_leakage_assessments(
     ax.legend()
     fig.tight_layout()
     fig.savefig(os.path.join(base_dir, 'assessments_over_time.png'))
-    plt.close(fig)
+    plt.close(fig)"""

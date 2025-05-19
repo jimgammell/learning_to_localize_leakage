@@ -19,8 +19,8 @@ from utils.baseline_assessments.occpoi import OccPOI
 OPTIMAL_WINDOW_SIZES = {
     'ascadv1-fixed': 3,
     'ascadv1-variable': 7,
-    'dpav4': 19,
-    'aes-hd': 19,
+    'dpav4': 41,
+    'aes-hd': 31,
     'otiait': 3,
     'otp': 5
 }
@@ -113,7 +113,9 @@ class Trainer:
                 callbacks.append(compute_assessments_callback)
             trainer = LightningTrainer(
                 max_steps=max_steps,
-                val_check_interval=1.,
+                val_check_interval=1. if max_steps >= 10000 else max_steps//100,
+                check_val_every_n_epoch=1 if max_steps >= 10000 else None,
+                log_every_n_steps=max(1, max_steps//100),
                 default_root_dir=logging_dir,
                 accelerator='gpu',
                 devices=1,

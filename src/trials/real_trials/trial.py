@@ -175,7 +175,7 @@ class Trial:
             for x in tqdm((self.trial_config['supervised_htune_trial_count']//5)*seed_idx + np.arange(self.trial_config['supervised_htune_trial_count']//5)):
                 model_dir = os.path.join(self.supervised_hparam_sweep_dir, f'trial_{x}')
                 print(f'Evaluating model in {model_dir}...')
-                self.evaluate_supervised_model(model_dir, seed_idx=0)
+                self.evaluate_supervised_model(model_dir, seed_idx=0, print_res=True)
         print('Computing selection criteria...')
         self.compute_selection_criterion_for_attribution_prefix('gradvis')
         self.compute_selection_criterion_for_attribution_prefix('lrp')

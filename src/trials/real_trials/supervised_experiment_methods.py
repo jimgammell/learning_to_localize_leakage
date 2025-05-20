@@ -230,16 +230,15 @@ def attribute_neural_net(
     occpoi_computor = None
     def init(mode: Literal['occpoi', 'attr'] = 'attr'):
         nonlocal profiling_dataloader, attack_dataloader, model, neural_net_attributor, occpoi_computor
-        if profiling_dataloader is None:
-            profiling_dataloader = profiling_dataloader or get_dataloader(profiling_dataset, attack_dataset, split='profile')
-            attack_dataloader = attack_dataloader or get_dataloader(attack_dataset, attack_dataset, split='profile')
-            model = model or load_trained_supervised_model(model_dir, as_lightning_module=False)
-            if mode == 'attr':
-                neural_net_attributor = neural_net_attributor or NeuralNetAttribution(profiling_dataloader, model, seed=0, device='cuda' if torch.cuda.is_available() else 'cpu')
-            elif mode == 'occpoi':
-                occpoi_computor = occpoi_computor or OccPOI(attack_dataloader, model, seed=0, device='cuda' if torch.cuda.is_available() else 'cpu', dataset_name=dataset_name)
-            else:
-                assert False
+        profiling_dataloader = profiling_dataloader or get_dataloader(profiling_dataset, attack_dataset, split='profile')
+        attack_dataloader = attack_dataloader or get_dataloader(attack_dataset, attack_dataset, split='profile')
+        model = model or load_trained_supervised_model(model_dir, as_lightning_module=False)
+        if mode == 'attr':
+            neural_net_attributor = neural_net_attributor or NeuralNetAttribution(profiling_dataloader, model, seed=0, device='cuda' if torch.cuda.is_available() else 'cpu')
+        elif mode == 'occpoi':
+            occpoi_computor = occpoi_computor or OccPOI(attack_dataloader, model, seed=0, device='cuda' if torch.cuda.is_available() else 'cpu', dataset_name=dataset_name)
+        else:
+            assert False
     def compute_attribution(attribution_fn: Callable, filename: str, mode: Literal['attr', 'occpoi'] = 'attr'):
         if os.path.exists(os.path.join(output_dir, filename)):
             return

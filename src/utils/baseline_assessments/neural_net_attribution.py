@@ -3,6 +3,7 @@ import os
 from collections import defaultdict
 from copy import copy, deepcopy
 import numpy as np
+from tqdm import tqdm
 import torch
 from torch import nn
 from torch.utils.data import DataLoader
@@ -33,10 +34,12 @@ class NeuralNetAttribution:
         self.trace_shape = self.base_model.input_shape
         self.model = ReshapeOutput(self.base_model)
     
-    def accumulate_attributions(self, attr_fn: Callable, timing=False):
+    def accumulate_attributions(self, attr_fn: Callable, timing=False, print=False):
         if not timing:
             attribution_map = torch.zeros(*self.trace_shape)
         count = 0
+        if print:
+            progress_bar = tqdm(total=len(self.dataloader))
         for trace, target in self.dataloader:
             batch_size = trace.size(0)
             trace, target = trace.to(self.device), target.to(self.device)
@@ -46,6 +49,8 @@ class NeuralNetAttribution:
             else:
                 prop = attr_fn(trace, target)
             count += batch_size
+            if print:
+                progress_bar.update(1)
         return attribution_map.numpy().reshape(-1) if not timing else prop
     
     def measure_occl2o_runtime(self):
@@ -75,6 +80,7 @@ class NeuralNetAttribution:
         return {key: np.stack(val) for key, val in results.items()}
     
     def compute_gradvis(self):
+        print('Doing GradVis')
         def attr_fn(trace, target):
             trace.requires_grad = True
             logits = self.model(trace)
@@ -86,6 +92,7 @@ class NeuralNetAttribution:
         return self.accumulate_attributions(attr_fn)
     
     def compute_saliency(self):
+        print('Doing saliency')
         saliency = Saliency(self.model)
         def attr_fn(trace, target):
             trace.requires_grad = True
@@ -93,6 +100,7 @@ class NeuralNetAttribution:
         return self.accumulate_attributions(attr_fn)
     
     def compute_lrp(self):
+        print('Doing LRP')
         lrp = LRP(self.model)
         def attr_fn(trace, target):
             trace.requires_grad = True
@@ -101,6 +109,7 @@ class NeuralNetAttribution:
     
     @torch.no_grad()
     def compute_occlusion(self):
+        print('Doing ablation')
         ablator = FeatureAblation(self.model)
         def attr_fn(trace, target):
             return ablator.attribute(trace, target=target.to(torch.long), perturbations_per_eval=10).abs().mean(axis=0).cpu()
@@ -108,19 +117,22 @@ class NeuralNetAttribution:
     
     @torch.no_grad()
     def compute_n_occlusion(self, n):
+        print(f'Doing {n}-occlusion')
         occludor = Occlusion(self.model)
         def attr_fn(trace, target):
             return occludor.attribute(trace, sliding_window_shapes=(1, n), strides=(1,), target=target.to(torch.long), perturbations_per_eval=8).abs().mean(axis=0).cpu()
-        return self.accumulate_attributions(attr_fn)
+        return self.accumulate_attributions(attr_fn, print=True)
     
     @torch.no_grad()
     def compute_second_order_occlusion(self, timing=False, window_size=1):
+        print(f'Doing {window_size}-second-order occlusion')
         occludor = SecondOrderOcclusion(self.model, perturbations_per_eval=8, window_size=window_size)
         def attr_fn(trace, target):
             return occludor.attribute(trace, target.to(torch.long))
         return self.accumulate_attributions(attr_fn, timing=timing)
     
     def compute_inputxgrad(self):
+        print('Doing inputxgrad')
         input_x_grad = InputXGradient(self.model)
         def attr_fn(trace, target):
             trace.requires_grad = True

@@ -18,12 +18,17 @@ class TemplateAttack:
         return hasattr(self, 'means') and hasattr(self, 'Ls') and hasattr(self, 'log_p_y')
     
     def profile(self, profiling_dataset: Dataset):
+        print('Extracting dataset...')
         traces, metadata = extract_dataset(profiling_dataset, self.points_of_interest, metadata_keys=self.target_key, target_byte=self.target_byte)
         targets = metadata[self.target_key]
+        print('Computing class count...')
         self.class_count = get_class_count(targets)
         self.log_p_y = get_log_p_y(targets, self.class_count)
+        print('Fitting means...')
         self.means = fit_means(traces, targets, self.class_count)
+        print('Fitting covariance matrices...')
         covs = fit_covs(traces, targets, self.means, self.class_count)
+        print('Decomposing covariance matrices...')
         self.Ls = choldecomp_covs(covs)
     
     def get_predictions(self, attack_dataset: Dataset):
@@ -50,9 +55,11 @@ class TemplateAttack:
         assert len(attack_dataset) >= n_traces
         assert self.has_profiled()
         traces, metadata = extract_dataset(attack_dataset, self.points_of_interest, metadata_keys=[*arg_keys, 'key'])
+        print('Getting model predictions...')
         log_p_x_given_y = get_log_p_x_given_y(traces, self.means, self.Ls, self.class_count)
         indices = np.stack([np.random.choice(len(attack_dataset), n_traces, replace=False) for _ in range(n_repetitions)])
         predictions = log_p_x_given_y + self.log_p_y
         args = np.stack([metadata[arg_key] for arg_key in arg_keys], axis=-1)
+        print('Computing rank over time traces...')
         rank_over_time = _accumulate_ranks(predictions, metadata['key'], args, constants, indices, int_var_to_key_fn)
         return rank_over_time

@@ -137,6 +137,7 @@ class Trial:
     
     def run_parametric_trials(self):
         set_seed(0)
+        print('Running parametric statistics-based methods.')
         os.makedirs(self.first_order_parametric_stats_dir, exist_ok=True)
         if not os.path.exists(os.path.join(self.first_order_parametric_stats_dir, 'random.npy')):
             random_assessment = np.random.rand(5, self.profiling_dataset.timesteps_per_trace)
@@ -161,6 +162,7 @@ class Trial:
         self.evaluate_leakage_assessment(cpa, dest=os.path.join(self.first_order_parametric_stats_dir, 'cpa_evaluation_metrics.npz'), print_res=True)
     
     def run_supervised_trials(self):
+        print('Running supervised trials.')
         base_seed = 0
         base_supervised_kwargs = copy(self.trial_config['default_kwargs'])
         base_supervised_kwargs.update(self.trial_config['supervised_training_kwargs'])
@@ -168,9 +170,13 @@ class Trial:
             self.supervised_hparam_sweep_dir, self.profiling_dataset, self.attack_dataset, training_kwargs=base_supervised_kwargs,
             trial_count=self.trial_config['supervised_htune_trial_count'], max_steps=self.trial_config['supervised_train_steps'], starting_seed=base_seed
         )
-        for x in tqdm(range(self.trial_config['supervised_htune_trial_count'])):
-            model_dir = os.path.join(self.supervised_hparam_sweep_dir, f'trial_{x}')
-            self.evaluate_supervised_model(model_dir, seed_idx=0)
+        print('Doing neural net attribution assessments...')
+        for seed_idx in self.run_particular_seeds:
+            for x in tqdm((self.trial_config['supervised_htune_trial_count']//5)*seed_idx + np.arange(self.trial_config['supervised_htune_trial_count']//5)):
+                model_dir = os.path.join(self.supervised_hparam_sweep_dir, f'trial_{x}')
+                print(f'Evaluating model in {model_dir}...')
+                self.evaluate_supervised_model(model_dir, seed_idx=0)
+        print('Computing selection criteria...')
         self.compute_selection_criterion_for_attribution_prefix('gradvis')
         self.compute_selection_criterion_for_attribution_prefix('lrp')
         self.compute_selection_criterion_for_attribution_prefix('saliency')
@@ -181,6 +187,7 @@ class Trial:
         best_supervised_hparams = supervised_experiment_methods.get_best_supervised_model_hparams(
             self.supervised_hparam_sweep_dir, self.profiling_dataset, self.attack_dataset, self.dataset_name, self.load_oracle_assessment()
         )
+        print('Training selection models...')
         for seed in base_seed + self.run_particular_seeds:
             best_classification_kwargs = copy(base_supervised_kwargs)
             best_classification_kwargs.update(best_supervised_hparams['classification'])
@@ -189,6 +196,7 @@ class Trial:
                 max_steps=self.trial_config['supervised_train_steps'], seed=seed
             )
         base_seed += 5
+        print('Training classification models...')
         for name, hparams in best_supervised_hparams.items():
             if name != 'classification': # FIXME
                 continue

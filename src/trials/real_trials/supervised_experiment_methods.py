@@ -228,7 +228,7 @@ def attribute_neural_net(
     model = None
     neural_net_attributor = None
     occpoi_computor = None
-    def init(mode: Literal['occpoi', 'attr'] = 'attr'):
+    def init(mode: Literal['occpoi', 'attr'] = 'attr'): # since these take time to init and we don't want to do it if not needed
         nonlocal profiling_dataloader, attack_dataloader, model, neural_net_attributor, occpoi_computor
         profiling_dataloader = profiling_dataloader or get_dataloader(profiling_dataset, attack_dataset, split='profile')
         attack_dataloader = attack_dataloader or get_dataloader(attack_dataset, attack_dataset, split='profile')

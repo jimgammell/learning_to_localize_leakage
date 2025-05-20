@@ -171,6 +171,12 @@ class Trial:
         for x in tqdm(range(self.trial_config['supervised_htune_trial_count'])):
             model_dir = os.path.join(self.supervised_hparam_sweep_dir, f'trial_{x}')
             self.evaluate_supervised_model(model_dir, seed_idx=0)
+        self.compute_selection_criterion_for_attribution_prefix('gradvis')
+        self.compute_selection_criterion_for_attribution_prefix('lrp')
+        self.compute_selection_criterion_for_attribution_prefix('saliency')
+        self.compute_selection_criterion_for_attribution_prefix('1-occlusion')
+        self.compute_selection_criterion_for_attribution_prefix('inputxgrad')
+        self.compute_selection_criterion_for_attribution_prefix(f'{OPTIMAL_WINDOW_SIZES[self.dataset_name]}-occlusion')
         base_seed += self.trial_config['supervised_htune_trial_count']
         best_supervised_hparams = supervised_experiment_methods.get_best_supervised_model_hparams(
             self.supervised_hparam_sweep_dir, self.profiling_dataset, self.attack_dataset, self.dataset_name, self.load_oracle_assessment()
@@ -283,6 +289,7 @@ class Trial:
                 pretrain_classifiers_dir=os.path.join(self.all_dir, 'oracle', f'seed={seed-self.seed_count}', 'classifier_pretraining') if self.dataset_name in ['ascadv1-fixed', 'ascadv1-variable', 'aes-hd'] else None
             )
 
+
     def compute_dnn_occlusion_tests(self, leakage_assessment, seed_idx, quiet: bool = True):
         available_seeds = [int(x.split('=')[1]) for x in os.listdir(self.supervised_selection_dir) if x.split('=')[0] == 'seed']
         available_seeds.sort()
@@ -301,6 +308,33 @@ class Trial:
             fwd_dnno = evaluation_methods.run_dnn_occlusion_test(leakage_assessment, model, traces, labels, direction='forward', quiet=quiet)
             rev_dnno = evaluation_methods.run_dnn_occlusion_test(leakage_assessment, model, traces, labels, direction='reverse', quiet=quiet)
         return fwd_dnno, rev_dnno
+    
+    def compute_selection_criterion_for_attribution_prefix(self, prefix):
+        base_dir = os.path.join(OUTPUT_DIR, self.dataset_name.replace('-', '_'), 'supervised_hparam_sweep')
+        mean_assessment = np.zeros(self.profiling_dataset.timesteps_per_trace)
+        for trial_idx in range(self.trial_config['supervised_htune_trial_count']):
+            assessment = np.load(os.path.join(base_dir, f'trial_{trial_idx}', f'{prefix}.npz'), allow_pickle=True)['attribution']
+            mean_assessment += assessment
+        mean_assessment /= self.trial_config['supervised_htune_trial_count']
+        for trial_idx in range(self.trial_config['supervised_htune_trial_count']):
+            assessment = np.load(os.path.join(base_dir, f'trial_{trial_idx}', f'{prefix}.npz'), allow_pickle=True)['attribution']
+            self.compute_selection_criterion(assessment, mean_assessment, os.path.join(base_dir, f'trial_{trial_idx}', f'{prefix}_selection_criterion.npz'))
+
+    def compute_selection_criterion(self, leakage_assessment, mean_leakage_assessment, dest):
+        if os.path.exists(dest):
+            return
+        selection_dataloader = self.get_dataloader(split='val', seed=50)
+        selection_dnn_dir = os.path.join(self.supervised_selection_dir, 'seed=50')
+        selection_dnn = supervised_experiment_methods.load_trained_supervised_model(selection_dnn_dir)
+        metrics = {}
+        metrics['oracle_agreement'] = evaluation_methods.get_oracle_agreement(leakage_assessment, self.load_oracle_assessment())
+        metrics['fwd_dnno_criterion'] = evaluation_methods.get_forward_dnno_criterion(leakage_assessment, selection_dnn, selection_dataloader)
+        metrics['rev_dnno_criterion'] = evaluation_methods.get_reverse_dnno_criterion(leakage_assessment, selection_dnn, selection_dataloader)
+        if leakage_assessment.std() > 0:
+            metrics['mean_agreement'] = spearmanr(leakage_assessment, mean_leakage_assessment).statistic
+        else:
+            metrics['mean_agreement'] = 0.
+        np.savez(dest, **metrics)
 
     def evaluate_leakage_assessment(self, leakage_assessment, seed_idx=0, dest=None, print_res=False):
         if dest is not None and os.path.exists(dest):

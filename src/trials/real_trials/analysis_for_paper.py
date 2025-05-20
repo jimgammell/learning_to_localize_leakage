@@ -955,7 +955,7 @@ def plot_leakiness_assessment_comparison_with_oracle(base_dir, dest):
     plt.close(fig)
 
 def plot_model_selection_criteria(base_dir, dest):
-    resultss = defaultdict(lambda: defaultdict(list))
+    resultss = defaultdict(lambda: defaultdict(lambda: defaultdict(list)))
     for dataset_name in DATASET_NAMES.keys():
         all_hsweep_dir = os.path.join(base_dir, dataset_name, 'all_hparam_sweep')
         for subdir in os.listdir(all_hsweep_dir):
@@ -964,20 +964,32 @@ def plot_model_selection_criteria(base_dir, dest):
             metrics_path = os.path.join(all_hsweep_dir, subdir, 'metrics.npz')
             metrics = np.load(metrics_path, allow_pickle=True)
             for key, val in metrics.items():
-                resultss[dataset_name][key].append(val)
-        resultss[dataset_name] = {key: np.stack(val) for key, val in resultss[dataset_name].items()}
+                resultss[dataset_name]['all'][key].append(val)
+        supervised_hsweep_dir = os.path.join(base_dir, dataset_name, 'supervised_hparam_sweep')
+        for subdir in os.listdir(supervised_hsweep_dir):
+            if not subdir.split('_')[0] == 'trial':
+                continue
+            for filename in os.listdir(os.path.join(supervised_hsweep_dir, subdir)):
+                if filename.endswith('_selection_criterion.npz'):
+                    method_name = filename.split('_')[0]
+                    criterion = np.load(os.path.join(supervised_hsweep_dir, subdir, filename), allow_pickle=True)
+                    for k, v in criterion.items():
+                        resultss[dataset_name][method_name][k].append(v)
     fig, axes = plt.subplots(6, 4, figsize=(3*PLOT_WIDTH, 4.5*PLOT_WIDTH))
+    colors = ['blue', 'red', 'green', 'yellow', 'grey', 'orange', 'brown']
     for axes_r, dataset_name in zip(axes, DATASET_NAMES.keys()):
         results = resultss[dataset_name]
-        composite_criterion = (
-            results['fwd_dnno_criterion'].argsort().argsort()
-            + (-results['rev_dnno_criterion']).argsort().argsort()
-            + (-results['mean_agreement']).argsort().argsort()
-        )
-        axes_r[0].plot(results['oracle_agreement'], results['fwd_dnno_criterion'], color='blue', marker='.', linestyle='none')
-        axes_r[1].plot(results['oracle_agreement'], results['rev_dnno_criterion'], color='blue', marker='.', linestyle='none')
-        axes_r[2].plot(results['oracle_agreement'], results['mean_agreement'], color='blue', marker='.', linestyle='none')
-        axes_r[3].plot(results['oracle_agreement'], composite_criterion, color='blue', marker='.', linestyle='none')
+        for method_name, color in zip(results.keys(), colors):
+            results[method_name] = {k: np.stack(v) for k, v in results[method_name].items()}
+            composite_criterion = (
+                results[method_name]['fwd_dnno_criterion'].argsort().argsort()
+                + (-results[method_name]['rev_dnno_criterion']).argsort().argsort()
+                + (-results[method_name]['mean_agreement']).argsort().argsort()
+            )
+            axes_r[0].plot(results[method_name]['oracle_agreement'], results[method_name]['fwd_dnno_criterion'], color=color, marker='.', linestyle='none', label=method_name)
+            axes_r[1].plot(results[method_name]['oracle_agreement'], results[method_name]['rev_dnno_criterion'], color=color, marker='.', linestyle='none', label=method_name)
+            axes_r[2].plot(results[method_name]['oracle_agreement'], results[method_name]['mean_agreement'], color=color, marker='.', linestyle='none', label=method_name)
+            axes_r[3].plot(results[method_name]['oracle_agreement'], composite_criterion, color=color, marker='.', linestyle='none', label=method_name)
         axes_r[0].set_xlabel(r'Oracle agreement $\uparrow$')
         axes_r[1].set_xlabel(r'Oracle agreement $\uparrow$')
         axes_r[2].set_xlabel(r'Oracle agreement $\uparrow$')
@@ -990,6 +1002,10 @@ def plot_model_selection_criteria(base_dir, dest):
         axes_r[1].set_title(f'Dataset: {DATASET_NAMES[dataset_name]}')
         axes_r[2].set_title(f'Dataset: {DATASET_NAMES[dataset_name]}')
         axes_r[3].set_title(f'Dataset: {DATASET_NAMES[dataset_name]}')
+        axes_r[0].legend(fontsize=8)
+        axes_r[1].legend(fontsize=8)
+        axes_r[2].legend(fontsize=8)
+        axes_r[3].legend(fontsize=8)
     fig.tight_layout()
     fig.savefig(dest)
     plt.close(fig)

@@ -172,7 +172,7 @@ class Trial:
             trial_count=self.trial_config['supervised_htune_trial_count'], max_steps=self.trial_config['supervised_train_steps'], starting_seed=base_seed
         )
         supervised_experiment_methods.run_supervised_hparam_sweep(
-            self.supervised_dropout_ablation, self.profiling_dataset, self.attack_dataset, training_kwargs=base_supervised_kwargs,
+            self.supervised_dropout_ablation, self.profiling_dataset, self.attack_dataset, training_kwargs=base_supervised_kwargs, heavy_dropout_ablation=True,
             trial_count=self.trial_config['supervised_htune_trial_count'], max_steps=self.trial_config['supervised_train_steps'], starting_seed=base_seed
         )
         print('Doing neural net attribution assessments...')
@@ -180,8 +180,6 @@ class Trial:
             for x in tqdm((self.trial_config['supervised_htune_trial_count']//5)*seed_idx + np.arange(self.trial_config['supervised_htune_trial_count']//5)):
                 model_dir = os.path.join(self.supervised_hparam_sweep_dir, f'trial_{x}')
                 print(f'Evaluating model in {model_dir}...')
-                self.evaluate_supervised_model(model_dir, seed_idx=0, print_res=True)
-                model_dir = os.path.join(self.supervised_dropout_ablation, f'trial_{x}')
                 self.evaluate_supervised_model(model_dir, seed_idx=0, print_res=True)
         print('Computing selection criteria...')
         self.compute_selection_criterion_for_attribution_prefix('gradvis')

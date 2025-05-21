@@ -878,6 +878,66 @@ def plot_hsweep_histograms(base_dir, dest):
     fig.savefig(dest, **SAVEFIG_KWARGS)
     plt.close(fig)
 
+def plot_ablation_histograms(base_dir, dest):
+    fontsize = 16
+    fig, axes = plt.subplots(2, 3, figsize=(3*PLOT_WIDTH, 2*PLOT_WIDTH))
+    axes = axes.flatten()
+    results = defaultdict(lambda: defaultdict(list))
+    oracle_assessments = get_oracle_assessments(base_dir)
+    for idx, dataset_name in enumerate(DATASET_NAMES.keys()):
+        oracle_assessment = oracle_assessments[dataset_name]
+        all_hsweep_dir = os.path.join(base_dir, dataset_name, 'all_hparam_sweep')
+        for subdir in os.listdir(all_hsweep_dir):
+            if not subdir.split('_')[0] == 'trial':
+                continue
+            assessment_path = os.path.join(all_hsweep_dir, subdir, 'leakage_assessment.npy')
+            if not os.path.exists(assessment_path):
+                print(f'Skipping {assessment_path}')
+                continue
+            assessment = np.load(assessment_path)
+            agreement = get_oracle_agreement(assessment, oracle_assessment)
+            pooled_assessment = lpf_assessment(assessment, OPTIMAL_WINDOW_SIZES[dataset_name])
+            pooled_agreement = get_oracle_agreement(pooled_assessment, oracle_assessment)
+            results[dataset_name]['all-pooled'].append(pooled_agreement)
+            results[dataset_name]['all'].append(agreement)
+        supervised_hsweep_dir = os.path.join(base_dir, dataset_name, 'supervised_dropout_ablation_hparam_sweep')
+        for subdir in os.listdir(supervised_hsweep_dir):
+            if not subdir.split('_')[0] == 'trial':
+                continue
+            for method_name in [ f'{OPTIMAL_WINDOW_SIZES[dataset_name]}-occlusion', '1-occlusion', 'gradvis', 'inputxgrad', 'lrp', 'saliency']:
+                assessment_path = os.path.join(supervised_hsweep_dir, subdir, f'{method_name}.npz')
+                if not os.path.exists(assessment_path):
+                    print(f'Skipping {assessment_path}')
+                    continue
+                assessment = np.load(assessment_path, allow_pickle=True)['attribution']
+                agreement = get_oracle_agreement(assessment, oracle_assessment)
+                results[dataset_name][method_name].append(agreement)
+    for idx, dataset_name in enumerate(DATASET_NAMES.keys()):
+        to_label = {
+            'all-pooled': r'\textbf{ALL}+AvgPool(' + f'{OPTIMAL_WINDOW_SIZES[dataset_name]})',
+            'all': r'\textbf{ALL (ours)}',
+            f'{OPTIMAL_WINDOW_SIZES[dataset_name]}-occlusion': f'{OPTIMAL_WINDOW_SIZES[dataset_name]}-Occlusion',
+            '1-occlusion': '1-Occlusion',
+            'gradvis': 'GradVis',
+            'inputxgrad': r'Input $*$ Grad',
+            'lrp': 'LRP',
+            'saliency': 'Saliency'
+        }
+        ax = axes[idx]
+        ax.boxplot(results[dataset_name].values(), positions=np.arange(len(results[dataset_name])))
+        for idx, method_name in enumerate(results[dataset_name].keys()):
+            if not method_name in results[dataset_name] or len(results[dataset_name][method_name]) == 0:
+                continue
+            res = results[dataset_name][method_name]
+            ax.plot(len(res)*[idx], res, marker='.', color='blue', linestyle='none', alpha=0.25, **PLOT_KWARGS)
+        ax.set_xticks(np.arange(len(results[dataset_name])))
+        ax.set_xticklabels([to_label[x] for x in results[dataset_name]], rotation=45)
+        ax.set_ylabel(r'Oracle agreement $\uparrow$', fontsize=fontsize)
+        ax.set_title(f'Dataset: {DATASET_NAMES[dataset_name]}', fontsize=fontsize+2)
+    fig.tight_layout()
+    fig.savefig(dest, **SAVEFIG_KWARGS)
+    plt.close(fig)
+
 def print_runtimes(base_dir):
     def format_time(time):
         time = 1e-3*time / 60 # ms to min
@@ -1016,6 +1076,7 @@ def do_analysis_for_paper():
     os.makedirs(fig_dir, exist_ok=True)
     plot_model_selection_criteria(OUTPUT_DIR, os.path.join(fig_dir, 'model_selection_criterion.pdf'))
     plot_hsweep_histograms(OUTPUT_DIR, os.path.join(fig_dir, 'oracle_agreement_boxplots.pdf'))
+    plot_ablation_histograms(OUTPUT_DIR, os.path.join(fig_dir, 'ablation_histograms.pdf'))
     plot_all_training_curves(OUTPUT_DIR, os.path.join(fig_dir, 'all_training_curves.pdf'))
     gamma_bar_sweep, theta_lr_scalar_sweep, etat_lr_scalar_sweep = load_all_sensitivity_analysis_data(OUTPUT_DIR)
     plot_all_sensitivity_analysis(gamma_bar_sweep, theta_lr_scalar_sweep, etat_lr_scalar_sweep, os.path.join(fig_dir, 'all_sensitivity_analysis.pdf'))

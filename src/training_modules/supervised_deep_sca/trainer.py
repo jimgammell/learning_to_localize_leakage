@@ -168,7 +168,7 @@ class Trainer:
         lr_vals = sum([[m*10**n for m in range(1, 10)] for n in range(-5, -2)], start=[])
         #weight_decay_vals = [0.0, 1e-6, 1e-4, 1e-2, 1e0]
         lr_scheduler_names = [None, 'CosineDecayLRSched']
-        input_dropout_vals = [0.0, 0.1] # np.arange(0.0, 1.0, 0.05) # if heavy_input_dropout_ablation else [0.0, 0.1]
+        input_dropout_vals = np.arange(0.0, 1.0, 0.05) if heavy_input_dropout_ablation else [0.0, 0.1]
         hidden_dropout_vals = [0.0, 0.2]
         output_dropout_vals = [0.0, 0.3]
         results = defaultdict(list)

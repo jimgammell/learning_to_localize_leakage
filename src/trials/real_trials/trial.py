@@ -72,6 +72,7 @@ class Trial:
         self.plots_for_paper_dir = os.path.join(self.logging_dir, 'plots_for_paper')
         self.attr_over_time_dir = os.path.join(self.logging_dir, 'attr_over_time')
         self.pretrained_model_experiment_dir = os.path.join(self.logging_dir, 'pretrained_model_experiments')
+        self.supervised_dropout_ablation = os.path.join(self.logging_dir, 'supervised_dropout_ablation_hparam_sweep')
 
         if self.dataset_name in ['ascadv1-fixed', 'ascadv1-variable']:
             self.oracle_targets = [ # based on Egger (2021) findings
@@ -170,11 +171,17 @@ class Trial:
             self.supervised_hparam_sweep_dir, self.profiling_dataset, self.attack_dataset, training_kwargs=base_supervised_kwargs,
             trial_count=self.trial_config['supervised_htune_trial_count'], max_steps=self.trial_config['supervised_train_steps'], starting_seed=base_seed
         )
+        supervised_experiment_methods.run_supervised_hparam_sweep(
+            self.supervised_dropout_ablation, self.profiling_dataset, self.attack_dataset, training_kwargs=base_supervised_kwargs,
+            trial_count=self.trial_config['supervised_htune_trial_count'], max_steps=self.trial_config['supervised_train_steps'], starting_seed=base_seed
+        )
         print('Doing neural net attribution assessments...')
         for seed_idx in self.run_particular_seeds:
             for x in tqdm((self.trial_config['supervised_htune_trial_count']//5)*seed_idx + np.arange(self.trial_config['supervised_htune_trial_count']//5)):
                 model_dir = os.path.join(self.supervised_hparam_sweep_dir, f'trial_{x}')
                 print(f'Evaluating model in {model_dir}...')
+                self.evaluate_supervised_model(model_dir, seed_idx=0, print_res=True)
+                model_dir = os.path.join(self.supervised_dropout_ablation, f'trial_{x}')
                 self.evaluate_supervised_model(model_dir, seed_idx=0, print_res=True)
         print('Computing selection criteria...')
         self.compute_selection_criterion_for_attribution_prefix('gradvis')

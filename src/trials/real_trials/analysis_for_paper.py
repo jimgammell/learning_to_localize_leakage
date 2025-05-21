@@ -65,6 +65,10 @@ STEPS = {
     'otp': 1000
 }
 
+def lpf_assessment(leakage_assessment, kernel_size):
+    assert kernel_size % 2 == 1
+    return nn.functional.avg_pool1d(torch.as_tensor(leakage_assessment).reshape(1, 1, -1), kernel_size=kernel_size, stride=1, padding=kernel_size//2).reshape(-1).numpy()
+
 def load_attack_curves(base_dir):
     attack_curves = defaultdict(lambda: defaultdict(list))
     collected_training_curves = defaultdict(list)
@@ -817,22 +821,6 @@ def create_toy_gaussian_plot(base_dir, dest):
     fig.savefig(dest, **SAVEFIG_KWARGS)
 
 def plot_hsweep_histograms(base_dir, dest):
-    to_color = {
-        'all': 'blue',
-        'gradvis': 'purple',
-        '1-occlusion': 'red',
-        'inputxgrad': 'brown',
-        'lrp': 'green',
-        'saliency': 'orange'
-    }
-    to_label = {
-        'all': r'\textbf{ALL (ours)}',
-        'gradvis': 'GradVis',
-        '1-occlusion': '1-Occlusion',
-        'inputxgrad': r'Input $*$ Grad',
-        'lrp': 'LRP',
-        'saliency': 'Saliency'
-    }
     fontsize = 16
     fig, axes = plt.subplots(2, 3, figsize=(3*PLOT_WIDTH, 2*PLOT_WIDTH))
     axes = axes.flatten()
@@ -850,12 +838,15 @@ def plot_hsweep_histograms(base_dir, dest):
                 continue
             assessment = np.load(assessment_path)
             agreement = get_oracle_agreement(assessment, oracle_assessment)
+            pooled_assessment = lpf_assessment(assessment, OPTIMAL_WINDOW_SIZES[dataset_name])
+            pooled_agreement = get_oracle_agreement(pooled_assessment, oracle_assessment)
+            results[dataset_name]['all-pooled'].append(pooled_agreement)
             results[dataset_name]['all'].append(agreement)
         supervised_hsweep_dir = os.path.join(base_dir, dataset_name, 'supervised_hparam_sweep')
         for subdir in os.listdir(supervised_hsweep_dir):
             if not subdir.split('_')[0] == 'trial':
                 continue
-            for method_name in ['1-occlusion', 'gradvis', 'inputxgrad', 'lrp', 'saliency']:
+            for method_name in [ f'{OPTIMAL_WINDOW_SIZES[dataset_name]}-occlusion', '1-occlusion', 'gradvis', 'inputxgrad', 'lrp', 'saliency']:
                 assessment_path = os.path.join(supervised_hsweep_dir, subdir, f'{method_name}.npz')
                 if not os.path.exists(assessment_path):
                     print(f'Skipping {assessment_path}')
@@ -864,8 +855,18 @@ def plot_hsweep_histograms(base_dir, dest):
                 agreement = get_oracle_agreement(assessment, oracle_assessment)
                 results[dataset_name][method_name].append(agreement)
     for idx, dataset_name in enumerate(DATASET_NAMES.keys()):
+        to_label = {
+            'all-pooled': r'\textbf{ALL}+AvgPool(' + f'{OPTIMAL_WINDOW_SIZES[dataset_name]})',
+            'all': r'\textbf{ALL (ours)}',
+            f'{OPTIMAL_WINDOW_SIZES[dataset_name]}-occlusion': f'{OPTIMAL_WINDOW_SIZES[dataset_name]}-Occlusion',
+            '1-occlusion': '1-Occlusion',
+            'gradvis': 'GradVis',
+            'inputxgrad': r'Input $*$ Grad',
+            'lrp': 'LRP',
+            'saliency': 'Saliency'
+        }
         ax = axes[idx]
-        ax.boxplot(results[dataset_name].values(), positions=np.arange(len(results[dataset_name])), **PLOT_KWARGS)
+        ax.boxplot(results[dataset_name].values(), positions=np.arange(len(results[dataset_name])))
         for idx, method_name in enumerate(results[dataset_name].keys()):
             res = results[dataset_name][method_name]
             ax.plot(len(res)*[idx], res, marker='.', color='blue', linestyle='none', alpha=0.25, **PLOT_KWARGS)
@@ -986,10 +987,10 @@ def plot_model_selection_criteria(base_dir, dest):
                 + (-results[method_name]['rev_dnno_criterion']).argsort().argsort()
                 + (-results[method_name]['mean_agreement']).argsort().argsort()
             )
-            axes_r[0].plot(results[method_name]['oracle_agreement'], results[method_name]['fwd_dnno_criterion'], color=color, marker='.', linestyle='none', label=method_name)
-            axes_r[1].plot(results[method_name]['oracle_agreement'], results[method_name]['rev_dnno_criterion'], color=color, marker='.', linestyle='none', label=method_name)
-            axes_r[2].plot(results[method_name]['oracle_agreement'], results[method_name]['mean_agreement'], color=color, marker='.', linestyle='none', label=method_name)
-            axes_r[3].plot(results[method_name]['oracle_agreement'], composite_criterion, color=color, marker='.', linestyle='none', label=method_name)
+            axes_r[0].plot(results[method_name]['oracle_agreement'], results[method_name]['fwd_dnno_criterion'], color=color, marker='.', linestyle='none', alpha=0.5, label=method_name, **PLOT_KWARGS)
+            axes_r[1].plot(results[method_name]['oracle_agreement'], results[method_name]['rev_dnno_criterion'], color=color, marker='.', linestyle='none', alpha=0.5, label=method_name, **PLOT_KWARGS)
+            axes_r[2].plot(results[method_name]['oracle_agreement'], results[method_name]['mean_agreement'], color=color, marker='.', linestyle='none', alpha=0.5, label=method_name, **PLOT_KWARGS)
+            axes_r[3].plot(results[method_name]['oracle_agreement'], composite_criterion, color=color, marker='.', linestyle='none', alpha=0.5, label=method_name, **PLOT_KWARGS)
         axes_r[0].set_xlabel(r'Oracle agreement $\uparrow$')
         axes_r[1].set_xlabel(r'Oracle agreement $\uparrow$')
         axes_r[2].set_xlabel(r'Oracle agreement $\uparrow$')
@@ -1014,12 +1015,14 @@ def do_analysis_for_paper():
     fig_dir = os.path.join(OUTPUT_DIR, 'plots_for_paper')
     os.makedirs(fig_dir, exist_ok=True)
     plot_model_selection_criteria(OUTPUT_DIR, os.path.join(fig_dir, 'model_selection_criterion.pdf'))
+    plot_hsweep_histograms(OUTPUT_DIR, os.path.join(fig_dir, 'oracle_agreement_boxplots.pdf'))
     plot_all_training_curves(OUTPUT_DIR, os.path.join(fig_dir, 'all_training_curves.pdf'))
+    gamma_bar_sweep, theta_lr_scalar_sweep, etat_lr_scalar_sweep = load_all_sensitivity_analysis_data(OUTPUT_DIR)
+    plot_all_sensitivity_analysis(gamma_bar_sweep, theta_lr_scalar_sweep, etat_lr_scalar_sweep, os.path.join(fig_dir, 'all_sensitivity_analysis.pdf'))
     traces = load_traces_over_time(OUTPUT_DIR)
     oracle_agreement_vals = get_oracle_agreement_vals(OUTPUT_DIR)
     plot_traces_over_time(traces, os.path.join(fig_dir, 'traces_over_time.pdf'), oracle_agreement_vals)
     assert False
-    plot_hsweep_histograms(OUTPUT_DIR, os.path.join(fig_dir, 'oracle_agreement_boxplots.pdf'))
     print('Plotting attack curves...')
     plot_attack_curves(OUTPUT_DIR, os.path.join(fig_dir, 'attack_curves.pdf'))
     print()
@@ -1033,9 +1036,7 @@ def do_analysis_for_paper():
     create_performance_comparison_table(OUTPUT_DIR, os.path.join(fig_dir, 'oracle_agreement_table'), oracle_agreement_vals)
     print()
     create_toy_gaussian_plot(OUTPUT_DIR, os.path.join(fig_dir, 'toy_gaussian_plot.pdf'))
-    gamma_bar_sweep, theta_lr_scalar_sweep, etat_lr_scalar_sweep = load_all_sensitivity_analysis_data(OUTPUT_DIR)
     plot_all_sensitivity_analysis(gamma_bar_sweep, theta_lr_scalar_sweep, etat_lr_scalar_sweep, os.path.join(fig_dir, 'ascadv1_variable_sensitivity_analysis.pdf'), only_ascadv1_variable=True)
-    plot_all_sensitivity_analysis(gamma_bar_sweep, theta_lr_scalar_sweep, etat_lr_scalar_sweep, os.path.join(fig_dir, 'all_sensitivity_analysis.pdf'))
     r"""print('Creating DNN occlusion AUC table...')
     fwd_dnno_data, rev_dnno_data = get_dnn_occlusion_curves(OUTPUT_DIR)
     create_performance_comparison_table(OUTPUT_DIR, os.path.join(fig_dir, 'fwd_dnno_auc_table'), fwd_dnno_data)

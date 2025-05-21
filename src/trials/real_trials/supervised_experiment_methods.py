@@ -114,13 +114,14 @@ def run_supervised_hparam_sweep(
     training_kwargs: Optional[Dict[str, Any]] = None, # training kwargs to use unless otherwise specified by hyperparameter config.
     trial_count: int = 50, # number of hparam configurations to try
     max_steps: int = 1000, # number of training steps per trial
-    starting_seed: int = 0 # each trial will use the seed trial_idx+starting_seed
+    starting_seed: int = 0, # each trial will use the seed trial_idx+starting_seed
+    heavy_dropout_ablation: bool = False
 ):
     if not os.path.exists(os.path.join(output_dir, 'results.pickle')):
         if training_kwargs is None:
             training_kwargs = {}
         trainer = SupervisedTrainer(profiling_dataset, attack_dataset, default_training_module_kwargs=training_kwargs)
-        trainer.hparam_tune(output_dir, trial_count=trial_count, max_steps=max_steps, starting_seed=starting_seed)
+        trainer.hparam_tune(output_dir, trial_count=trial_count, max_steps=max_steps, starting_seed=starting_seed, heavy_input_dropout_ablation=heavy_dropout_ablation)
 
 def get_best_supervised_model_hparams(sweep_dir: str, profiling_dataset: Dataset, attack_dataset: Dataset, dataset_name: str, reference_leakage_assessment: np.ndarray):
     best_model_dir = None

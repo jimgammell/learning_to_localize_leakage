@@ -181,6 +181,9 @@ class Trial:
                 model_dir = os.path.join(self.supervised_hparam_sweep_dir, f'trial_{x}')
                 print(f'Evaluating model in {model_dir}...')
                 self.evaluate_supervised_model(model_dir, seed_idx=0, print_res=True)
+                model_dir = os.path.join(self.supervised_dropout_ablation, f'trial_{x}')
+                print(f'Evaluating model in {model_dir}...')
+                self.evaluate_supervised_model(model_dir, seed_idx=0, print_res=True, skip_metrics=True)
         print('Computing selection criteria...')
         self.compute_selection_criterion_for_attribution_prefix('gradvis')
         self.compute_selection_criterion_for_attribution_prefix('lrp')
@@ -374,7 +377,7 @@ class Trial:
             print(f'\tReverse DNN occlusion AUC: {rev_dnno.mean()}')
         return dict(fwd_dnno=fwd_dnno, rev_dnno=rev_dnno, ta_ttd=ta_ttd, oracle_agreement=oracle_agreement)
     
-    def evaluate_supervised_model(self, output_dir, seed_idx=0, cost: Literal['reduced', 'full'] = 'reduced', print_res=False):
+    def evaluate_supervised_model(self, output_dir, seed_idx=0, cost: Literal['reduced', 'full'] = 'reduced', print_res=False, skip_metrics=False):
         compute_lrp = False
         if 'benadjila_cnn_best' in output_dir:
             if self.dataset_name == 'ascadv1-fixed':
@@ -413,7 +416,8 @@ class Trial:
         else:
             model_dir = output_dir
             compute_lrp = True
-        supervised_experiment_methods.eval_on_attack_dataset(model_dir, self.profiling_dataset, self.attack_dataset, self.dataset_name, output_dir)
+        if not skip_metrics:
+            supervised_experiment_methods.eval_on_attack_dataset(model_dir, self.profiling_dataset, self.attack_dataset, self.dataset_name, output_dir)
         supervised_experiment_methods.attribute_neural_net(
             model_dir, self.profiling_dataset, self.attack_dataset, self.dataset_name, compute_gradvis=True, compute_saliency=True, compute_inputxgrad=True,
             compute_lrp=compute_lrp, compute_occlusion=[1, OPTIMAL_WINDOW_SIZES[self.dataset_name]], output_dir=output_dir
@@ -426,9 +430,10 @@ class Trial:
                 model_dir, self.profiling_dataset, self.attack_dataset, self.dataset_name, compute_second_order_occlusion=[1, OPTIMAL_WINDOW_SIZES[self.dataset_name]], compute_occpoi=True
             )
             methods_to_eval.extend(['1-second-order-occlusion', f'{OPTIMAL_WINDOW_SIZES[self.dataset_name]}-second-order-occlusion', 'occpoi'])
-        for method_name in methods_to_eval:
-            leakage_assessment = np.load(os.path.join(output_dir, f'{method_name}.npz'), allow_pickle=True)['attribution']
-            self.evaluate_leakage_assessment(leakage_assessment, seed_idx, os.path.join(output_dir, f'{method_name}_evaluation_metrics.npz'), print_res=print_res)
+        if not skip_metrics:
+            for method_name in methods_to_eval:
+                leakage_assessment = np.load(os.path.join(output_dir, f'{method_name}.npz'), allow_pickle=True)['attribution']
+                self.evaluate_leakage_assessment(leakage_assessment, seed_idx, os.path.join(output_dir, f'{method_name}_evaluation_metrics.npz'), print_res=print_res)
     
     def __call__(self,
         run_parametric_trials: bool = False,

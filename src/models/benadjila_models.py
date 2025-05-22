@@ -102,6 +102,7 @@ class CNNBest(nn.Module):
         batch_size, channels, timesteps = x.shape
         assert channels == self.channels
         assert timesteps == self.timesteps
+        print(self)
         print(x.shape)
         x = self.conv_stage(x)
         print(x.shape)

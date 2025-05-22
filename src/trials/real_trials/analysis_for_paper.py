@@ -25,6 +25,9 @@ DATASET_NAMES = {
 
 METHOD_NAMES = {
     'random': 'Random',
+    'snr': 'SNR',
+    'sosd': 'SOSD',
+    'cpa': 'CPA',
     #'prof_oracle': 'Oracle (train set)',
     'gradvis': 'GradVis~\\cite{masure2019}',
     'saliency': 'Saliency~\\cite{simonyan2014, hettwer2020}',
@@ -558,7 +561,14 @@ def get_assessments(base_dir):
     assessments = {dataset_name: defaultdict(list) for dataset_name in dataset_names}
     assessment_runtimes = {dataset_name: defaultdict(list) for dataset_name in dataset_names}
     for dataset_name in dataset_names:
+        param_stats_dir = os.path.join(base_dir, dataset_name, 'first_order_parametric_statistical_assessment')
+        param_stats = np.load(os.path.join(param_stats_dir, 'first_order_stats.npz'), allow_pickle=True)
+        assessments[dataset_name]['snr'].append(param_stats['snr'])
+        assessments[dataset_name]['sosd'].append(param_stats['sosd'])
+        assessments[dataset_name]['cpa'].append(param_stats['cpa'])
         for seed in [55, 56, 57, 58, 59]:
+            random_assessment = np.load(os.path.join(param_stats_dir, 'random.npy'))[seed-55]
+            assessments[dataset_name]['random'].append(random_assessment)
             sup_dir = os.path.join(base_dir, dataset_name, 'supervised_models_for_attribution', 'classification', f'seed={seed}')
             for method_name in [
                 'gradvis', 'inputxgrad', 'lrp', 'occpoi', 'saliency', '1-second-order-occlusion', f'{OPTIMAL_WINDOW_SIZES[dataset_name]}-second-order-occlusion',
@@ -621,7 +631,6 @@ def get_oracle_agreement_vals(base_dir):
         print(f'Dataset: {dataset_name}')
         oracle_assessment = oracle_assessments[dataset_name]
         profiling_oracle_assessment = profiling_oracle_assessments[dataset_name]
-        data[dataset_name]['random'] = np.stack([get_oracle_agreement(np.random.rand(oracle_assessment.shape[-1]), oracle_assessment) for _ in range(5)])
         #data[dataset_name]['prof_oracle'] = get_oracle_agreement(oracle_assessment, profiling_oracle_assessment).reshape(1, -1)
         per_method_assessments = assessments[dataset_name]
         for assessment_name, assessment in per_method_assessments.items():
@@ -635,6 +644,75 @@ def get_oracle_agreement_vals(base_dir):
                 data[dataset_name]['m-second-order-occlusion'] = agreement_vals
             print(f'\t{assessment_name}: {agreement_vals.mean()} +/- {agreement_vals.std()}')
     return data
+
+def get_eval_metrics(base_dir):
+    oracle_agreement = defaultdict(lambda: defaultdict(list))
+    fwd_dnno_auc = defaultdict(lambda: defaultdict(list))
+    rev_dnno_auc = defaultdict(lambda: defaultdict(list))
+    ta_mttd = defaultdict(lambda: defaultdict(list))
+    for dataset_name in DATASET_NAMES.keys():
+        print(f'Dataset: {dataset_name}')
+        param_dir = os.path.join(base_dir, dataset_name, 'first_order_parametric_statistical_assessment')
+        for seed in range(5):
+            random_metrics = np.load(os.path.join(param_dir, f'random_evaluation_metrics_{seed}.npz'), allow_pickle=True)
+            oracle_agreement[dataset_name]['random'].append(random_metrics['oracle_agreement'])
+            fwd_dnno_auc[dataset_name]['random'].append(random_metrics['fwd_dnno'])
+            rev_dnno_auc[dataset_name]['random'].append(random_metrics['rev_dnno'])
+            ta_mttd[dataset_name]['random'].append(random_metrics['ta_ttd'])
+        for method_name in ['snr', 'sosd', 'cpa']:
+            eval_metrics = np.load(os.path.join(param_dir, f'{method_name}_evaluation_metrics.npz'), allow_pickle=True)
+            oracle_agreement[dataset_name][method_name].append(eval_metrics['oracle_agreement'])
+            fwd_dnno_auc[dataset_name][method_name].append(eval_metrics['fwd_dnno'])
+            rev_dnno_auc[dataset_name][method_name].append(eval_metrics['rev_dnno'])
+            ta_mttd[dataset_name][method_name].append(eval_metrics['ta_ttd'])
+        for seed in range(55, 60):
+            attr_dir = os.path.join(base_dir, dataset_name, 'supervised_models_for_attribution', 'classification', f'seed={seed}')
+            for method_name in [
+                'gradvis', 'inputxgrad', 'lrp', 'saliency', 'occpoi',
+                '1-occlusion', f'{OPTIMAL_WINDOW_SIZES[dataset_name]}-occlusion', '1-second-order-occlusion', f'{OPTIMAL_WINDOW_SIZES[dataset_name]}-second-order-occlusion'
+            ]:
+                path = os.path.join(attr_dir, f'{method_name}_evaluation_metrics.npz')
+                if not os.path.exists(path):
+                    print(f'DNE: {path}')
+                    continue
+                eval_metrics = np.load(path, allow_pickle=True)
+                if method_name == f'{OPTIMAL_WINDOW_SIZES[dataset_name]}-occlusion':
+                    method_name = 'm-occlusion'
+                if method_name == f'{OPTIMAL_WINDOW_SIZES[dataset_name]}-second-order-occlusion':
+                    method_name = 'm-second-order-occlusion'
+                oracle_agreement[dataset_name][method_name].append(eval_metrics['oracle_agreement'])
+                fwd_dnno_auc[dataset_name][method_name].append(eval_metrics['fwd_dnno'])
+                rev_dnno_auc[dataset_name][method_name].append(eval_metrics['rev_dnno'])
+                ta_mttd[dataset_name][method_name].append(eval_metrics['ta_ttd'])
+        for seed in range(50, 55):
+            path = os.path.join(base_dir, dataset_name, 'all_runs', 'fair', f'seed={seed}', 'evaluation_metrics.npz')
+            if not os.path.exists(path):
+                print(f'DNE: {path}')
+                continue
+            eval_metrics = np.load(path, allow_pickle=True)
+            oracle_agreement[dataset_name]['all'].append(eval_metrics['oracle_agreement'])
+            fwd_dnno_auc[dataset_name]['all'].append(eval_metrics['fwd_dnno'])
+            rev_dnno_auc[dataset_name]['all'].append(eval_metrics['rev_dnno'])
+            ta_mttd[dataset_name]['all'].append(eval_metrics['ta_ttd'])
+    oracle_agreement = {k1: {k2: np.stack(v) for k2, v in oracle_agreement[k1].items()} for k1 in oracle_agreement}
+    fwd_dnno_auc = {k1: {k2: np.stack(v) for k2, v in fwd_dnno_auc[k1].items()} for k1 in fwd_dnno_auc}
+    rev_dnno_auc = {k1: {k2: np.stack(v) for k2, v in rev_dnno_auc[k1].items()} for k1 in rev_dnno_auc}
+    ta_mttd = {k1: {k2: np.stack(v) for k2, v in ta_mttd[k1].items()} for k1 in ta_mttd}
+    for dataset_name in DATASET_NAMES.keys():
+        print(f'Dataset: {dataset_name}')
+        print('\tOracle agreement values:')
+        for k, v in oracle_agreement[dataset_name].items():
+            print(f'\t\t{k}: {v.mean()} +/- {v.std()}')
+        print('\tFwd DNNO AUC values:')
+        for k, v in fwd_dnno_auc[dataset_name].items():
+            print(f'\t\t{k}: {v.mean()} +/- {v.std()}')
+        print('\tRev DNNO AUC values:')
+        for k, v in rev_dnno_auc[dataset_name].items():
+            print(f'\t\t{k}: {v.mean()} +/- {v.std()}')
+        print('\tTA MTTD values:')
+        for k, v in ta_mttd[dataset_name].items():
+            print(f'\t\t{k}: {v.mean()} +/- {v.std()}')
+    return oracle_agreement, fwd_dnno_auc, rev_dnno_auc, ta_mttd
 
 def get_dnn_occlusion_curves(base_dir):
     fwd_base_data = {dataset_name: defaultdict(list) for dataset_name in DATASET_NAMES.keys()}
@@ -669,7 +747,7 @@ def get_dnn_occlusion_curves(base_dir):
     return fwd_data, rev_data
 
 # done with the help of ChatGPT
-def create_performance_comparison_table(base_dir, dest, data):
+def create_performance_comparison_table(base_dir, dest, data, bigger_is_better: bool = True):
     def to_one_sigfig(x):
         if x == 0 or np.isnan(x):
             return 0.
@@ -680,7 +758,7 @@ def create_performance_comparison_table(base_dir, dest, data):
             return r'n/a'
         error = to_one_sigfig(std)
         if error > 0:
-            decimals = abs(int(floor(log10(error)))) if error < 1 else 0.
+            decimals = abs(int(floor(log10(error)))) if error < 1 else 0
             val = round(mean, decimals)
             fmt_str = f'{{:.{decimals}f}} \\pm {{:.{decimals}f}}'
             rv = fmt_str.format(val, error)
@@ -721,14 +799,17 @@ def create_performance_comparison_table(base_dir, dest, data):
         return header + "\n".join(body_lines) + footer
     table = pd.DataFrame(index=list(METHOD_NAMES.values()), columns=list(DATASET_NAMES.values()))
     for dataset_name, subdata in data.items():
-        best_method_idx = np.argmax([x.mean() if (x is not None and name != 'prof_oracle') else -np.inf for name, x in subdata.items()])
+        if bigger_is_better:
+            best_method_idx = np.argmax([x.mean() if (x is not None and name != 'prof_oracle') else -np.inf for name, x in subdata.items()])
+        else:
+            best_method_idx = np.argmin([x.mean() if (x is not None and name != 'prof_oracle') else -np.inf for name, x in subdata.items()])
         best_name = list(subdata.keys())[best_method_idx]
         best_data = subdata[best_name]
         methods_to_underline = [
             method_name for method_name, method_data in subdata.items()
             if (method_data is not None)
             and (method_name != best_name)
-            and (method_data.mean()+method_data.std() >= best_data.mean()-best_data.std())
+            and ((method_data.mean()+method_data.std() >= best_data.mean()-best_data.std()) if bigger_is_better else (method_data.mean()-method_data.std() <= best_data.mean()+best_data.std()))
             and method_name != 'prof_oracle'
         ]
         for method_name, method_data in subdata.items():
@@ -900,11 +981,35 @@ def plot_ablation_histograms(base_dir, dest):
             pooled_agreement = get_oracle_agreement(pooled_assessment, oracle_assessment)
             results[dataset_name]['all-pooled'].append(pooled_agreement)
             results[dataset_name]['all'].append(agreement)
+        all_cooperative_hsweep_dir = os.path.join(base_dir, dataset_name, 'all_cooperative_ablation')
+        if os.path.exists(all_cooperative_hsweep_dir):
+            for subdir in os.listdir(all_cooperative_hsweep_dir):
+                if not subdir.split('_')[0] == 'trial':
+                    continue
+                assessment_path = os.path.join(all_cooperative_hsweep_dir, subdir, 'leakage_assessment.npy')
+                if not os.path.exists(assessment_path):
+                    print(f'Skipping {assessment_path}')
+                    continue
+                assessment = np.load(assessment_path)
+                agreement = get_oracle_agreement(assessment, oracle_assessment)
+                results[dataset_name]['cooperative'].append(agreement)
+        all_unconditional_hsweep_dir = os.path.join(base_dir, dataset_name, 'all_unconditional_ablation')
+        if os.path.exists(all_unconditional_hsweep_dir):
+            for subdir in os.listdir(all_unconditional_hsweep_dir):
+                if not subdir.split('_')[0] == 'trial':
+                    continue
+                assessment_path = os.path.join(all_unconditional_hsweep_dir, subdir, 'leakage_assessment.npy')
+                if not os.path.exists(assessment_path):
+                    print(f'Skipping {assessment_path}')
+                    continue
+                assessment = np.load(assessment_path)
+                agreement = get_oracle_agreement(assessment, oracle_assessment)
+                results[dataset_name]['unconditional'].append(agreement)
         supervised_hsweep_dir = os.path.join(base_dir, dataset_name, 'supervised_dropout_ablation_hparam_sweep')
         for subdir in os.listdir(supervised_hsweep_dir):
             if not subdir.split('_')[0] == 'trial':
                 continue
-            for method_name in [ f'{OPTIMAL_WINDOW_SIZES[dataset_name]}-occlusion', '1-occlusion', 'gradvis', 'inputxgrad', 'lrp', 'saliency']:
+            for method_name in [ f'{OPTIMAL_WINDOW_SIZES[dataset_name]}-occlusion', '1-occlusion']:
                 assessment_path = os.path.join(supervised_hsweep_dir, subdir, f'{method_name}.npz')
                 if not os.path.exists(assessment_path):
                     print(f'Skipping {assessment_path}')
@@ -916,12 +1021,10 @@ def plot_ablation_histograms(base_dir, dest):
         to_label = {
             'all-pooled': r'\textbf{ALL}+AvgPool(' + f'{OPTIMAL_WINDOW_SIZES[dataset_name]})',
             'all': r'\textbf{ALL (ours)}',
+            'cooperative': 'ALL (cooperative)',
+            'unconditional': 'ALL (unconditional)',
             f'{OPTIMAL_WINDOW_SIZES[dataset_name]}-occlusion': f'{OPTIMAL_WINDOW_SIZES[dataset_name]}-Occlusion',
-            '1-occlusion': '1-Occlusion',
-            'gradvis': 'GradVis',
-            'inputxgrad': r'Input $*$ Grad',
-            'lrp': 'LRP',
-            'saliency': 'Saliency'
+            '1-occlusion': '1-Occlusion'
         }
         ax = axes[idx]
         ax.boxplot(results[dataset_name].values(), positions=np.arange(len(results[dataset_name])))
@@ -1086,17 +1189,24 @@ def plot_model_selection_criteria(base_dir, dest):
 def do_analysis_for_paper():
     fig_dir = os.path.join(OUTPUT_DIR, 'plots_for_paper')
     os.makedirs(fig_dir, exist_ok=True)
+    oracle_agreement_vals, fwd_dnno_auc_vals, rev_dnno_auc_vals, ta_mttd_vals = get_eval_metrics(OUTPUT_DIR)
+    create_performance_comparison_table(OUTPUT_DIR, os.path.join(fig_dir, 'oracle_agreement_table'), oracle_agreement_vals)
+    create_performance_comparison_table(OUTPUT_DIR, os.path.join(fig_dir, 'fwd_dnno_auc_table'), fwd_dnno_auc_vals)
+    create_performance_comparison_table(OUTPUT_DIR, os.path.join(fig_dir, 'rev_dnno_auc_table'), rev_dnno_auc_vals)
+    create_performance_comparison_table(OUTPUT_DIR, os.path.join(fig_dir, 'ta_mttd_table'), ta_mttd_vals, bigger_is_better=False)
+    plot_ablation_histograms(OUTPUT_DIR, os.path.join(fig_dir, 'ablation_histograms.pdf'))
+    assert False
     plot_attack_curves(OUTPUT_DIR, os.path.join(fig_dir, 'attack_curves.pdf'))
     plot_model_selection_criteria(OUTPUT_DIR, os.path.join(fig_dir, 'model_selection_criterion.pdf'))
     plot_hsweep_histograms(OUTPUT_DIR, os.path.join(fig_dir, 'oracle_agreement_boxplots.pdf'))
-    plot_ablation_histograms(OUTPUT_DIR, os.path.join(fig_dir, 'ablation_histograms.pdf'))
     plot_all_training_curves(OUTPUT_DIR, os.path.join(fig_dir, 'all_training_curves.pdf'))
     gamma_bar_sweep, theta_lr_scalar_sweep, etat_lr_scalar_sweep = load_all_sensitivity_analysis_data(OUTPUT_DIR)
     plot_all_sensitivity_analysis(gamma_bar_sweep, theta_lr_scalar_sweep, etat_lr_scalar_sweep, os.path.join(fig_dir, 'all_sensitivity_analysis.pdf'))
-    traces = load_traces_over_time(OUTPUT_DIR)
     oracle_agreement_vals = get_oracle_agreement_vals(OUTPUT_DIR)
-    plot_traces_over_time(traces, os.path.join(fig_dir, 'traces_over_time.pdf'), oracle_agreement_vals)
+    create_performance_comparison_table(OUTPUT_DIR, os.path.join(fig_dir, 'oracle_agreement_table'), oracle_agreement_vals)
     assert False
+    traces = load_traces_over_time(OUTPUT_DIR)
+    plot_traces_over_time(traces, os.path.join(fig_dir, 'traces_over_time.pdf'), oracle_agreement_vals)
     print('Plotting attack curves...')
     print()
     print('Plotting occlusion window size sweeps...')
@@ -1106,7 +1216,6 @@ def do_analysis_for_paper():
     print_runtimes(OUTPUT_DIR)
     plot_leakiness_assessments(OUTPUT_DIR, os.path.join(fig_dir, 'ascadv1_variable_relationship_with_oracle.pdf'), only_ascadv1_variable=True)
     print('Creating oracle agreement table...')
-    create_performance_comparison_table(OUTPUT_DIR, os.path.join(fig_dir, 'oracle_agreement_table'), oracle_agreement_vals)
     print()
     create_toy_gaussian_plot(OUTPUT_DIR, os.path.join(fig_dir, 'toy_gaussian_plot.pdf'))
     plot_all_sensitivity_analysis(gamma_bar_sweep, theta_lr_scalar_sweep, etat_lr_scalar_sweep, os.path.join(fig_dir, 'ascadv1_variable_sensitivity_analysis.pdf'), only_ascadv1_variable=True)

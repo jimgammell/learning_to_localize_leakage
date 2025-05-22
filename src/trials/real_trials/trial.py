@@ -230,8 +230,8 @@ class Trial:
                     self.evaluate_supervised_model(os.path.join(self.pretrained_model_experiment_dir, 'benadjila_mlp_best'), seed_idx=seed_idx, print_res=True)
                     self.evaluate_supervised_model(os.path.join(self.pretrained_model_experiment_dir, 'wouters', f'seed={seed_idx}'), seed_idx=seed_idx, print_res=True)
                     self.evaluate_supervised_model(os.path.join(self.pretrained_model_experiment_dir, 'zaid', f'seed={seed_idx}'), seed_idx=seed_idx, print_res=True)
-                elif self.dataset_name == 'ascadv1-variable':
-                    self.evaluate_supervised_model(os.path.join(self.pretrained_model_experiment_dir, 'benadjila_cnn_best'), seed_idx=seed_idx, print_res=True)
+                #elif self.dataset_name == 'ascadv1-variable':
+                #    self.evaluate_supervised_model(os.path.join(self.pretrained_model_experiment_dir, 'benadjila_cnn_best'), seed_idx=seed_idx, print_res=True)
                 elif self.dataset_name == 'aes-hd':
                     self.evaluate_supervised_model(os.path.join(self.pretrained_model_experiment_dir, 'wouters', f'seed={seed_idx}'), seed_idx=seed_idx, print_res=True)
                     self.evaluate_supervised_model(os.path.join(self.pretrained_model_experiment_dir, 'zaid', f'seed={seed_idx}'), seed_idx=seed_idx, print_res=True)

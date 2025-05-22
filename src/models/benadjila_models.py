@@ -102,9 +102,13 @@ class CNNBest(nn.Module):
         batch_size, channels, timesteps = x.shape
         assert channels == self.channels
         assert timesteps == self.timesteps
+        print(x.shape)
         x = self.conv_stage(x)
+        print(x.shape)
         x = self.flatten(x)
+        print(x.shape)
         x = self.fc_stage(x)
+        print(x.shape)
         return x
     
     def load_pretrained_keras_params(self, weights_path):

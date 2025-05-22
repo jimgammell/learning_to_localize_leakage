@@ -116,7 +116,7 @@ def plot_attack_curves(base_dir, dest):
         'benadjila_mlp_best': colors[4]
     }
     to_method_label = {
-        'ours': 'ALL (ours)',
+        'ours': 'Ours',
         'wouters': 'WoutersNet',
         'zaid': 'ZaidNet',
         'benadjila': r"Benadjila's $\mathrm{CNN_{best}}$",
@@ -1037,10 +1037,12 @@ def plot_model_selection_criteria(base_dir, dest):
                     for k, v in criterion.items():
                         resultss[dataset_name][method_name][k].append(v)
     fig, axes = plt.subplots(6, 4, figsize=(3*PLOT_WIDTH, 4.5*PLOT_WIDTH))
-    colors = ['blue', 'red', 'green', 'yellow', 'grey', 'orange', 'brown']
+    colors = ['red', 'green', 'yellow', 'grey', 'orange', 'brown']
     for axes_r, dataset_name in zip(axes, DATASET_NAMES.keys()):
         results = resultss[dataset_name]
         for method_name, color in zip(results.keys(), colors):
+            if method_name == 'all':
+                continue
             results[method_name] = {k: np.stack(v) for k, v in results[method_name].items()}
             composite_criterion = (
                 results[method_name]['fwd_dnno_criterion'].argsort().argsort()
@@ -1051,6 +1053,16 @@ def plot_model_selection_criteria(base_dir, dest):
             axes_r[1].plot(results[method_name]['oracle_agreement'], results[method_name]['rev_dnno_criterion'], color=color, marker='.', linestyle='none', alpha=0.5, label=method_name, **PLOT_KWARGS)
             axes_r[2].plot(results[method_name]['oracle_agreement'], results[method_name]['mean_agreement'], color=color, marker='.', linestyle='none', alpha=0.5, label=method_name, **PLOT_KWARGS)
             axes_r[3].plot(results[method_name]['oracle_agreement'], composite_criterion, color=color, marker='.', linestyle='none', alpha=0.5, label=method_name, **PLOT_KWARGS)
+        results['all'] = {k: np.stack(v) for k, v in results['all'].items()}
+        composite_criterion = (
+            results['all']['fwd_dnno_criterion'].argsort().argsort()
+            + (-results['all']['rev_dnno_criterion']).argsort().argsort()
+            + (-results['all']['mean_agreement']).argsort().argsort()
+        )
+        axes_r[0].plot(results['all']['oracle_agreement'], results['all']['fwd_dnno_criterion'], color='blue', marker='.', linestyle='none', alpha=1, label=r'\textbf{ALL (ours)}', **PLOT_KWARGS)
+        axes_r[1].plot(results['all']['oracle_agreement'], results['all']['rev_dnno_criterion'], color='blue', marker='.', linestyle='none', alpha=1, label=r'\textbf{ALL (ours)}', **PLOT_KWARGS)
+        axes_r[2].plot(results['all']['oracle_agreement'], results['all']['mean_agreement'], color='blue', marker='.', linestyle='none', alpha=1, label=r'\textbf{ALL (ours)}', **PLOT_KWARGS)
+        axes_r[3].plot(results['all']['oracle_agreement'], composite_criterion, color='blue', marker='.', linestyle='none', alpha=1, label=r'\textbf{ALL (ours)}', **PLOT_KWARGS)
         axes_r[0].set_xlabel(r'Oracle agreement $\uparrow$')
         axes_r[1].set_xlabel(r'Oracle agreement $\uparrow$')
         axes_r[2].set_xlabel(r'Oracle agreement $\uparrow$')
@@ -1074,6 +1086,7 @@ def plot_model_selection_criteria(base_dir, dest):
 def do_analysis_for_paper():
     fig_dir = os.path.join(OUTPUT_DIR, 'plots_for_paper')
     os.makedirs(fig_dir, exist_ok=True)
+    plot_attack_curves(OUTPUT_DIR, os.path.join(fig_dir, 'attack_curves.pdf'))
     plot_model_selection_criteria(OUTPUT_DIR, os.path.join(fig_dir, 'model_selection_criterion.pdf'))
     plot_hsweep_histograms(OUTPUT_DIR, os.path.join(fig_dir, 'oracle_agreement_boxplots.pdf'))
     plot_ablation_histograms(OUTPUT_DIR, os.path.join(fig_dir, 'ablation_histograms.pdf'))
@@ -1085,7 +1098,6 @@ def do_analysis_for_paper():
     plot_traces_over_time(traces, os.path.join(fig_dir, 'traces_over_time.pdf'), oracle_agreement_vals)
     assert False
     print('Plotting attack curves...')
-    plot_attack_curves(OUTPUT_DIR, os.path.join(fig_dir, 'attack_curves.pdf'))
     print()
     print('Plotting occlusion window size sweeps...')
     plot_m_occlusion_oracle_agreement_scores(OUTPUT_DIR, os.path.join(fig_dir, 'occl_window_size_sweep.pdf'))

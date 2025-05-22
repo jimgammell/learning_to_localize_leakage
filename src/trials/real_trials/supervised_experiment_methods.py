@@ -231,8 +231,8 @@ def attribute_neural_net(
     occpoi_computor = None
     def init(mode: Literal['occpoi', 'attr'] = 'attr'): # since these take time to init and we don't want to do it if not needed
         nonlocal profiling_dataloader, attack_dataloader, model, neural_net_attributor, occpoi_computor
-        profiling_dataloader = profiling_dataloader or get_dataloader(profiling_dataset, attack_dataset, split='profile')
-        attack_dataloader = attack_dataloader or get_dataloader(attack_dataset, attack_dataset, split='profile')
+        profiling_dataloader = profiling_dataloader or get_dataloader(profiling_dataset, attack_dataset, split='profile', **({'data_mean': torch.tensor(0.0), 'data_var': torch.tensor(1.0)} if any(x in model_dir for x in ['cnn_best', 'mlp_best', 'cnn2-ascad']) else {}))
+        attack_dataloader = attack_dataloader or get_dataloader(attack_dataset, attack_dataset, split='profile', **({'data_mean': torch.tensor(0.0), 'data_var': torch.tensor(1.0)} if any(x in model_dir for x in ['cnn_best', 'mlp_best', 'cnn2-ascad']) else {}))
         model = model or load_trained_supervised_model(model_dir, as_lightning_module=False)
         if mode == 'attr':
             neural_net_attributor = neural_net_attributor or NeuralNetAttribution(profiling_dataloader, model, seed=0, device='cuda' if torch.cuda.is_available() else 'cpu')

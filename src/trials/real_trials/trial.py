@@ -73,6 +73,9 @@ class Trial:
         self.attr_over_time_dir = os.path.join(self.logging_dir, 'attr_over_time')
         self.pretrained_model_experiment_dir = os.path.join(self.logging_dir, 'pretrained_model_experiments')
         self.supervised_dropout_ablation = os.path.join(self.logging_dir, 'supervised_dropout_ablation_hparam_sweep')
+        self.all_cooperative_ablation_dir = os.path.join(self.logging_dir, 'all_cooperative_ablation')
+        self.all_unconditional_ablation_dir = os.path.join(self.logging_dir, 'all_unconditional_ablation')
+        self.all_interpretive_ablation_dir = os.path.join(self.logging_dir, 'all_interpretive_ablation')
 
         if self.dataset_name in ['ascadv1-fixed', 'ascadv1-variable']:
             self.oracle_targets = [ # based on Egger (2021) findings
@@ -236,13 +239,9 @@ class Trial:
                     self.evaluate_supervised_model(os.path.join(self.pretrained_model_experiment_dir, 'wouters', f'seed={seed_idx}'), seed_idx=seed_idx, print_res=True)
                     self.evaluate_supervised_model(os.path.join(self.pretrained_model_experiment_dir, 'zaid', f'seed={seed_idx}'), seed_idx=seed_idx, print_res=True)
     
-    def run_all_trials(self):
-        base_seed = 0
-        base_all_kwargs = copy(self.trial_config['default_kwargs'])
-        base_all_kwargs.update(self.trial_config['classifiers_pretrain_kwargs'])
-        base_all_kwargs.update(self.trial_config['all_kwargs'])
+    def run_all_hsweep(self, output_dir, base_seed, base_all_kwargs):
         all_experiment_methods.run_all_hparam_sweep(
-            self.all_hparam_sweep_dir, self.profiling_dataset, self.attack_dataset, training_kwargs=base_all_kwargs,
+            output_dir, self.profiling_dataset, self.attack_dataset, training_kwargs=base_all_kwargs,
             classifiers_pretrain_trial_count=self.trial_config['all_classifiers_pretrain_htune_trial_count'],
             trial_count=self.trial_config['all_htune_trial_count'],
             max_classifiers_pretrain_steps=self.trial_config['all_classifiers_pretrain_steps'],
@@ -250,6 +249,22 @@ class Trial:
             starting_seed=base_seed,
             reference_leakage_assessment=self.load_oracle_assessment()
         )
+
+    def run_all_trials(self):
+        base_seed = 0
+        base_all_kwargs = copy(self.trial_config['default_kwargs'])
+        base_all_kwargs.update(self.trial_config['classifiers_pretrain_kwargs'])
+        base_all_kwargs.update(self.trial_config['all_kwargs'])
+        self.run_all_hsweep(self.all_hparam_sweep_dir, 0, base_all_kwargs)
+        cooperative_all_kwargs = copy(base_all_kwargs)
+        cooperative_all_kwargs['adversarial_mode'] = False
+        self.run_all_hsweep(self.all_cooperative_ablation_dir, 0, cooperative_all_kwargs)
+        unconditional_all_kwargs = copy(base_all_kwargs)
+        unconditional_all_kwargs['omit_classifier_conditioning'] = True
+        self.run_all_hsweep(self.all_unconditional_ablation_dir, 0, unconditional_all_kwargs)
+        interpretive_all_kwargs = copy(base_all_kwargs)
+        interpretive_all_kwargs['classifier_to_interpret'] = supervised_experiment_methods.load_trained_supervised_model(os.path.join(self.supervised_attribution_dir, 'classification', 'seed=55'))
+        self.run_all_hsweep(self.all_interpretive_ablation_dir, 0, interpretive_all_kwargs)
         for x in tqdm(range(self.trial_config['all_htune_trial_count'])):
             model_dir = os.path.join(self.all_hparam_sweep_dir, f'trial_{x}')
             leakage_assessment = np.load(os.path.join(model_dir, 'leakage_assessment.npy'))
@@ -379,6 +394,7 @@ class Trial:
     
     def evaluate_supervised_model(self, output_dir, seed_idx=0, cost: Literal['reduced', 'full'] = 'reduced', print_res=False, skip_metrics=False):
         compute_lrp = False
+        standardize_dataset = True
         if 'benadjila_cnn_best' in output_dir:
             if self.dataset_name == 'ascadv1-fixed':
                 model_dir = os.path.join(RESOURCE_DIR, 'ascadv1-fixed', 'ASCAD_data', 'ASCAD_trained_models', 'cnn_best_ascad_desync0_epochs75_classes256_batchsize200.h5')
@@ -386,11 +402,13 @@ class Trial:
                 model_dir = os.path.join(RESOURCE_DIR, 'ascadv1-variable', 'cnn2-ascad-desync0.h5')
             else:
                 assert False
+            standardize_dataset = False
         elif 'benadjila_mlp_best' in output_dir:
             if self.dataset_name == 'ascadv1-fixed':
                 model_dir = os.path.join(RESOURCE_DIR, 'ascadv1-fixed', 'ASCAD_data', 'ASCAD_trained_models', 'mlp_best_ascad_desync0_node200_layernb6_epochs200_classes256_batchsize100.h5')
             else:
                 assert False
+            standardize_dataset = False
         elif 'zaid' in output_dir:
             assert 'seed' in output_dir
             seed = int(output_dir.split(os.sep)[-1].split('=')[1])

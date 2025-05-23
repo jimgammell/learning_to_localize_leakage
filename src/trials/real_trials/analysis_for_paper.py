@@ -29,17 +29,23 @@ METHOD_NAMES = {
     'sosd': 'SOSD',
     'cpa': 'CPA',
     #'prof_oracle': 'Oracle (train set)',
-    'gradvis': 'GradVis~\\cite{masure2019}',
-    'saliency': 'Saliency~\\cite{simonyan2014, hettwer2020}',
-    'inputxgrad': r'Input $*$ Grad~\cite{shrikumar2017, wouters2020}',
-    'lrp': 'LRP~\\cite{bach2015, hettwer2020}',
-    'occpoi': 'OccPOI~\\cite{yap2025}',
-    '1-occlusion': '1-Occlusion~\\cite{zeiler2014, hettwer2020}',
-    'm-occlusion': r'$m^*$-Occlusion~\cite{schamberger2023}',
-    '1-second-order-occlusion': r'$1$-Occlusion$^2$~\cite{schamberger2023}',
-    'm-second-order-occlusion': r'$m^*$-Occlusion$^2$~\cite{schamberger2023}',
-    'all': 'ALL (ours)'
+    'gradvis': 'GradVis',
+    'saliency': 'Saliency',
+    'inputxgrad': r'Input $*$ Grad',
+    'lrp': 'LRP',
+    'occpoi': 'OccPOI',
+    '1-occlusion': '1-Occlusion',
+    'm-occlusion': r'$m^*$-Occlusion',
+    '1-second-order-occlusion': r'$1$-Occlusion$^2$',
+    'm-second-order-occlusion': r'$m^*$-Occlusion$^2$'
 }
+for method_name in ['1-occlusion', 'm-occlusion', 'gradvis', 'inputxgrad', 'saliency']:
+    METHOD_NAMES[f'wouters-{method_name}'] = 'WoutersNet ' + METHOD_NAMES[method_name]
+for method_name in ['1-occlusion', 'm-occlusion', 'gradvis', 'inputxgrad', 'saliency']:
+    METHOD_NAMES[f'zaid-{method_name}'] = 'ZaidNet ' + METHOD_NAMES[method_name]
+    #METHOD_NAMES[f'benadjila_cnn_best-{method_name}'] = r'Benadjila $\mathrm{CNN}_{\mathrm{best}}$ ' + METHOD_NAMES[method_name]
+    #METHOD_NAMES[f'benadjila_mlp_best-{method_name}'] = r'Benadjila $\mathrm{MLP}_{\mathrm{best}}$ ' + METHOD_NAMES[method_name]
+METHOD_NAMES['all'] = 'ALL (ours)'
 
 OPTIMAL_WINDOW_SIZES = {
     'ascadv1_fixed': 3,
@@ -658,13 +664,37 @@ def get_eval_metrics(base_dir):
             oracle_agreement[dataset_name]['random'].append(random_metrics['oracle_agreement'])
             fwd_dnno_auc[dataset_name]['random'].append(random_metrics['fwd_dnno'])
             rev_dnno_auc[dataset_name]['random'].append(random_metrics['rev_dnno'])
-            ta_mttd[dataset_name]['random'].append(random_metrics['ta_ttd'])
+            ta_mttd[dataset_name]['random'].append(random_metrics['ta_ttd'] + (1 if dataset_name in ['otiait', 'otp'] else 0))
         for method_name in ['snr', 'sosd', 'cpa']:
             eval_metrics = np.load(os.path.join(param_dir, f'{method_name}_evaluation_metrics.npz'), allow_pickle=True)
             oracle_agreement[dataset_name][method_name].append(eval_metrics['oracle_agreement'])
             fwd_dnno_auc[dataset_name][method_name].append(eval_metrics['fwd_dnno'])
             rev_dnno_auc[dataset_name][method_name].append(eval_metrics['rev_dnno'])
-            ta_mttd[dataset_name][method_name].append(eval_metrics['ta_ttd'])
+            ta_mttd[dataset_name][method_name].append(eval_metrics['ta_ttd'] + (1 if dataset_name in ['otiait', 'otp'] else 0))
+        pretrained_method_dir = os.path.join(base_dir, dataset_name, 'pretrained_model_experiments')
+        pretrained_method_names = ['1-occlusion', f'{OPTIMAL_WINDOW_SIZES[dataset_name]}-occlusion', 'gradvis', 'inputxgrad', 'saliency']
+        if os.path.exists(pretrained_method_dir):
+            for subdir in os.listdir(pretrained_method_dir):
+                if any(os.path.exists(os.path.join(pretrained_method_dir, subdir, f'seed={x}')) for x in range(5)):
+                    paths = [os.path.join(pretrained_method_dir, subdir, f'seed={x}') for x in range(5)]
+                else:
+                    paths = [] #[os.path.join(pretrained_method_dir, subdir)] # FIXME: skipping the Benadjila models for now because there seem to be some bugs I need to work out
+                for _path in paths:
+                    for method_name in pretrained_method_names:
+                        path = os.path.join(_path, f'{method_name}_evaluation_metrics.npz')
+                        if not os.path.exists(path):
+                            print(f'DNE: {path}')
+                            continue
+                        eval_metrics = np.load(path, allow_pickle=True)
+                        if method_name == f'{OPTIMAL_WINDOW_SIZES[dataset_name]}-occlusion':
+                            method_name = 'm-occlusion'
+                        if method_name == f'{OPTIMAL_WINDOW_SIZES[dataset_name]}-second-order-occlusion':
+                            method_name = 'm-second-order-occlusion'
+                        method_name = subdir + '-' + method_name
+                        oracle_agreement[dataset_name][method_name].append(eval_metrics['oracle_agreement'])
+                        fwd_dnno_auc[dataset_name][method_name].append(eval_metrics['fwd_dnno'])
+                        rev_dnno_auc[dataset_name][method_name].append(eval_metrics['rev_dnno'])
+                        ta_mttd[dataset_name][method_name].append(eval_metrics['ta_ttd'] + (1 if dataset_name in ['otiait', 'otp'] else 0))
         for seed in range(55, 60):
             attr_dir = os.path.join(base_dir, dataset_name, 'supervised_models_for_attribution', 'classification', f'seed={seed}')
             for method_name in [
@@ -683,7 +713,7 @@ def get_eval_metrics(base_dir):
                 oracle_agreement[dataset_name][method_name].append(eval_metrics['oracle_agreement'])
                 fwd_dnno_auc[dataset_name][method_name].append(eval_metrics['fwd_dnno'])
                 rev_dnno_auc[dataset_name][method_name].append(eval_metrics['rev_dnno'])
-                ta_mttd[dataset_name][method_name].append(eval_metrics['ta_ttd'])
+                ta_mttd[dataset_name][method_name].append(eval_metrics['ta_ttd'] + (1 if dataset_name in ['otiait', 'otp'] else 0))
         for seed in range(50, 55):
             path = os.path.join(base_dir, dataset_name, 'all_runs', 'fair', f'seed={seed}', 'evaluation_metrics.npz')
             if not os.path.exists(path):
@@ -693,7 +723,7 @@ def get_eval_metrics(base_dir):
             oracle_agreement[dataset_name]['all'].append(eval_metrics['oracle_agreement'])
             fwd_dnno_auc[dataset_name]['all'].append(eval_metrics['fwd_dnno'])
             rev_dnno_auc[dataset_name]['all'].append(eval_metrics['rev_dnno'])
-            ta_mttd[dataset_name]['all'].append(eval_metrics['ta_ttd'])
+            ta_mttd[dataset_name]['all'].append(eval_metrics['ta_ttd'] + (1 if dataset_name in ['otiait', 'otp'] else 0))
     oracle_agreement = {k1: {k2: np.stack(v) for k2, v in oracle_agreement[k1].items()} for k1 in oracle_agreement}
     fwd_dnno_auc = {k1: {k2: np.stack(v) for k2, v in fwd_dnno_auc[k1].items()} for k1 in fwd_dnno_auc}
     rev_dnno_auc = {k1: {k2: np.stack(v) for k2, v in rev_dnno_auc[k1].items()} for k1 in rev_dnno_auc}
@@ -754,7 +784,7 @@ def create_performance_comparison_table(base_dir, dest, data, bigger_is_better: 
         exp = int(floor(log10(abs(x))))
         return round(x, -exp)
     def fmt(mean, std, should_highlight=False, should_underline=False):
-        if mean is None or std is None:
+        if mean is None or std is None or np.isnan(mean) or np.isnan(std):
             return r'n/a'
         error = to_one_sigfig(std)
         if error > 0:
@@ -768,10 +798,10 @@ def create_performance_comparison_table(base_dir, dest, data, bigger_is_better: 
             fmt_str = f'{{:.{decimals}f}}'
             rv = fmt_str.format(val)
         rv = '$' + rv + '$'
-        if should_highlight:
-            rv = f'\\best{{{rv}}}'
         if should_underline:
             rv = f'\\underline{{{rv}}}'
+        if should_highlight:
+            rv = f'\\best{{{rv}}}'
         return rv
     def build_full_tabular(latex_body, n_rows):
         header = (
@@ -792,28 +822,40 @@ def create_performance_comparison_table(base_dir, dest, data, bigger_is_better: 
         end   = next(i for i, ln in enumerate(lines[::-1]) if ln.strip() == r"\bottomrule")
         body_lines = lines[start: len(lines) - end - 1]
         for idx, body_line in enumerate(body_lines):
-            if ('Random' in body_line) or (r'$m^*$-Occlusion$^2$' in body_line):
+            if ('Random' in body_line) or (r'$m^*$-Occlusion$^2$' in body_line) or ('CPA' in body_line) or ('WoutersNet Saliency' in body_line) or ('ZaidNet Saliency' in body_line):
                 body_lines[idx] += '\\midrule'
         body_lines = [f"{ln.lstrip()}" for ln in body_lines]
         footer = "\\bottomrule\n\\end{tabular}\n"
         return header + "\n".join(body_lines) + footer
     table = pd.DataFrame(index=list(METHOD_NAMES.values()), columns=list(DATASET_NAMES.values()))
+    for method_name in METHOD_NAMES:
+        for dataset_name in DATASET_NAMES:
+            table.at[METHOD_NAMES[method_name], DATASET_NAMES[dataset_name]] = r'n/a'
     for dataset_name, subdata in data.items():
         if bigger_is_better:
-            best_method_idx = np.argmax([x.mean() if (x is not None and name != 'prof_oracle') else -np.inf for name, x in subdata.items()])
+            vals = [x if (x is not None and name != 'prof_oracle') else -np.inf for name, x in subdata.items()]
+            best_data = vals[np.argmax([x.mean() if (x is not None and name != 'prof_oracle') else -np.inf for name, x in subdata.items()])]
+            vals = [x if (x is not None and name not in ['prof_oracle', 'snr', 'sosd', 'cpa', 'random']) else -np.inf for name, x in subdata.items()]
+            best_dl_data = vals[np.argmax([x.mean() if (x is not None and name not in ['prof_oracle', 'snr', 'sosd', 'cpa', 'random']) else -np.inf for name, x in subdata.items()])]
         else:
-            best_method_idx = np.argmin([x.mean() if (x is not None and name != 'prof_oracle') else -np.inf for name, x in subdata.items()])
-        best_name = list(subdata.keys())[best_method_idx]
-        best_data = subdata[best_name]
+            vals = [x if (x is not None and name != 'prof_oracle') else -np.inf for name, x in subdata.items()]
+            best_data = vals[np.argmin([x.mean() if (x is not None and name != 'prof_oracle') else np.inf for name, x in subdata.items()])]
+            vals = [x if (x is not None and name not in ['prof_oracle', 'snr', 'sosd', 'cpa', 'random']) else -np.inf for name, x in subdata.items()]
+            best_dl_data = vals[np.argmin([x.mean() if (x is not None and name not in ['prof_oracle', 'snr', 'sosd', 'cpa', 'random']) else np.inf for name, x in subdata.items()])]
+        methods_to_box = [
+            method_name for method_name, method_data in subdata.items()
+            if (method_data is not None)
+            and (method_name not in ['prof_oracle'])
+            and ((method_data.mean() >= best_data.mean()-best_data.std()) if bigger_is_better else (method_data.mean() <= best_data.mean()+best_data.std()))
+        ]
         methods_to_underline = [
             method_name for method_name, method_data in subdata.items()
             if (method_data is not None)
-            and (method_name != best_name)
-            and ((method_data.mean()+method_data.std() >= best_data.mean()-best_data.std()) if bigger_is_better else (method_data.mean()-method_data.std() <= best_data.mean()+best_data.std()))
-            and method_name != 'prof_oracle'
+            and (method_name not in ['snr', 'sosd', 'cpa', 'random', 'prof_oracle'])
+            and ((method_data.mean() >= best_dl_data.mean()-best_dl_data.std()) if bigger_is_better else (method_data.mean() <= best_dl_data.mean()+best_dl_data.std()))
         ]
         for method_name, method_data in subdata.items():
-            should_highlight = method_name == best_name
+            should_highlight = method_name in methods_to_box
             should_underline = method_name in methods_to_underline
             table.at[METHOD_NAMES[method_name], DATASET_NAMES[dataset_name]] = (
                 fmt(method_data.mean(), method_data.std(), should_highlight=should_highlight, should_underline=should_underline) if method_data is not None
@@ -919,9 +961,6 @@ def plot_hsweep_histograms(base_dir, dest):
                 continue
             assessment = np.load(assessment_path)
             agreement = get_oracle_agreement(assessment, oracle_assessment)
-            pooled_assessment = lpf_assessment(assessment, OPTIMAL_WINDOW_SIZES[dataset_name])
-            pooled_agreement = get_oracle_agreement(pooled_assessment, oracle_assessment)
-            results[dataset_name]['all-pooled'].append(pooled_agreement)
             results[dataset_name]['all'].append(agreement)
         supervised_hsweep_dir = os.path.join(base_dir, dataset_name, 'supervised_hparam_sweep')
         for subdir in os.listdir(supervised_hsweep_dir):
@@ -937,7 +976,6 @@ def plot_hsweep_histograms(base_dir, dest):
                 results[dataset_name][method_name].append(agreement)
     for idx, dataset_name in enumerate(DATASET_NAMES.keys()):
         to_label = {
-            'all-pooled': r'\textbf{ALL}+AvgPool(' + f'{OPTIMAL_WINDOW_SIZES[dataset_name]})',
             'all': r'\textbf{ALL (ours)}',
             f'{OPTIMAL_WINDOW_SIZES[dataset_name]}-occlusion': f'{OPTIMAL_WINDOW_SIZES[dataset_name]}-Occlusion',
             '1-occlusion': '1-Occlusion',
@@ -952,7 +990,7 @@ def plot_hsweep_histograms(base_dir, dest):
             res = results[dataset_name][method_name]
             ax.plot(len(res)*[idx], res, marker='.', color='blue', linestyle='none', alpha=0.25, **PLOT_KWARGS)
         ax.set_xticks(np.arange(len(results[dataset_name])))
-        ax.set_xticklabels([to_label[x] for x in results[dataset_name]], rotation=45)
+        ax.set_xticklabels([to_label[x] for x in results[dataset_name]], rotation=45, ha='right', rotation_mode='anchor')
         ax.set_ylabel(r'Oracle agreement $\uparrow$', fontsize=fontsize)
         ax.set_title(f'Dataset: {DATASET_NAMES[dataset_name]}', fontsize=fontsize+2)
     fig.tight_layout()
@@ -1016,25 +1054,43 @@ def plot_ablation_histograms(base_dir, dest):
                     continue
                 assessment = np.load(assessment_path, allow_pickle=True)['attribution']
                 agreement = get_oracle_agreement(assessment, oracle_assessment)
+                results[dataset_name][f'{method_name}-dropout'].append(agreement)
+        supervised_hsweep_dir = os.path.join(base_dir, dataset_name, 'supervised_hparam_sweep')
+        for subdir in os.listdir(supervised_hsweep_dir):
+            if not subdir.split('_')[0] == 'trial':
+                continue
+            for method_name in [ f'{OPTIMAL_WINDOW_SIZES[dataset_name]}-occlusion', '1-occlusion']:
+                assessment_path = os.path.join(supervised_hsweep_dir, subdir, f'{method_name}.npz')
+                if not os.path.exists(assessment_path):
+                    print(f'Skipping {assessment_path}')
+                    continue
+                assessment = np.load(assessment_path, allow_pickle=True)['attribution']
+                agreement = get_oracle_agreement(assessment, oracle_assessment)
                 results[dataset_name][method_name].append(agreement)
     for idx, dataset_name in enumerate(DATASET_NAMES.keys()):
+        ordered_methods = [
+            'all-pooled', 'all', 'cooperative', 'unconditional', f'{OPTIMAL_WINDOW_SIZES[dataset_name]}-occlusion-dropout',
+            f'{OPTIMAL_WINDOW_SIZES[dataset_name]}-occlusion', '1-occlusion-dropout', '1-occlusion'
+        ]
         to_label = {
-            'all-pooled': r'\textbf{ALL}+AvgPool(' + f'{OPTIMAL_WINDOW_SIZES[dataset_name]})',
+            'all-pooled': r'ALL + AvgPool(' + f'{OPTIMAL_WINDOW_SIZES[dataset_name]})',
             'all': r'\textbf{ALL (ours)}',
             'cooperative': 'ALL (cooperative)',
             'unconditional': 'ALL (unconditional)',
+            f'{OPTIMAL_WINDOW_SIZES[dataset_name]}-occlusion-dropout': f'{OPTIMAL_WINDOW_SIZES[dataset_name]}-Occl + heavy dropout',
             f'{OPTIMAL_WINDOW_SIZES[dataset_name]}-occlusion': f'{OPTIMAL_WINDOW_SIZES[dataset_name]}-Occlusion',
+            '1-occlusion-dropout': '1-Occl + heavy dropout',
             '1-occlusion': '1-Occlusion'
         }
         ax = axes[idx]
-        ax.boxplot(results[dataset_name].values(), positions=np.arange(len(results[dataset_name])))
-        for idx, method_name in enumerate(results[dataset_name].keys()):
+        ax.boxplot([results[dataset_name][method_name] for method_name in ordered_methods], positions=np.arange(len(results[dataset_name])))
+        for idx, method_name in enumerate(ordered_methods):
             if not method_name in results[dataset_name] or len(results[dataset_name][method_name]) == 0:
                 continue
             res = results[dataset_name][method_name]
             ax.plot(len(res)*[idx], res, marker='.', color='blue', linestyle='none', alpha=0.25, **PLOT_KWARGS)
         ax.set_xticks(np.arange(len(results[dataset_name])))
-        ax.set_xticklabels([to_label[x] for x in results[dataset_name]], rotation=45)
+        ax.set_xticklabels([to_label[x] for x in ordered_methods], rotation=45, ha='right', rotation_mode='anchor')
         ax.set_ylabel(r'Oracle agreement $\uparrow$', fontsize=fontsize)
         ax.set_title(f'Dataset: {DATASET_NAMES[dataset_name]}', fontsize=fontsize+2)
     fig.tight_layout()
@@ -1143,7 +1199,7 @@ def plot_model_selection_criteria(base_dir, dest):
     colors = ['red', 'green', 'yellow', 'grey', 'orange', 'brown']
     for axes_r, dataset_name in zip(axes, DATASET_NAMES.keys()):
         results = resultss[dataset_name]
-        for method_name, color in zip(results.keys(), colors):
+        r"""for method_name, color in zip(results.keys(), colors):
             if method_name == 'all':
                 continue
             results[method_name] = {k: np.stack(v) for k, v in results[method_name].items()}
@@ -1155,7 +1211,7 @@ def plot_model_selection_criteria(base_dir, dest):
             axes_r[0].plot(results[method_name]['oracle_agreement'], results[method_name]['fwd_dnno_criterion'], color=color, marker='.', linestyle='none', alpha=0.5, label=method_name, **PLOT_KWARGS)
             axes_r[1].plot(results[method_name]['oracle_agreement'], results[method_name]['rev_dnno_criterion'], color=color, marker='.', linestyle='none', alpha=0.5, label=method_name, **PLOT_KWARGS)
             axes_r[2].plot(results[method_name]['oracle_agreement'], results[method_name]['mean_agreement'], color=color, marker='.', linestyle='none', alpha=0.5, label=method_name, **PLOT_KWARGS)
-            axes_r[3].plot(results[method_name]['oracle_agreement'], composite_criterion, color=color, marker='.', linestyle='none', alpha=0.5, label=method_name, **PLOT_KWARGS)
+            axes_r[3].plot(results[method_name]['oracle_agreement'], composite_criterion, color=color, marker='.', linestyle='none', alpha=0.5, label=method_name, **PLOT_KWARGS)"""
         results['all'] = {k: np.stack(v) for k, v in results['all'].items()}
         composite_criterion = (
             results['all']['fwd_dnno_criterion'].argsort().argsort()
@@ -1178,10 +1234,6 @@ def plot_model_selection_criteria(base_dir, dest):
         axes_r[1].set_title(f'Dataset: {DATASET_NAMES[dataset_name]}')
         axes_r[2].set_title(f'Dataset: {DATASET_NAMES[dataset_name]}')
         axes_r[3].set_title(f'Dataset: {DATASET_NAMES[dataset_name]}')
-        axes_r[0].legend(fontsize=8)
-        axes_r[1].legend(fontsize=8)
-        axes_r[2].legend(fontsize=8)
-        axes_r[3].legend(fontsize=8)
     fig.tight_layout()
     fig.savefig(dest)
     plt.close(fig)
@@ -1190,15 +1242,15 @@ def do_analysis_for_paper():
     fig_dir = os.path.join(OUTPUT_DIR, 'plots_for_paper')
     os.makedirs(fig_dir, exist_ok=True)
     oracle_agreement_vals, fwd_dnno_auc_vals, rev_dnno_auc_vals, ta_mttd_vals = get_eval_metrics(OUTPUT_DIR)
-    create_performance_comparison_table(OUTPUT_DIR, os.path.join(fig_dir, 'oracle_agreement_table'), oracle_agreement_vals)
-    create_performance_comparison_table(OUTPUT_DIR, os.path.join(fig_dir, 'fwd_dnno_auc_table'), fwd_dnno_auc_vals)
+    create_performance_comparison_table(OUTPUT_DIR, os.path.join(fig_dir, 'full_oracle_agreement_table'), oracle_agreement_vals)
+    create_performance_comparison_table(OUTPUT_DIR, os.path.join(fig_dir, 'fwd_dnno_auc_table'), fwd_dnno_auc_vals, bigger_is_better=False)
     create_performance_comparison_table(OUTPUT_DIR, os.path.join(fig_dir, 'rev_dnno_auc_table'), rev_dnno_auc_vals)
     create_performance_comparison_table(OUTPUT_DIR, os.path.join(fig_dir, 'ta_mttd_table'), ta_mttd_vals, bigger_is_better=False)
+    plot_hsweep_histograms(OUTPUT_DIR, os.path.join(fig_dir, 'oracle_agreement_boxplots.pdf'))
     plot_ablation_histograms(OUTPUT_DIR, os.path.join(fig_dir, 'ablation_histograms.pdf'))
+    plot_model_selection_criteria(OUTPUT_DIR, os.path.join(fig_dir, 'model_selection_criterion.pdf'))
     assert False
     plot_attack_curves(OUTPUT_DIR, os.path.join(fig_dir, 'attack_curves.pdf'))
-    plot_model_selection_criteria(OUTPUT_DIR, os.path.join(fig_dir, 'model_selection_criterion.pdf'))
-    plot_hsweep_histograms(OUTPUT_DIR, os.path.join(fig_dir, 'oracle_agreement_boxplots.pdf'))
     plot_all_training_curves(OUTPUT_DIR, os.path.join(fig_dir, 'all_training_curves.pdf'))
     gamma_bar_sweep, theta_lr_scalar_sweep, etat_lr_scalar_sweep = load_all_sensitivity_analysis_data(OUTPUT_DIR)
     plot_all_sensitivity_analysis(gamma_bar_sweep, theta_lr_scalar_sweep, etat_lr_scalar_sweep, os.path.join(fig_dir, 'all_sensitivity_analysis.pdf'))

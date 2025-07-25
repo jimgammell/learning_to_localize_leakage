@@ -82,7 +82,7 @@ class DataModule(L.LightningDataModule):
         set_transforms(self.val_dataset, self.data_transform, self.target_transform)
         set_transforms(self.attack_dataset, self.data_transform, self.target_transform)
         dataloader_kwargs = {
-            'num_workers': min(self.num_workers, 4),
+            'num_workers': 40, #min(self.num_workers, 4),
             'pin_memory': True,
             'persistent_workers': self.num_workers > 0,
             'prefetch_factor': 4 if self.num_workers > 0 else None

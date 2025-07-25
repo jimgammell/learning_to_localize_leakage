@@ -1249,6 +1249,7 @@ def do_analysis_for_paper():
     plot_hsweep_histograms(OUTPUT_DIR, os.path.join(fig_dir, 'oracle_agreement_boxplots.pdf'))
     plot_ablation_histograms(OUTPUT_DIR, os.path.join(fig_dir, 'ablation_histograms.pdf'))
     plot_model_selection_criteria(OUTPUT_DIR, os.path.join(fig_dir, 'model_selection_criterion.pdf'))
+    print_runtimes(OUTPUT_DIR)
     assert False
     plot_attack_curves(OUTPUT_DIR, os.path.join(fig_dir, 'attack_curves.pdf'))
     plot_all_training_curves(OUTPUT_DIR, os.path.join(fig_dir, 'all_training_curves.pdf'))

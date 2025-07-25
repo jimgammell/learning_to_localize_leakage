@@ -262,9 +262,9 @@ class Trial:
         unconditional_all_kwargs = copy(base_all_kwargs)
         unconditional_all_kwargs['omit_classifier_conditioning'] = True
         self.run_all_hsweep(self.all_unconditional_ablation_dir, 0, unconditional_all_kwargs)
-        interpretive_all_kwargs = copy(base_all_kwargs)
-        interpretive_all_kwargs['classifier_to_interpret'] = supervised_experiment_methods.load_trained_supervised_model(os.path.join(self.supervised_attribution_dir, 'classification', 'seed=55'))
-        self.run_all_hsweep(self.all_interpretive_ablation_dir, 0, interpretive_all_kwargs)
+        #interpretive_all_kwargs = copy(base_all_kwargs)
+        #interpretive_all_kwargs['classifier_to_interpret'] = supervised_experiment_methods.load_trained_supervised_model(os.path.join(self.supervised_attribution_dir, 'classification', 'seed=55'))
+        #self.run_all_hsweep(self.all_interpretive_ablation_dir, 0, interpretive_all_kwargs)
         for x in tqdm(range(self.trial_config['all_htune_trial_count'])):
             model_dir = os.path.join(self.all_hparam_sweep_dir, f'trial_{x}')
             leakage_assessment = np.load(os.path.join(model_dir, 'leakage_assessment.npy'))

@@ -177,16 +177,16 @@ class Module(lightning.LightningModule):
     
     def training_step(self, batch: Tuple[torch.Tensor, torch.Tensor]):
         rv = self.step(batch, train_theta=self.hparams.train_theta, train_etat=self.hparams.train_etat)
-        for key, val in rv.items():
-            self.log(f'train_{key}', val, on_step=True, on_epoch=True)
         if self.hparams.reference_leakage_assessment is not None:
             log_gamma = self.selection_mechanism.get_log_gamma()
             correlation = spearmanr(
                 self.hparams.reference_leakage_assessment.reshape(-1), log_gamma.reshape(-1).detach().cpu().numpy()
             ).statistic
-            self.log('oracle_snr_corr', correlation, on_step=True, on_epoch=True)
+            self.log('oracle_snr_corr', correlation, on_step=True, on_epoch=True, prog_bar=True)
+        for key, val in rv.items():
+            self.log(f'train_{key}', val, on_step=True, on_epoch=True, prog_bar=True if key in ('theta_loss', 'theta_rank') else False)
     
     def validation_step(self, batch: Tuple[torch.Tensor, torch.Tensor]):
         rv = self.step(batch, train_theta=False, train_etat=False)
         for key, val in rv.items():
-            self.log(f'val_{key}', val, on_step=False, on_epoch=True)
+            self.log(f'val_{key}', val, on_step=False, on_epoch=True, prog_bar=True if key in ('theta_loss', 'theta_rank') else False)

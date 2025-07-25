@@ -59,7 +59,7 @@ class FirstOrderStatistics:
             self.per_target_counts = {key: np.zeros(self.dataset.class_count, dtype=int) for *_, key in self.get_key_iterator()}
             self.mean_hamming_weights = {key: 0. for *_, key in self.get_key_iterator()}
             self.mean_trace = np.zeros(self.timesteps_per_trace, dtype=np.float64)
-            for count, (trace, _, metadata) in enumerate(self.get_chunk_iterator()):
+            for count, (trace, _, metadata) in enumerate(tqdm(self.get_chunk_iterator())):
                 for target, byte, key in self.get_key_iterator():
                     target_val = metadata[target]
                     if (byte is not None) and (target_val.size > 1):
@@ -78,7 +78,7 @@ class FirstOrderStatistics:
             self.trace_variance = np.zeros(self.timesteps_per_trace, dtype=np.float64)
             self.unnormalized_correlation = {key: np.zeros(self.timesteps_per_trace, dtype=np.float64) for *_, key in self.get_key_iterator()}
             self.hamming_weight_variance = {key: 0. for *_, key in self.get_key_iterator()}
-            for count, (trace, _, metadata) in enumerate(self.get_chunk_iterator()):
+            for count, (trace, _, metadata) in enumerate(tqdm(self.get_chunk_iterator())):
                 for target, byte, key in self.get_key_iterator():
                     target_val = metadata[target]
                     if (byte is not None) and (target_val.size > 1):

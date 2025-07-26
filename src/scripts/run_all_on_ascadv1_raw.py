@@ -45,7 +45,7 @@ SUBDIR_PREFIX = '' if clargs.subdir_prefix is None else clargs.subdir_prefix
 
 print('Loading dataset into RAM...')
 
-ascad_path = r'/home/jgammell/Desktop/learning_to_localize_leakage/resources/ascadv1-fixed/ASCAD_data/ASCAD_databases/ATMega8515_raw_traces.h5'
+ascad_path = os.path.join(RESOURCE_DIR, r'ascadv1-fixed/ASCAD_data/ASCAD_databases/ATMega8515_raw_traces.h5')
 with h5py.File(ascad_path, 'r') as database:
     TRACES = np.array(database['traces'], dtype=np.float32)
     KEYS = np.array(database['metadata']['key'], dtype=np.uint8)

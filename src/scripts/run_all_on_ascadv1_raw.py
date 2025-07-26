@@ -6,6 +6,7 @@ import os
 from random import randint
 from typing import Optional, Sequence, Callable, Union
 import json
+import pickle
 
 from matplotlib import pyplot as plt
 import numpy as np
@@ -128,21 +129,25 @@ datamodule = DataModule(profiling_dataset, attack_dataset, val_prop=0.1, data_me
 #endregion
 #region  Computing ground truth signal to noise ratio
 
-# skipping for now because slow on local machine
-r"""stats_calculator = FirstOrderStatistics(
-    snr_attack_dataset, chunk_size=1, bytes=2,
-    targets=['subbytes', 'r', 'r_in', 'r_out', 'subbytes__r', 'subbytes__r_out', 'key__plaintext__r_in']
-)
-snr_vals = stats_calculator.snr_vals
-fig, axes = plt.subplots(1, len(snr_vals), figsize=(4*len(snr_vals), 4))
-for ax, (var_name, var_snr) in zip(axes, snr_vals.items()):
-    ax.plot(var_snr, color='blue', linewidth=0.5, markersize=1, marker='.')
-    ax.set_xlabel(r'Time $t$')
-    ax.set_ylabel(r'Estimated leakiness of $X_t$')
-    ax.set_title(f'Target variable: {var_name}')
-fig.tight_layout()
-fig.savefig(os.path.join(FIG_DIR, 'gt_snr.png'))
-plt.close(fig)"""
+if not os.path.exists(os.path.join(TRIAL_DIR, 'snr.pickle')):
+    stats_calculator = FirstOrderStatistics(
+        snr_attack_dataset, chunk_size=1, bytes=2,
+        targets=['subbytes', 'r', 'r_in', 'r_out', 'subbytes__r', 'subbytes__r_out', 'key__plaintext__r_in']
+    )
+    snr_vals = stats_calculator.snr_vals
+    fig, axes = plt.subplots(1, len(snr_vals), figsize=(4*len(snr_vals), 4))
+    for ax, (var_name, var_snr) in zip(axes, snr_vals.items()):
+        ax.plot(var_snr, color='blue', linewidth=0.5, markersize=1, marker='.')
+        ax.set_xlabel(r'Time $t$')
+        ax.set_ylabel(r'Estimated leakiness of $X_t$')
+        ax.set_title(f'Target variable: {var_name}')
+    fig.tight_layout()
+    fig.savefig(os.path.join(FIG_DIR, 'gt_snr.png'))
+    plt.close(fig)
+    with open(os.path.join(TRIAL_DIR, 'snr.pickle'), 'wb') as f:
+        pickle.dump(snr_vals, f)
+with open(os.path.join(TRIAL_DIR, 'snr.pickle'), 'rb') as f:
+    snr_vals = pickle.load(f)
 
 #endregion
 #region Training a supervised model on the dataset
@@ -195,5 +200,62 @@ trainer = lightning.Trainer(
     default_root_dir=os.path.join(SUPERVISED_TRAINING_DIR, 'lightning_logs')
 )
 trainer.fit(supervised_module, datamodule=datamodule)
+
+#endregion
+#region ALL training
+
+ALL_PRETRAINING_DIR = os.path.join(TRIAL_DIR, 'all_pretrain')
+os.makedirs(ALL_PRETRAINING_DIR, exist_ok=True)
+
+trial_count = 250
+for trial_idx in range(trial_count):
+    trial_dir = os.path.join(ALL_PRETRAINING_DIR, f'trial_idx={trial_idx}')
+    if os.path.exists(trial_dir):
+        print(f'ALL pretraining trial exists for lr={lr}. Skipping.')
+        continue
+    print(f'Starting ALL pretraining trial with lr={lr}')
+    hparams = dict(
+        gamma_bar=float(np.random.uniform(0.05, 0.95)),
+        theta_lr=10**np.random.uniform(-4, -2)
+    )
+    hparams['etat_lr'] = float(hparams['theta_lr']*10**np.random.uniform(0, 3))
+    print(f'\tHparams: {hparams}')
+    all_module = ALLModule(
+        timesteps_per_trace=250000,
+        output_classes=256,
+        classifiers_name='transformer',
+        classifiers_kwargs=transformer_kwargs,
+        theta_weight_decay=1e-2,
+        lr_scheduler_name='CosineDecayLRSched',
+        lr_scheduler_kwargs=dict(warmup_prop=500./STEPS, const_prop=0., final_prop=0.1),
+        beta_1=0.9,
+        beta_2=0.99,
+        eps=1.e-8,
+        weight_decay=1.e-2,
+        grad_clip=1.0,
+        train_theta=True,
+        train_etat=False,
+        reference_leakage_assessment=gt_snr,
+        **hparams
+    )
+    trainer = lightning.Trainer(
+        max_steps=STEPS//2,
+        val_check_interval=1.,
+        check_val_every_n_epoch=1,
+        default_root_dir=trial_dir
+    )
+    profiling_dataset.desync_level = 5
+    trainer.fit(all_module, datamodule=datamodule)
+    all_module.hparams.train_etat = True
+    trainer = lightning.Trainer(
+        max_steps=STEPS,
+        val_check_interval=1.,
+        check_val_every_n_epoch=1,
+        default_root_dir=trial_dir
+    )
+    profiling_dataset.desync_level = 0
+    trainer.fit(all_module, datamodule=datamodule)
+    with open(os.path.join(trial_dir, 'hparams.json'), 'w') as f:
+        json.dump(hparams, f)
 
 #endregion

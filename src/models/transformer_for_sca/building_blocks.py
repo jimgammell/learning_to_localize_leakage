@@ -127,9 +127,11 @@ class Patchifier(nn.Module):
         super().__init__()
         self.config = config
         self.patch_embedding = nn.Conv1d(1, self.config.embedding_dim, kernel_size=self.config.patch_size, stride=self.config.patch_size, bias=self.config.bias)
+        if self.config.noise_conditional:
+            self.noise_embedding = nn.Conv1d(1, self.config.embedding_dim, kernel_size=self.config.patch_size, stride=self.config.patch_size, bias=self.config.bias)
         self.dropout = nn.Dropout(self.config.input_dropout)
     
-    def forward(self, x):
+    def forward(self, x, noise: Optional[torch.Tensor] = None):
         batch_size, _, dim = x.shape
         token_count = ceil(dim/self.config.patch_size)
         padding = self.config.patch_size*ceil(dim/self.config.patch_size) - dim
@@ -144,6 +146,11 @@ class Patchifier(nn.Module):
                 for idx, shift in enumerate(shifts):
                     x[idx] = torch.roll(x[idx], shifts=shift, dims=-1)
         x = self.patch_embedding(x).transpose(1, 2)
+        if self.config.noise_conditional:
+            assert noise is not None
+            x += self.noise_embedding(noise).transpose(1, 2)
+        else:
+            assert noise is None
         if self.training and self.config.dropword > 0:
             mask = torch.rand((batch_size, token_count), device=x.device) > self.config.dropword
             x = x * mask.reshape(batch_size, token_count, 1).to(x.dtype)

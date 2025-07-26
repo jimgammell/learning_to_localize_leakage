@@ -26,6 +26,7 @@ class TransformerConfig:
     output_classes: Any = None
     hidden_dropout: Any = None
     output_dropout: Any = None
+    noise_conditional: bool = False
 
     def __post_init__(self):
         assert isinstance(self.patch_size, int)

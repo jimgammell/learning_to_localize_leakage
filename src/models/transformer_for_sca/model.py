@@ -49,8 +49,13 @@ class Transformer(nn.Module):
         ])
         self.head = Head(self.config) #self.heads = AttentionPoolingLayer(self.config)
     
-    def forward(self, x):
-        x, mask = self.patchifier(x)
+    def forward(self, x, noise: Optional[torch.Tensor] = None):
+        if self.config.noise_conditional:
+            assert noise is not None
+            x, mask = self.patchifier(x, noise)
+        else:
+            assert noise is None
+            x, mask = self.patchifier(x)
         for transformer_layer in self.transformer_layers:
             x = transformer_layer(x, mask)
         x = self.head(x, mask) #self.heads(x)

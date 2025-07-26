@@ -39,7 +39,6 @@ class CondMutInfEstimator(nn.Module):
             logits = self.classifiers(masked_input)
         else:
             logits = self.classifiers(masked_input, condition_mask)
-        logits = logits.reshape(batch_size, self.output_classes)
         return logits
     
     def get_mutinf_estimate_from_logits(self, logits: torch.Tensor, labels: torch.Tensor) -> torch.Tensor:

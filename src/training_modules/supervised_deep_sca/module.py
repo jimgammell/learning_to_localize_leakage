@@ -4,6 +4,7 @@ import numpy as np
 import torch
 from torch import nn, optim
 import lightning as L
+from einops import rearrange
 
 import models
 import utils.lr_schedulers
@@ -89,7 +90,11 @@ class Module(L.LightningModule):
         batch_size = trace.size(0)
         rv = {}
         logits = self.classifier(trace)
-        logits = logits.reshape(-1, logits.size(-1))
+        if len(logits.shape) > 2:
+            batch_size, head_count, class_count = logits.shape
+            assert (batch_size, head_count) == label.shape
+            logits = rearrange(logits, 'b h c -> (b h) c')
+            label = rearrange(label, 'b h -> (b h)')
         loss = nn.functional.cross_entropy(logits, label)
         rv.update({'loss': loss.detach(), 'rank': get_rank(logits, label).mean()})
         if train:

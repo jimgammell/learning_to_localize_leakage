@@ -2,6 +2,7 @@ from typing import Optional, Dict, Any, Tuple, Literal
 from dataclasses import dataclass, field
 
 import numpy as np
+from einops import rearrange
 from scipy.stats import spearmanr
 import torch
 from torch import nn, optim
@@ -149,6 +150,11 @@ class Module(lightning.LightningModule):
         elif self.hparams.gradient_estimator == 'reinmax':
             mask = self.selection_mechanism.reinmax_sample(batch_size)
         logits = self.cmi_estimator.get_logits(trace, mask)
+        if len(logits.shape) > 2:
+            batch_size, head_count, class_count = logits.shape
+            assert (batch_size, head_count) == labels.shape
+            logits = rearrange(logits, 'b h c -> (b h) c')
+            labels = rearrange(labels, 'b h -> (b h)')
         theta_loss = nn.functional.cross_entropy(logits, label)
         mutinf = self.cmi_estimator.get_mutinf_estimate_from_logits(logits, label)
         etat_loss = -mutinf.mean()

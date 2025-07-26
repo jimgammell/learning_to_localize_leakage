@@ -122,7 +122,8 @@ class ASCAD(Dataset):
 profiling_dataset = ASCAD(
     ascad_path,
     phase='profile',
-    add_channel_dim=True
+    add_channel_dim=True,
+    target_byte=np.arange(16)
 )
 attack_dataset = ASCAD(
     ascad_path,
@@ -132,7 +133,8 @@ attack_dataset = ASCAD(
 snr_attack_dataset = ASCAD(
     ascad_path,
     phase='attack',
-    add_channel_dim=False
+    add_channel_dim=False,
+    target_byte=np.arange(16)
 )
 mean_trace = TRACES.mean(axis=0)
 var_trace = TRACES.var(axis=0)
@@ -160,6 +162,8 @@ if not os.path.exists(os.path.join(TRIAL_DIR, 'snr.pickle')):
         pickle.dump(snr_vals, f)
 with open(os.path.join(TRIAL_DIR, 'snr.pickle'), 'rb') as f:
     snr_vals = pickle.load(f)
+print(snr_vals)
+gt_snr = np.stack([snr_vals[('r', 2)], snr_vals[('r_in', 2)], snr_vals[('r_out', 2)], snr_vals[('subbytes__r', 2)], snr_vals[('subbytes__r_out', 2)], snr_vals[('key__plaintext__r_in', 2)]], axis=0).mean(axis=0)
 
 #endregion
 #region Training a supervised model on the dataset
@@ -182,7 +186,7 @@ transformer_kwargs = dict(
     bias=False,
     norm_eps=1.e-5,
     rescale_norm_outputs=False,
-    output_head_count=1,
+    output_head_count=16,
     output_head_classes=256,
     shared_head=True,
     head_type='simple-shared'
@@ -190,11 +194,10 @@ transformer_kwargs = dict(
 trial_idx = 0
 while True:
     lr = float(10**np.random.uniform(-5, -2))
-    final_prop = float(10**np.random.uniform(-2, 0))
     training_kwargs = dict(
         lr=lr,
         lr_scheduler_name='CosineDecayLRSched',
-        lr_scheduler_kwargs=dict(warmup_prop=0., const_prop=0., final_prop=final_prop),
+        lr_scheduler_kwargs=dict(warmup_prop=0., const_prop=0., final_prop=0.1),
         beta_1=0.9,
         beta_2=0.99,
         eps=1.e-8,
@@ -209,7 +212,6 @@ while True:
         classifier_kwargs=transformer_kwargs,
         **training_kwargs
     )
-    print(supervised_module.classifier)
     trainer = lightning.Trainer(
         max_steps=STEPS,
         val_check_interval=1.,
@@ -221,21 +223,19 @@ while True:
 
 #endregion
 #region ALL training
-r"""
+
 ALL_PRETRAINING_DIR = os.path.join(TRIAL_DIR, 'all_pretrain')
 os.makedirs(ALL_PRETRAINING_DIR, exist_ok=True)
 
 trial_count = 250
 for trial_idx in range(trial_count):
     trial_dir = os.path.join(ALL_PRETRAINING_DIR, f'trial_idx={trial_idx}')
-    if os.path.exists(trial_dir):
-        print(f'ALL pretraining trial exists for lr={lr}. Skipping.')
-        continue
-    print(f'Starting ALL pretraining trial with lr={lr}')
+    print(f'Starting ALL trial {trial_idx}.')
     hparams = dict(
         gamma_bar=float(np.random.uniform(0.05, 0.95)),
-        theta_lr=10**np.random.uniform(-4, -2)
+        theta_lr=10**np.random.uniform(-5, -2)
     )
+    print(f'\t{hparams}')
     hparams['etat_lr'] = float(hparams['theta_lr']*10**np.random.uniform(0, 3))
     print(f'\tHparams: {hparams}')
     all_module = ALLModule(
@@ -244,13 +244,9 @@ for trial_idx in range(trial_count):
         classifiers_name='transformer',
         classifiers_kwargs=transformer_kwargs,
         theta_weight_decay=1e-2,
-        lr_scheduler_name='CosineDecayLRSched',
-        lr_scheduler_kwargs=dict(warmup_prop=500./STEPS, const_prop=0., final_prop=0.1),
-        beta_1=0.9,
-        beta_2=0.99,
-        eps=1.e-8,
-        weight_decay=1.e-2,
-        grad_clip=1.0,
+        theta_lr_scheduler_name='CosineDecayLRSched',
+        theta_lr_scheduler_kwargs=dict(warmup_prop=500./STEPS, const_prop=0., final_prop=0.1),
+        theta_beta_1=0.9,
         train_theta=True,
         train_etat=False,
         reference_leakage_assessment=gt_snr,
@@ -264,7 +260,7 @@ for trial_idx in range(trial_count):
     )
     profiling_dataset.desync_level = 5
     trainer.fit(all_module, datamodule=datamodule)
-    all_module.hparams.train_etat = True
+    r"""all_module.hparams.train_etat = True
     trainer = lightning.Trainer(
         max_steps=STEPS,
         val_check_interval=1.,
@@ -274,6 +270,6 @@ for trial_idx in range(trial_count):
     profiling_dataset.desync_level = 0
     trainer.fit(all_module, datamodule=datamodule)
     with open(os.path.join(trial_dir, 'hparams.json'), 'w') as f:
-        json.dump(hparams, f)
-"""
+        json.dump(hparams, f)"""
+
 #endregion

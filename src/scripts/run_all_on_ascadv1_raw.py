@@ -7,6 +7,7 @@ from random import randint
 from typing import Optional, Sequence, Callable, Union
 import json
 import pickle
+import argparse
 
 from matplotlib import pyplot as plt
 import numpy as np
@@ -29,14 +30,30 @@ import models
 #endregion
 #region Global variable definitions
 
-TRIAL_DIR = os.path.join(OUTPUT_DIR, 'ascadv1_raw_trials')
+TRIAL_DIR = os.path.join(OUTPUT_DIR, 'ascadv1f_raw_trials')
 os.makedirs(TRIAL_DIR, exist_ok=True)
 FIG_DIR = os.path.join(TRIAL_DIR, 'figures')
 os.makedirs(FIG_DIR, exist_ok=True)
-STEPS = 20000
+STEPS = 5000
+parser = argparse.ArgumentParser()
+parser.add_argument('--subdir-prefix', default=None, action='store')
+clargs = parser.parse_args()
+SUBDIR_PREFIX = '' if clargs.subdir_prefix is None else clargs.subdir_prefix
 
 #endregion
 #region Dataset initialization
+
+print('Loading dataset into RAM...')
+
+ascad_path = r'/home/jgammell/Desktop/learning_to_localize_leakage/resources/ascadv1-fixed/ASCAD_data/ASCAD_databases/ATMega8515_raw_traces.h5'
+with h5py.File(ascad_path, 'r') as database:
+    TRACES = np.array(database['traces'], dtype=np.float32)
+    KEYS = np.array(database['metadata']['key'], dtype=np.uint8)
+    PLAINTEXTS = np.array(database['metadata']['plaintext'], dtype=np.uint8)
+    MASKS = np.array(database['metadata']['masks'], dtype=np.uint8)
+    MASKS = np.concatenate([np.zeros((len(MASKS), 2), dtype=np.uint8), MASKS], axis=1)
+
+print('\tDone.')
 
 class ASCAD(Dataset):
     def __init__(
@@ -50,25 +67,26 @@ class ASCAD(Dataset):
     ):
         super().__init__()
         self.dataset_path = dataset_path
-        self.dataset = None
+        self.dataset = {
+            'traces': TRACES,
+            'metadata': {'key': KEYS, 'plaintext': PLAINTEXTS, 'masks': MASKS}
+        }
         self.transform = transform
         self.target_transform = target_transform
         self.add_channel_dim = add_channel_dim
         self.target_byte = target_byte
         if phase == 'profile':
-            self.data_indices = np.concatenate([np.arange(0, 300000, 3, dtype=np.int64), np.arange(1, 300000, 3, dtype=np.int64)])
+            self.data_indices = np.arange(0, 50000, dtype=np.int64)
         elif phase == 'attack':
-            self.data_indices = np.arange(2, 300000, 3, dtype=np.int64)
+            self.data_indices = np.arange(50000, 60000, dtype=np.int64)
         else:
             assert False
         self.return_metadata = False
-        self.timesteps_per_trace = 250000
+        self.timesteps_per_trace = 100000
         self.class_count = 256
     
     def __getitem__(self, idx: int) -> Tuple[torch.Tensor, int]:
         idx = self.data_indices[idx]
-        if self.dataset is None: # lazy init to avoid multiprocessing-related issues
-            self.dataset = h5py.File(self.dataset_path, 'r')
         trace = np.array(self.dataset['traces'][idx, :], dtype=np.float32)
         key = self.dataset['metadata']['key'][idx, self.target_byte]
         plaintext = self.dataset['metadata']['plaintext'][idx, self.target_byte]
@@ -101,11 +119,6 @@ class ASCAD(Dataset):
     def __len__(self) -> int:
         return len(self.data_indices)
 
-    def __del__(self):
-        if self.dataset is not None:
-            self.dataset.close()
-
-ascad_path = r'/home/jgammell/Desktop/learning_to_localize_leakage/resources/ascadv1-variable/atmega8515-raw-traces.h5'
 profiling_dataset = ASCAD(
     ascad_path,
     phase='profile',
@@ -121,10 +134,9 @@ snr_attack_dataset = ASCAD(
     phase='attack',
     add_channel_dim=False
 )
-with h5py.File(ascad_path, 'r') as dataset:
-    mean_trace = np.array(dataset['traces'][:10000, :]).mean(axis=0)
-    var_trace = np.array(dataset['traces'][:10000, :]).var(axis=0)
-datamodule = DataModule(profiling_dataset, attack_dataset, val_prop=0.1, data_mean=mean_trace, data_var=var_trace, train_batch_size=512, eval_batch_size=512, num_workers=20)
+mean_trace = TRACES.mean(axis=0)
+var_trace = TRACES.var(axis=0)
+datamodule = DataModule(profiling_dataset, attack_dataset, val_prop=0.1, data_mean=mean_trace, data_var=var_trace, train_batch_size=512, eval_batch_size=512, num_workers=1)
 
 #endregion
 #region  Computing ground truth signal to noise ratio
@@ -152,7 +164,7 @@ with open(os.path.join(TRIAL_DIR, 'snr.pickle'), 'rb') as f:
 #endregion
 #region Training a supervised model on the dataset
 
-SUPERVISED_TRAINING_DIR = os.path.join(TRIAL_DIR, 'supervised')
+SUPERVISED_TRAINING_DIR = os.path.join(TRIAL_DIR, SUBDIR_PREFIX + 'supervised')
 os.makedirs(SUPERVISED_TRAINING_DIR, exist_ok=True)
 
 # previously found to work well
@@ -175,35 +187,41 @@ transformer_kwargs = dict(
     shared_head=True,
     head_type='simple-shared'
 )
-training_kwargs = dict(
-    lr=5.e-4,
-    lr_scheduler_name='CosineDecayLRSched',
-    lr_scheduler_kwargs=dict(warmup_prop=500./STEPS, const_prop=0., final_prop=0.1),
-    beta_1=0.9,
-    beta_2=0.99,
-    eps=1.e-8,
-    weight_decay=1.e-2,
-    grad_clip=1.0,
-    timesteps_per_trace=250000,
-    class_count=256,
-    compile=True
-)
-supervised_module = SupervisedModule(
-    classifier_name='transformer',
-    classifier_kwargs=transformer_kwargs,
-    **training_kwargs
-)
-trainer = lightning.Trainer(
-    max_steps=STEPS,
-    val_check_interval=1.,
-    check_val_every_n_epoch=1,
-    default_root_dir=os.path.join(SUPERVISED_TRAINING_DIR, 'lightning_logs')
-)
-trainer.fit(supervised_module, datamodule=datamodule)
+trial_idx = 0
+while True:
+    lr = float(10**np.random.uniform(-5, -2))
+    final_prop = float(10**np.random.uniform(-2, 0))
+    training_kwargs = dict(
+        lr=lr,
+        lr_scheduler_name='CosineDecayLRSched',
+        lr_scheduler_kwargs=dict(warmup_prop=0., const_prop=0., final_prop=final_prop),
+        beta_1=0.9,
+        beta_2=0.99,
+        eps=1.e-8,
+        weight_decay=1.e-2,
+        grad_clip=1.0,
+        timesteps_per_trace=100000,
+        class_count=256,
+        compile=True
+    )
+    supervised_module = SupervisedModule(
+        classifier_name='transformer',
+        classifier_kwargs=transformer_kwargs,
+        **training_kwargs
+    )
+    print(supervised_module.classifier)
+    trainer = lightning.Trainer(
+        max_steps=STEPS,
+        val_check_interval=1.,
+        check_val_every_n_epoch=1,
+        default_root_dir=os.path.join(SUPERVISED_TRAINING_DIR, f'trial_{trial_idx}', 'lightning_logs')
+    )
+    trainer.fit(supervised_module, datamodule=datamodule)
+    trial_idx += 1
 
 #endregion
 #region ALL training
-
+r"""
 ALL_PRETRAINING_DIR = os.path.join(TRIAL_DIR, 'all_pretrain')
 os.makedirs(ALL_PRETRAINING_DIR, exist_ok=True)
 
@@ -221,7 +239,7 @@ for trial_idx in range(trial_count):
     hparams['etat_lr'] = float(hparams['theta_lr']*10**np.random.uniform(0, 3))
     print(f'\tHparams: {hparams}')
     all_module = ALLModule(
-        timesteps_per_trace=250000,
+        timesteps_per_trace=100000,
         output_classes=256,
         classifiers_name='transformer',
         classifiers_kwargs=transformer_kwargs,
@@ -257,5 +275,5 @@ for trial_idx in range(trial_count):
     trainer.fit(all_module, datamodule=datamodule)
     with open(os.path.join(trial_dir, 'hparams.json'), 'w') as f:
         json.dump(hparams, f)
-
+"""
 #endregion

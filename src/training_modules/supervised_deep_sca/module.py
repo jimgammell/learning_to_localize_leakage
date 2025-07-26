@@ -105,7 +105,7 @@ class Module(L.LightningModule):
     def training_step(self, batch):
         rv = self.step(batch, train=True)
         for key, val in rv.items():
-            self.log(f'train_{key}', val, on_step=True, on_epoch=True, prog_bar=False if key in ('loss', 'rank') else False)
+            self.log(f'train_{key}', val, on_step=False, on_epoch=True, prog_bar=True if key in ('loss', 'rank') else False)
     
     def validation_step(self, batch):
         rv = self.step(batch, train=False)

@@ -1,8 +1,8 @@
 #region Imports
 
-import sys
-sys.path.insert(0, r'/home/jgammell/Desktop/learning_to_localize_leakage/src')
 import os
+import sys
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from random import randint
 from typing import Optional, Sequence, Callable, Union
 import json

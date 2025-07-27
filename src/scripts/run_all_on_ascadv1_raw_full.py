@@ -154,7 +154,7 @@ datamodule = DataModule(profiling_dataset, attack_dataset, val_prop=0.1, data_me
 
 if not os.path.exists(os.path.join(TRIAL_DIR, 'snr.pickle')):
     stats_calculator = FirstOrderStatistics(
-        snr_attack_dataset, chunk_size=1, bytes=2,
+        snr_attack_dataset, chunk_size=1, bytes=np.arange(16),
         targets=['subbytes', 'r', 'r_in', 'r_out', 'subbytes__r', 'subbytes__r_out', 'key__plaintext__r_in']
     )
     snr_vals = stats_calculator.snr_vals
@@ -236,10 +236,19 @@ while True:
 ALL_TRAINING_DIR = os.path.join(TRIAL_DIR, 'all_train')
 os.makedirs(ALL_TRAINING_DIR, exist_ok=True)
 
-datamodule.profiling_dataset.target_byte = 2
-datamodule.attack_dataset.target_byte = 2
-datamodule.train_dataset.dataset.target_byte = 2
-datamodule.val_dataset.dataset.target_byte = 2
+profiling_dataset = ASCAD(
+    ascad_path,
+    phase='profile',
+    add_channel_dim=True,
+    target_byte=2
+)
+attack_dataset = ASCAD(
+    ascad_path,
+    phase='attack',
+    add_channel_dim=True,
+    target_byte=2
+)
+datamodule = DataModule(profiling_dataset, attack_dataset, val_prop=0.1, data_mean=mean_trace, data_var=var_trace, train_batch_size=512, eval_batch_size=512, num_workers=1)
 
 trial_count = 50
 for trial_idx in range(trial_count):

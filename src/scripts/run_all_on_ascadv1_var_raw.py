@@ -31,7 +31,7 @@ import models
 #endregion
 #region Global variable definitions
 
-TRIAL_DIR = os.path.join(OUTPUT_DIR, 'ascadv1f_raw_trials')
+TRIAL_DIR = os.path.join(OUTPUT_DIR, 'ascadv1f_var_raw_trials')
 os.makedirs(TRIAL_DIR, exist_ok=True)
 FIG_DIR = os.path.join(TRIAL_DIR, 'figures')
 os.makedirs(FIG_DIR, exist_ok=True)
@@ -233,7 +233,7 @@ while True:
 #endregion
 #region ALL training
 
-ALL_TRAINING_DIR = os.path.join(TRIAL_DIR, 'all_train')
+ALL_TRAINING_DIR = os.path.join(TRIAL_DIR, 'all_pretrain_train')
 os.makedirs(ALL_TRAINING_DIR, exist_ok=True)
 
 datamodule.profiling_dataset.target_byte = 2

@@ -14,6 +14,7 @@ import numpy as np
 from scipy.special import log_softmax
 import h5py
 import torch
+from torch import nn
 from torch.utils.data import TensorDataset, random_split, Dataset
 import lightning
 
@@ -55,6 +56,14 @@ with h5py.File(ascad_path, 'r') as database:
 
 print('\tDone.')
 
+class PredictSingleByteWrapper(nn.Module):
+    def __init__(self, base_module, byte):
+        super().__init__()
+        self.base_module = base_module
+        self.byte = byte
+    def forward(self, *args):
+        return self.base_module(*args)[:, self.byte, :]
+
 class ASCAD(Dataset):
     def __init__(
             self,
@@ -68,7 +77,7 @@ class ASCAD(Dataset):
         super().__init__()
         self.dataset_path = dataset_path
         self.dataset = {
-            'traces': TRACES,
+            'traces': torch.from_numpy(TRACES).share_memory_(),
             'metadata': {'key': KEYS, 'plaintext': PLAINTEXTS, 'masks': MASKS}
         }
         self.transform = transform
@@ -87,7 +96,7 @@ class ASCAD(Dataset):
     
     def __getitem__(self, idx: int) -> Tuple[torch.Tensor, int]:
         idx = self.data_indices[idx]
-        trace = np.array(self.dataset['traces'][idx, :], dtype=np.float32)
+        trace = self.dataset['traces'][idx, :].numpy()
         key = self.dataset['metadata']['key'][idx, self.target_byte]
         plaintext = self.dataset['metadata']['plaintext'][idx, self.target_byte]
         r = self.dataset['metadata']['masks'][idx, self.target_byte]
@@ -224,12 +233,26 @@ while True:
 #endregion
 #region ALL training
 
-ALL_PRETRAINING_DIR = os.path.join(TRIAL_DIR, 'all_pretrain')
-os.makedirs(ALL_PRETRAINING_DIR, exist_ok=True)
+ALL_TRAINING_DIR = os.path.join(TRIAL_DIR, 'all_train')
+os.makedirs(ALL_TRAINING_DIR, exist_ok=True)
+
+profiling_dataset = ASCAD(
+    ascad_path,
+    phase='profile',
+    add_channel_dim=True,
+    target_byte=2
+)
+attack_dataset = ASCAD(
+    ascad_path,
+    phase='attack',
+    add_channel_dim=True,
+    target_byte=2
+)
+datamodule = DataModule(profiling_dataset, attack_dataset, val_prop=0.1, data_mean=mean_trace, data_var=var_trace, train_batch_size=512, eval_batch_size=512, num_workers=1)
 
 trial_count = 50
 for trial_idx in range(trial_count):
-    trial_dir = os.path.join(ALL_PRETRAINING_DIR, f'trial_idx={trial_idx}')
+    trial_dir = os.path.join(ALL_TRAINING_DIR, f'trial_idx={trial_idx}')
     print(f'Starting ALL trial {trial_idx}.')
     hparams = dict(
         gamma_bar=float(np.random.uniform(0.05, 0.95)),
@@ -254,6 +277,7 @@ for trial_idx in range(trial_count):
         **hparams
     )
     all_module.cmi_estimator.classifiers.load_state_dict(pretrain_all_module.cmi_estimator.classifiers.state_dict())
+    all_module.cmi_estimator.classifiers = PredictSingleByteWrapper(all_module.cmi_estimator.classifiers, 2)
     del pretrain_all_module
     all_module.compile()
     trainer = lightning.Trainer(

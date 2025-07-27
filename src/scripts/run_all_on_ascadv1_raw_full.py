@@ -236,20 +236,6 @@ while True:
 ALL_TRAINING_DIR = os.path.join(TRIAL_DIR, 'all_train')
 os.makedirs(ALL_TRAINING_DIR, exist_ok=True)
 
-profiling_dataset = ASCAD(
-    ascad_path,
-    phase='profile',
-    add_channel_dim=True,
-    target_byte=2
-)
-attack_dataset = ASCAD(
-    ascad_path,
-    phase='attack',
-    add_channel_dim=True,
-    target_byte=2
-)
-datamodule = DataModule(profiling_dataset, attack_dataset, val_prop=0.1, data_mean=mean_trace, data_var=var_trace, train_batch_size=512, eval_batch_size=512, num_workers=1)
-
 trial_count = 50
 for trial_idx in range(trial_count):
     trial_dir = os.path.join(ALL_TRAINING_DIR, f'trial_idx={trial_idx}')

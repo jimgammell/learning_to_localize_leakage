@@ -172,7 +172,7 @@ if not os.path.exists(os.path.join(OUTPUT_DIR, 'ascadv1f_raw_trials', 'snr.pickl
 with open(os.path.join(OUTPUT_DIR, 'ascadv1f_raw_trials', 'snr.pickle'), 'rb') as f:
     snr_vals = pickle.load(f)
 print(snr_vals)
-gt_snr = np.stack(snr_vals.values()).mean(axis=0)
+gt_snr = np.stack(list(snr_vals.values())).mean(axis=0)
 
 #endregion
 #region Training a supervised model on the dataset

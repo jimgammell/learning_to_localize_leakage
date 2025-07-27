@@ -31,7 +31,7 @@ import models
 #endregion
 #region Global variable definitions
 
-TRIAL_DIR = os.path.join(OUTPUT_DIR, 'ascadv1f_raw_full_trials')
+TRIAL_DIR = os.path.join(OUTPUT_DIR, 'ascadv1f_raw_trials')
 os.makedirs(TRIAL_DIR, exist_ok=True)
 FIG_DIR = os.path.join(TRIAL_DIR, 'figures')
 os.makedirs(FIG_DIR, exist_ok=True)
@@ -46,7 +46,7 @@ SUBDIR_PREFIX = '' if clargs.subdir_prefix is None else clargs.subdir_prefix
 
 print('Loading dataset into RAM...')
 
-ascad_path = os.path.join(RESOURCE_DIR, r'ascadv1-fixed/ASCAD_data/ASCAD_databases/ATMega8515_raw_traces.h5')
+ascad_path = os.path.join(RESOURCE_DIR, r'ascadv1-variable/atmega8515-raw-traces.h5')
 with h5py.File(ascad_path, 'r') as database:
     TRACES = np.array(database['traces'], dtype=np.float32)
     KEYS = np.array(database['metadata']['key'], dtype=np.uint8)
@@ -152,9 +152,9 @@ datamodule = DataModule(profiling_dataset, attack_dataset, val_prop=0.1, data_me
 #endregion
 #region  Computing ground truth signal to noise ratio
 
-if not os.path.exists(os.path.join(OUTPUT_DIR, 'ascadv1f_raw_trials', 'snr.pickle')):
+if not os.path.exists(os.path.join(TRIAL_DIR, 'snr.pickle')):
     stats_calculator = FirstOrderStatistics(
-        snr_attack_dataset, chunk_size=1, bytes=np.arange(16),
+        snr_attack_dataset, chunk_size=1, bytes=2,
         targets=['subbytes', 'r', 'r_in', 'r_out', 'subbytes__r', 'subbytes__r_out', 'key__plaintext__r_in']
     )
     snr_vals = stats_calculator.snr_vals
@@ -172,7 +172,7 @@ if not os.path.exists(os.path.join(OUTPUT_DIR, 'ascadv1f_raw_trials', 'snr.pickl
 with open(os.path.join(TRIAL_DIR, 'snr.pickle'), 'rb') as f:
     snr_vals = pickle.load(f)
 print(snr_vals)
-gt_snr = np.stack(list(snr_vals.values())).mean(axis=0)
+gt_snr = np.stack([snr_vals[('r', 2)], snr_vals[('r_in', 2)], snr_vals[('r_out', 2)], snr_vals[('subbytes__r', 2)], snr_vals[('subbytes__r_out', 2)], snr_vals[('key__plaintext__r_in', 2)]], axis=0).mean(axis=0)
 
 #endregion
 #region Training a supervised model on the dataset
@@ -236,18 +236,22 @@ while True:
 ALL_TRAINING_DIR = os.path.join(TRIAL_DIR, 'all_train')
 os.makedirs(ALL_TRAINING_DIR, exist_ok=True)
 
+datamodule.profiling_dataset.target_byte = 2
+datamodule.attack_dataset.target_byte = 2
+datamodule.train_dataset.dataset.target_byte = 2
+datamodule.val_dataset.dataset.target_byte = 2
+
 trial_count = 50
 for trial_idx in range(trial_count):
     trial_dir = os.path.join(ALL_TRAINING_DIR, f'trial_idx={trial_idx}')
     print(f'Starting ALL trial {trial_idx}.')
     hparams = dict(
-        gamma_bar=float(np.random.uniform(0.05, 0.95)),
+        gamma_bar=0.5,
         theta_lr=10**np.random.uniform(-5, -2)
     )
     print(f'\t{hparams}')
     hparams['etat_lr'] = float(hparams['theta_lr']*10**np.random.uniform(0, 3))
     print(f'\tHparams: {hparams}')
-    pretrain_all_module = ALLModule.load_from_checkpoint(os.path.join(OUTPUT_DIR, 'ascadv1f_raw_trials', 'all_pretrain', 'trial_idx=4', 'lightning_logs', 'version_0', 'checkpoints', 'epoch=113-step=10000.ckpt'))
     all_module = ALLModule(
         timesteps_per_trace=100000,
         output_classes=256,
@@ -257,13 +261,11 @@ for trial_idx in range(trial_count):
         theta_lr_scheduler_name=None,
         theta_beta_1=0.9,
         train_theta=True,
-        train_etat=True,
+        train_etat=False,
         reference_leakage_assessment=gt_snr,
         alternating_sgd=False,
         **hparams
     )
-    all_module.cmi_estimator.classifiers.load_state_dict(pretrain_all_module.cmi_estimator.classifiers.state_dict())
-    del pretrain_all_module
     all_module.compile()
     trainer = lightning.Trainer(
         max_steps=STEPS,

@@ -250,7 +250,7 @@ for trial_idx in range(trial_count):
         train_theta=True,
         train_etat=True,
         reference_leakage_assessment=gt_snr,
-        alternating_sgd=True,
+        alternating_sgd=False,
         **hparams
     )
     all_module.cmi_estimator.classifiers.load_state_dict(pretrain_all_module.cmi_estimator.classifiers.state_dict())

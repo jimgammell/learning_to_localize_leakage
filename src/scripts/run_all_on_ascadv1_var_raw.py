@@ -85,13 +85,13 @@ class ASCAD(Dataset):
         self.add_channel_dim = add_channel_dim
         self.target_byte = target_byte
         if phase == 'profile':
-            self.data_indices = np.arange(0, 50000, dtype=np.int64)
+            self.data_indices = np.concatenate([np.arange(0, 300000, 3, dtype=np.int64), np.arange(1, 300000, 3, dtype=np.int64)])
         elif phase == 'attack':
-            self.data_indices = np.arange(50000, 60000, dtype=np.int64)
+            self.data_indices = np.arange(2, 300000, 3, dtype=np.int64)
         else:
             assert False
         self.return_metadata = False
-        self.timesteps_per_trace = 100000
+        self.timesteps_per_trace = 250000
         self.class_count = 256
     
     def __getitem__(self, idx: int) -> Tuple[torch.Tensor, int]:
@@ -253,7 +253,7 @@ for trial_idx in range(trial_count):
     hparams['etat_lr'] = float(hparams['theta_lr']*10**np.random.uniform(0, 3))
     print(f'\tHparams: {hparams}')
     all_module = ALLModule(
-        timesteps_per_trace=100000,
+        timesteps_per_trace=250000,
         output_classes=256,
         classifiers_name='transformer',
         classifiers_kwargs=transformer_kwargs,

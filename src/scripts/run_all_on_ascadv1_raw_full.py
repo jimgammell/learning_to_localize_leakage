@@ -31,7 +31,7 @@ import models
 #endregion
 #region Global variable definitions
 
-TRIAL_DIR = os.path.join(OUTPUT_DIR, 'ascadv1f_raw_trials')
+TRIAL_DIR = os.path.join(OUTPUT_DIR, 'ascadv1f_raw_full_trials')
 os.makedirs(TRIAL_DIR, exist_ok=True)
 FIG_DIR = os.path.join(TRIAL_DIR, 'figures')
 os.makedirs(FIG_DIR, exist_ok=True)

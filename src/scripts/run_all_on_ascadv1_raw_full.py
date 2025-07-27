@@ -152,7 +152,7 @@ datamodule = DataModule(profiling_dataset, attack_dataset, val_prop=0.1, data_me
 #endregion
 #region  Computing ground truth signal to noise ratio
 
-if not os.path.exists(os.path.join(TRIAL_DIR, 'snr.pickle')):
+if not os.path.exists(os.path.join(OUTPUT_DIR, 'ascadv1f_raw_trials', 'snr.pickle')):
     stats_calculator = FirstOrderStatistics(
         snr_attack_dataset, chunk_size=1, bytes=np.arange(16),
         targets=['subbytes', 'r', 'r_in', 'r_out', 'subbytes__r', 'subbytes__r_out', 'key__plaintext__r_in']
@@ -169,7 +169,7 @@ if not os.path.exists(os.path.join(TRIAL_DIR, 'snr.pickle')):
     plt.close(fig)
     with open(os.path.join(TRIAL_DIR, 'snr.pickle'), 'wb') as f:
         pickle.dump(snr_vals, f)
-with open(os.path.join(TRIAL_DIR, 'snr.pickle'), 'rb') as f:
+with open(os.path.join(OUTPUT_DIR, 'ascadv1f_raw_trials', 'snr.pickle'), 'rb') as f:
     snr_vals = pickle.load(f)
 print(snr_vals)
 gt_snr = np.stack(snr_vals.values()).mean(axis=0)

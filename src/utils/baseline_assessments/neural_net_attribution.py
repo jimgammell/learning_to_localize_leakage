@@ -120,7 +120,7 @@ class NeuralNetAttribution:
         print(f'Doing {n}-occlusion')
         occludor = Occlusion(self.model)
         def attr_fn(trace, target):
-            return occludor.attribute(trace, sliding_window_shapes=(1, n), strides=(1,), target=target.to(torch.long), perturbations_per_eval=8).abs().mean(axis=0).cpu()
+            return occludor.attribute(trace, sliding_window_shapes=(1, n), strides=(1,), target=target.to(torch.long), perturbations_per_eval=4).abs().mean(axis=0).cpu()
         return self.accumulate_attributions(attr_fn, print=True)
     
     @torch.no_grad()

@@ -8,6 +8,7 @@ from tqdm import tqdm
 import numpy as np
 from scipy.stats import spearmanr
 from matplotlib import pyplot as plt
+from torch import nn
 from torch.utils.data import Dataset, DataLoader
 
 from common import *
@@ -182,7 +183,15 @@ def get_best_supervised_model_hparams(sweep_dir: str, profiling_dataset: Dataset
 
 # Create plots showing the performance of a trained supervised model
 def eval_on_attack_dataset(model_dir: str, profile_dataset: Dataset, attack_dataset: Dataset, dataset_name: str, output_dir: Optional[str] = None):
+    def get_model(model_dir):
+        if isinstance(model_dir, str):
+            return load_trained_supervised_model(model_dir, as_lightning_module=False)
+        elif isinstance(model_dir, nn.Module):
+            return model_dir
+        else:
+            assert False
     if output_dir is None:
+        assert isinstance(model_dir, str)
         output_dir = model_dir
     os.makedirs(output_dir, exist_ok=True)
     if dataset_name in ['ascadv1-fixed', 'ascadv1-variable', 'aes-hd', 'dpav4']:
@@ -192,8 +201,10 @@ def eval_on_attack_dataset(model_dir: str, profile_dataset: Dataset, attack_data
             set_seed(0)
             dataloader = get_dataloader(
                 profile_dataset, attack_dataset, split='attack',
-                **({'data_mean': torch.tensor(0.0), 'data_var': torch.tensor(1.0)} if any(x in model_dir for x in ['cnn_best', 'mlp_best', 'cnn2-ascad']) else {})) # Benadjila models don't seem to have normalized data for training
-            model = load_trained_supervised_model(model_dir, as_lightning_module=False)
+                **({'data_mean': torch.tensor(0.0), 'data_var': torch.tensor(1.0)}
+                    if isinstance(model_dir, str) and any(x in model_dir for x in ['cnn_best', 'mlp_best', 'cnn2-ascad'])
+                 else {})) # Benadjila models don't seem to have normalized data for training
+            model = get_model(model_dir)
             evaluator = AESMultiTraceEvaluator(dataloader, model, seed=0, dataset_name=dataset_name)
             rv = evaluator(get_rank_over_time=True)
             np.save(os.path.join(output_dir, 'attack_performance.npy'), rv)
@@ -210,7 +221,7 @@ def eval_on_attack_dataset(model_dir: str, profile_dataset: Dataset, attack_data
         loss, rank = np.load(os.path.join(output_dir, 'attack_rank_and_loss.npy'))
     else:
         dataloader = get_dataloader(profile_dataset, attack_dataset, split='attack')
-        model = load_trained_supervised_model(model_dir, as_lightning_module=False)
+        model = get_model(model_dir)
         evaluator = AESMultiTraceEvaluator(dataloader, model, seed=0, dataset_name=dataset_name)
         loss, rank = evaluator(get_rank_over_time=False)
         np.save(os.path.join(output_dir, 'attack_rank_and_loss.npy'), np.array([loss, rank]))
@@ -231,9 +242,9 @@ def attribute_neural_net(
     occpoi_computor = None
     def init(mode: Literal['occpoi', 'attr'] = 'attr'): # since these take time to init and we don't want to do it if not needed
         nonlocal profiling_dataloader, attack_dataloader, model, neural_net_attributor, occpoi_computor
-        profiling_dataloader = profiling_dataloader or get_dataloader(profiling_dataset, attack_dataset, split='profile', **({'data_mean': torch.tensor(0.0), 'data_var': torch.tensor(1.0)} if any(x in model_dir for x in ['cnn_best', 'mlp_best', 'cnn2-ascad']) else {}))
-        attack_dataloader = attack_dataloader or get_dataloader(attack_dataset, attack_dataset, split='profile', **({'data_mean': torch.tensor(0.0), 'data_var': torch.tensor(1.0)} if any(x in model_dir for x in ['cnn_best', 'mlp_best', 'cnn2-ascad']) else {}))
-        model = model or load_trained_supervised_model(model_dir, as_lightning_module=False)
+        profiling_dataloader = profiling_dataloader or get_dataloader(profiling_dataset, attack_dataset, split='profile', **({'data_mean': torch.tensor(0.0), 'data_var': torch.tensor(1.0)} if isinstance(model_dir, str) and any(x in model_dir for x in ['cnn_best', 'mlp_best', 'cnn2-ascad']) else {}))
+        attack_dataloader = attack_dataloader or get_dataloader(attack_dataset, attack_dataset, split='profile', **({'data_mean': torch.tensor(0.0), 'data_var': torch.tensor(1.0)} if isinstance(model_dir, str) and any(x in model_dir for x in ['cnn_best', 'mlp_best', 'cnn2-ascad']) else {}))
+        model = model or (model_dir if isinstance(model_dir, nn.Module) else load_trained_supervised_model(model_dir, as_lightning_module=False))
         if mode == 'attr':
             neural_net_attributor = neural_net_attributor or NeuralNetAttribution(profiling_dataloader, model, seed=0, device='cuda' if torch.cuda.is_available() else 'cpu')
         elif mode == 'occpoi':
@@ -303,7 +314,8 @@ def evaluate_leakage_assessments(
     assessments_over_time = defaultdict(list)
     model_training_times = []
     for model_dir in model_dirs:
-        model_training_times.append(np.load(os.path.join(model_dir, 'training_time.npy')))
+        if os.path.exists(os.path.join(model_dir, 'training_time.npy')):
+            model_training_times.append(np.load(os.path.join(model_dir, 'training_time.npy')))
         for attr_filename in attr_filenames:
             if os.path.exists(os.path.join(model_dir, f'{attr_filename}.npz')):
                 res = np.load(os.path.join(model_dir, f'{attr_filename}.npz'), allow_pickle=True)
@@ -319,7 +331,8 @@ def evaluate_leakage_assessments(
     elapsed_times = {key: np.stack(val) for key, val in elapsed_times.items()}
     model_training_times = np.array(model_training_times)
     assessments_over_time = {key: np.stack(val) for key, val in assessments_over_time.items()}
-    print(f'Base model training time: {model_training_times.mean()} +/- {model_training_times.std()}')
+    if len(model_training_times.shape) > 0:
+        print(f'Base model training time: {model_training_times.mean()} +/- {model_training_times.std()}')
     for attr_filename in assessments:
         osnr_scores = [spearmanr(x, oracle_assessment).statistic for x in assessments[attr_filename]]
         osnr_scores = np.array([0. if np.isnan(x) else x for x in osnr_scores])

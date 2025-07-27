@@ -34,7 +34,7 @@ TRIAL_DIR = os.path.join(OUTPUT_DIR, 'ascadv1f_raw_trials')
 os.makedirs(TRIAL_DIR, exist_ok=True)
 FIG_DIR = os.path.join(TRIAL_DIR, 'figures')
 os.makedirs(FIG_DIR, exist_ok=True)
-STEPS = 5000
+STEPS = 20000
 parser = argparse.ArgumentParser()
 parser.add_argument('--subdir-prefix', default=None, action='store')
 clargs = parser.parse_args()
@@ -191,7 +191,7 @@ transformer_kwargs = dict(
     shared_head=True,
     head_type='simple-shared'
 )
-trial_idx = 0
+r"""trial_idx = 0
 while True:
     lr = float(10**np.random.uniform(-5, -2))
     training_kwargs = dict(
@@ -219,7 +219,7 @@ while True:
         default_root_dir=os.path.join(SUPERVISED_TRAINING_DIR, f'trial_{trial_idx}', 'lightning_logs')
     )
     trainer.fit(supervised_module, datamodule=datamodule)
-    trial_idx += 1
+    trial_idx += 1"""
 
 #endregion
 #region ALL training
@@ -227,7 +227,7 @@ while True:
 ALL_PRETRAINING_DIR = os.path.join(TRIAL_DIR, 'all_pretrain')
 os.makedirs(ALL_PRETRAINING_DIR, exist_ok=True)
 
-trial_count = 250
+trial_count = 50
 for trial_idx in range(trial_count):
     trial_dir = os.path.join(ALL_PRETRAINING_DIR, f'trial_idx={trial_idx}')
     print(f'Starting ALL trial {trial_idx}.')
@@ -238,27 +238,31 @@ for trial_idx in range(trial_count):
     print(f'\t{hparams}')
     hparams['etat_lr'] = float(hparams['theta_lr']*10**np.random.uniform(0, 3))
     print(f'\tHparams: {hparams}')
+    pretrain_all_module = ALLModule.load_from_checkpoint(os.path.join(OUTPUT_DIR, 'ascadv1f_raw_trials', 'all_pretrain', 'trial_idx=4', 'lightning_logs', 'version_0', 'checkpoints', 'epoch=113-step=10000.ckpt'))
     all_module = ALLModule(
         timesteps_per_trace=100000,
         output_classes=256,
         classifiers_name='transformer',
         classifiers_kwargs=transformer_kwargs,
-        theta_weight_decay=1e-2,
-        theta_lr_scheduler_name='CosineDecayLRSched',
-        theta_lr_scheduler_kwargs=dict(warmup_prop=500./STEPS, const_prop=0., final_prop=0.1),
+        theta_weight_decay=1e-4,
+        theta_lr_scheduler_name=None,
         theta_beta_1=0.9,
         train_theta=True,
-        train_etat=False,
+        train_etat=True,
         reference_leakage_assessment=gt_snr,
+        alternating_sgd=True,
         **hparams
     )
+    all_module.cmi_estimator.classifiers.load_state_dict(pretrain_all_module.cmi_estimator.classifiers.state_dict())
+    del pretrain_all_module
+    all_module.compile()
     trainer = lightning.Trainer(
-        max_steps=STEPS//2,
+        max_steps=STEPS,
         val_check_interval=1.,
         check_val_every_n_epoch=1,
-        default_root_dir=trial_dir
+        default_root_dir=trial_dir,
+        precision='bf16-mixed'
     )
-    profiling_dataset.desync_level = 5
     trainer.fit(all_module, datamodule=datamodule)
     r"""all_module.hparams.train_etat = True
     trainer = lightning.Trainer(

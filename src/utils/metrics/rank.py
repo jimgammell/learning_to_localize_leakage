@@ -23,7 +23,7 @@ def _get_rank(logits: np.ndarray, targets: np.ndarray):
 
 def get_rank(logits: Union[torch.Tensor, np.ndarray], targets: Union[torch.Tensor, np.ndarray]):
     if isinstance(logits, torch.Tensor):
-        logits = logits.detach().cpu().numpy()
+        logits = logits.float().detach().cpu().numpy()
     else:
         assert isinstance(logits, np.ndarray)
     if isinstance(targets, torch.Tensor):

@@ -30,6 +30,7 @@ class _Hparams:
     adversarial_mode: bool = True
     train_theta: bool = True
     train_etat: bool = True
+    alternating_sgd: bool = False
     reference_leakage_assessment: Optional[np.ndarray] = None
 
 class Module(lightning.LightningModule):
@@ -58,6 +59,7 @@ class Module(lightning.LightningModule):
         omit_classifier_conditioning: bool = False,
         train_theta: bool = True,
         train_etat: bool = True,
+        alternating_sgd: bool = False,
         reference_leakage_assessment: Optional[np.ndarray] = None
     ):
         super().__init__()
@@ -81,6 +83,7 @@ class Module(lightning.LightningModule):
             adversarial_mode=self.hparams.adversarial_mode,
             use_budget=True if self.hparams.penalty_style == 'budget' else False
         )
+        self.train_etat_this_step = False
     
     def to_global_steps(self, steps: int) -> int: # Lightning considers it a 'step' every time we call optimizer.step. This computes training steps to Lightning steps one can pass to a trainer.
         out = 0
@@ -128,36 +131,45 @@ class Module(lightning.LightningModule):
     def step(self, batch: Tuple[torch.Tensor, torch.Tensor], train_theta: bool = True, train_etat: bool = True) -> Dict[str, Any]:
         trace, label = batch
         batch_size, *trace_dims = trace.shape
-        assert (batch_size,) == tuple(label.shape)
         assert (batch_size, 1, self.hparams.timesteps_per_trace) == tuple(trace.shape)
         if train_theta:
+            print('Fetching optimizers for theta')
             self.cmi_estimator.requires_grad_(True)
             theta_optimizer, _ = self.optimizers()
             theta_lr_scheduler, _ = self.lr_schedulers()
             theta_optimizer.zero_grad()
+            print('\tDone')
         else:
             self.cmi_estimator.requires_grad_(False)
         if train_etat:
+            print('Fetching optimizers for etat')
             self.selection_mechanism.requires_grad_(True)
             _, etat_optimizer = self.optimizers()
             _, etat_lr_scheduler = self.lr_schedulers()
             etat_optimizer.zero_grad()
+            print('\tDone')
         else:
             self.selection_mechanism.requires_grad_(False)
         rv = {}
+        print('Sampling noise')
         if self.hparams.gradient_estimator == 'gumbel':
             mask = self.selection_mechanism.concrete_sample(batch_size)
         elif self.hparams.gradient_estimator == 'reinmax':
             mask = self.selection_mechanism.reinmax_sample(batch_size)
+        print('\tDone')
+        print('Computing logits')
         logits = self.cmi_estimator.get_logits(trace, mask)
+        print('\tDone')
         if len(logits.shape) > 2:
             batch_size, head_count, class_count = logits.shape
-            assert (batch_size, head_count) == labels.shape
+            assert (batch_size, head_count) == label.shape
             logits = rearrange(logits, 'b h c -> (b h) c')
-            labels = rearrange(labels, 'b h -> (b h)')
+            label = rearrange(label, 'b h -> (b h)')
+        print('Computing loss')
         theta_loss = nn.functional.cross_entropy(logits, label)
         mutinf = self.cmi_estimator.get_mutinf_estimate_from_logits(logits, label)
         etat_loss = -mutinf.mean()
+        print('\tDone')
         if self.hparams.adversarial_mode:
             etat_loss = -1*etat_loss
         if self.hparams.penalty_style == 'mask_norm_penalty':
@@ -165,9 +177,13 @@ class Module(lightning.LightningModule):
         if self.hparams.penalty_style== 'gamma_norm_penalty':
             etat_loss = etat_loss + self.hparams.norm_penalty_coeff*self.selection_mechanism.get_gamma().sum(dim=-1).mean()
         if train_theta:
-            self.manual_backward(theta_loss, retain_graph=train_etat, inputs=list(self.cmi_estimator.parameters()))
+            print('Computing theta gradients')
+            self.manual_backward(theta_loss, inputs=list(self.cmi_estimator.parameters()), retain_graph=train_etat)
+            print('\tDone')
         if train_etat:
+            print('Computing etat gradients')
             self.manual_backward(etat_loss, inputs=list(self.selection_mechanism.parameters()))
+            print('\tDone')
         if train_theta:
             theta_optimizer.step()
             theta_lr_scheduler.step()
@@ -182,7 +198,15 @@ class Module(lightning.LightningModule):
         return rv
     
     def training_step(self, batch: Tuple[torch.Tensor, torch.Tensor]):
-        rv = self.step(batch, train_theta=self.hparams.train_theta, train_etat=self.hparams.train_etat)
+        if self.hparams.alternating_sgd and self.hparams.train_theta and self.hparams.train_etat:
+            train_etat = self.train_etat_this_step
+            train_theta = not self.train_etat_this_step
+            self.train_etat_this_step = not self.train_etat_this_step
+        else:
+            train_etat = self.hparams.train_etat
+            train_theta = self.hparams.train_theta
+        print(train_etat, train_theta)
+        rv = self.step(batch, train_theta=train_theta, train_etat=train_etat)
         if self.hparams.reference_leakage_assessment is not None:
             log_gamma = self.selection_mechanism.get_log_gamma()
             correlation = spearmanr(

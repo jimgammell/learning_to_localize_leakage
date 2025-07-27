@@ -172,7 +172,7 @@ if not os.path.exists(os.path.join(TRIAL_DIR, 'snr.pickle')):
 with open(os.path.join(TRIAL_DIR, 'snr.pickle'), 'rb') as f:
     snr_vals = pickle.load(f)
 print(snr_vals)
-gt_snr = np.stack([snr_vals[('r', 2)], snr_vals[('r_in', 2)], snr_vals[('r_out', 2)], snr_vals[('subbytes__r', 2)], snr_vals[('subbytes__r_out', 2)], snr_vals[('key__plaintext__r_in', 2)]], axis=0).mean(axis=0)
+gt_snr = np.stack(snr_vals.values()).mean(axis=0)
 
 #endregion
 #region Training a supervised model on the dataset
@@ -277,7 +277,6 @@ for trial_idx in range(trial_count):
         **hparams
     )
     all_module.cmi_estimator.classifiers.load_state_dict(pretrain_all_module.cmi_estimator.classifiers.state_dict())
-    all_module.cmi_estimator.classifiers = PredictSingleByteWrapper(all_module.cmi_estimator.classifiers, 2)
     del pretrain_all_module
     all_module.compile()
     trainer = lightning.Trainer(

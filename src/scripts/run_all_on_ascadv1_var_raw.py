@@ -9,6 +9,7 @@ import json
 import pickle
 import argparse
 
+from tqdm import tqdm
 from matplotlib import pyplot as plt
 import numpy as np
 from scipy.special import log_softmax
@@ -46,13 +47,33 @@ SUBDIR_PREFIX = '' if clargs.subdir_prefix is None else clargs.subdir_prefix
 
 print('Loading dataset into RAM...')
 
-ascad_path = os.path.join(RESOURCE_DIR, r'ascadv1-variable/atmega8515-raw-traces.h5')
+ascad_path = os.path.join(RESOURCE_DIR,
+                          r'ascadv1-variable/atmega8515-raw-traces.h5')
+
 with h5py.File(ascad_path, 'r') as database:
-    TRACES = np.array(database['traces'])
-    KEYS = np.array(database['metadata']['key'], dtype=np.uint8)
-    PLAINTEXTS = np.array(database['metadata']['plaintext'], dtype=np.uint8)
-    MASKS = np.array(database['metadata']['masks'], dtype=np.uint8)
-    MASKS = np.concatenate([np.zeros((len(MASKS), 2), dtype=np.uint8), MASKS], axis=1)
+    # ---------- traces ----------
+    traces_ds = database['traces']                 # h5py.Dataset (lazy handle)
+    n_traces, trace_len = traces_ds.shape
+    TRACES = np.empty((n_traces, trace_len),       # ≈ 70 GiB uint8 array
+                      dtype=np.uint8)
+
+    chunk = 4096                                   # traces per read (≈1 GB)
+    for start in tqdm.trange(0, n_traces, chunk,
+                             unit='trace', desc='traces'):
+        stop = min(start + chunk, n_traces)
+        # read_direct avoids the double copy np.array() would create
+        traces_ds.read_direct(TRACES[start:stop],
+                              np.s_[start:stop],   # source slice in file
+                              np.s_[:])            # dest slice (entire row)
+
+    # ---------- metadata ----------
+    KEYS        = np.array(database['metadata']['key'],       dtype=np.uint8)
+    PLAINTEXTS  = np.array(database['metadata']['plaintext'], dtype=np.uint8)
+    MASKS       = np.array(database['metadata']['masks'],     dtype=np.uint8)
+    MASKS       = np.concatenate([np.zeros((len(MASKS), 2),
+                                           dtype=np.uint8),
+                                  MASKS],
+                                 axis=1)
 
 print('\tDone.')
 

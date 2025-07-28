@@ -11,10 +11,24 @@ import numpy as np
 import torch
 from torch import multiprocessing
 
-plt.rcParams['font.size'] = 10
-plt.rcParams['font.family'] = 'Times New Roman'
-plt.rcParams['text.usetex'] = True
-plt.rcParams['text.latex.preamble'] = r'\usepackage{times} \usepackage{amsmath} \usepackage{amssymb}'
+try:
+    plt.rcParams.update({
+        'font.size': 10,
+        'font.family': 'Times New Roman',
+        'text.usetex': True,
+        'text.latex.preamble': r'\usepackage{times} \usepackage{amsmath} \usepackage{amssymb}'
+    })
+    # Try a dummy plot to trigger LaTeX rendering
+    plt.figure()
+    plt.plot([0, 1], [0, 1])
+    plt.title(r'Test: $x^2$', fontsize=10)
+    plt.close()
+except Exception as e:
+    print(f"[Warning] LaTeX rendering failed: {e}. Falling back to default.")
+    plt.rcParams.update({
+        'text.usetex': False,
+        'font.family': 'sans-serif'  # Or any other available font
+    })
 
 if torch.cuda.is_available():
     torch.backends.cudnn.benchmark = True

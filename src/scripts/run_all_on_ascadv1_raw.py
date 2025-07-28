@@ -206,7 +206,7 @@ transformer_kwargs = dict(
     shared_head=True,
     head_type='simple-shared'
 )
-r"""trial_idx = 0
+trial_idx = 0
 while True:
     lr = float(10**np.random.uniform(-5, -2))
     training_kwargs = dict(
@@ -214,9 +214,9 @@ while True:
         lr_scheduler_name='CosineDecayLRSched',
         lr_scheduler_kwargs=dict(warmup_prop=0., const_prop=0., final_prop=0.1),
         beta_1=0.9,
-        beta_2=0.99,
+        beta_2=0.999,
         eps=1.e-8,
-        weight_decay=1.e-2,
+        weight_decay=1.e-4,
         grad_clip=1.0,
         timesteps_per_trace=100000,
         class_count=256,
@@ -234,7 +234,7 @@ while True:
         default_root_dir=os.path.join(SUPERVISED_TRAINING_DIR, f'trial_{trial_idx}', 'lightning_logs')
     )
     trainer.fit(supervised_module, datamodule=datamodule)
-    trial_idx += 1"""
+    trial_idx += 1
 
 #endregion
 #region ALL training

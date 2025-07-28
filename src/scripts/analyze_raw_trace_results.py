@@ -11,8 +11,9 @@ from common import *
 from utils.baseline_assessments import FirstOrderStatistics
 from training_modules.adversarial_leakage_localization import ALLModule
 
-fig, axes = plt.subplots(11, 3, figsize=(3*4, 11*4))
-for trial_idx in range(11):
+TRIAL_COUNT = 8
+fig, axes = plt.subplots(TRIAL_COUNT, 3, figsize=(3*4, TRIAL_COUNT*4))
+for trial_idx in range(TRIAL_COUNT):
     checkpoint_path = f'/home/jgammell/Desktop/learning_to_localize_leakage/gautschi_outputs/ascadv1f_raw_trials/all_train/trial_idx={trial_idx}/lightning_logs/version_0/checkpoints/epoch=113-step=20000.ckpt'
     output_path = os.path.join(OUTPUT_DIR, r'raw_trace_visualization')
     os.makedirs(output_path, exist_ok=True)

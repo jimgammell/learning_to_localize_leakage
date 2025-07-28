@@ -9,7 +9,7 @@ import json
 import pickle
 import argparse
 
-from tqdm import tqdm
+import tqdm
 from matplotlib import pyplot as plt
 import numpy as np
 from scipy.special import log_softmax

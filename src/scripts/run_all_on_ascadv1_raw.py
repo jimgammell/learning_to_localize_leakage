@@ -261,6 +261,7 @@ for trial_idx in range(trial_count):
         theta_weight_decay=1e-4,
         theta_lr_scheduler_name=None,
         theta_beta_1=0.9,
+        l1_norm_penalty=1e-2,
         train_theta=True,
         train_etat=True,
         reference_leakage_assessment=gt_snr,

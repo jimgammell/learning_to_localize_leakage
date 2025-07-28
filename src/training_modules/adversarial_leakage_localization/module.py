@@ -31,6 +31,7 @@ class _Hparams:
     train_theta: bool = True
     train_etat: bool = True
     alternating_sgd: bool = False
+    l1_norm_penalty: Optional[float] = None
     reference_leakage_assessment: Optional[np.ndarray] = None
 
 class Module(lightning.LightningModule):
@@ -55,6 +56,7 @@ class Module(lightning.LightningModule):
         relaxation_temp: float = 1.0,
         gradient_estimator: Literal['gumbel', 'reinmax'] = 'gumbel',
         penalty_style: Literal['budget', 'l1', 'l2', 'l1_plus_l2'] = 'budget',
+        l1_norm_penalty: Optional[float] = None,
         adversarial_mode: bool = True,
         omit_classifier_conditioning: bool = False,
         train_theta: bool = True,
@@ -166,6 +168,8 @@ class Module(lightning.LightningModule):
             etat_loss = etat_loss + self.hparams.norm_penalty_coeff*(mask.sum(dim=-1).mean() + mask.pow(2).sum(dim=-1).sqrt().mean())
         if self.hparams.penalty_style== 'gamma_norm_penalty':
             etat_loss = etat_loss + self.hparams.norm_penalty_coeff*self.selection_mechanism.get_gamma().sum(dim=-1).mean()
+        if self.hparams.l1_norm_penalty is not None:
+            etat_loss = etat_loss + self.hparams.l1_norm_penalty*self.selection_mechanism.get_gamma().sum(dim=-1).mean()
         if train_theta:
             self.manual_backward(theta_loss, inputs=list(self.cmi_estimator.parameters()), retain_graph=train_etat)
         if train_etat:

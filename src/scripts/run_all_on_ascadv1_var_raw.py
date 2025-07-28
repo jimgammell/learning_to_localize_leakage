@@ -48,7 +48,7 @@ print('Loading dataset into RAM...')
 
 ascad_path = os.path.join(RESOURCE_DIR, r'ascadv1-variable/atmega8515-raw-traces.h5')
 with h5py.File(ascad_path, 'r') as database:
-    TRACES = np.array(database['traces'], dtype=np.float32)
+    TRACES = np.array(database['traces'])
     KEYS = np.array(database['metadata']['key'], dtype=np.uint8)
     PLAINTEXTS = np.array(database['metadata']['plaintext'], dtype=np.uint8)
     MASKS = np.array(database['metadata']['masks'], dtype=np.uint8)
@@ -96,7 +96,7 @@ class ASCAD(Dataset):
     
     def __getitem__(self, idx: int) -> Tuple[torch.Tensor, int]:
         idx = self.data_indices[idx]
-        trace = self.dataset['traces'][idx, :].numpy()
+        trace = self.dataset['traces'][idx, :].numpy().astype(np.float32)
         key = self.dataset['metadata']['key'][idx, self.target_byte]
         plaintext = self.dataset['metadata']['plaintext'][idx, self.target_byte]
         r = self.dataset['metadata']['masks'][idx, self.target_byte]

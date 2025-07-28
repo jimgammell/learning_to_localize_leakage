@@ -77,7 +77,7 @@ class ASCAD(Dataset):
         super().__init__()
         self.dataset_path = dataset_path
         self.dataset = {
-            'traces': torch.from_numpy(TRACES).share_memory_(),
+            'traces': torch.from_numpy(TRACES), #.share_memory_(),
             'metadata': {'key': KEYS, 'plaintext': PLAINTEXTS, 'masks': MASKS}
         }
         self.transform = transform
@@ -173,6 +173,12 @@ with open(os.path.join(TRIAL_DIR, 'snr.pickle'), 'rb') as f:
     snr_vals = pickle.load(f)
 print(snr_vals)
 gt_snr = np.stack([snr_vals[('r', 2)], snr_vals[('r_in', 2)], snr_vals[('r_out', 2)], snr_vals[('subbytes__r', 2)], snr_vals[('subbytes__r_out', 2)], snr_vals[('key__plaintext__r_in', 2)]], axis=0).mean(axis=0)
+if not os.path.exists(os.path.join(TRIAL_DIR, 'profiling_snr.pickle')):
+    profiling_dataset.add_channel_dim = False
+    stats_calculator = FirstOrderStatistics(profiling_dataset, chunk_size=1, bytes=2, targets=['subbytes', 'r', 'r_in', 'r_out', 'subbytes__r', 'subbytes__r_out', 'key__plaintext__r_in'])
+    snr_vals = stats_calculator.snr_vals
+    with open(os.path.join(TRIAL_DIR, 'profiling_snr.pickle'), 'wb') as f:
+        pickle.dump(snr_vals, f)
 
 #endregion
 #region Training a supervised model on the dataset
@@ -247,7 +253,7 @@ for trial_idx in range(trial_count):
     print(f'Starting ALL trial {trial_idx}.')
     hparams = dict(
         gamma_bar=float(np.random.uniform(0.05, 0.95)),
-        theta_lr=10**np.random.uniform(-5, -2)
+        theta_lr=1e-4 #10**np.random.uniform(-5, -2)
     )
     print(f'\t{hparams}')
     hparams['etat_lr'] = float(hparams['theta_lr']*10**np.random.uniform(0, 3))
@@ -261,7 +267,7 @@ for trial_idx in range(trial_count):
         theta_weight_decay=1e-4,
         theta_lr_scheduler_name=None,
         theta_beta_1=0.9,
-        l1_norm_penalty=1e-2,
+        l1_norm_penalty=1e-3,
         train_theta=True,
         train_etat=True,
         reference_leakage_assessment=gt_snr,

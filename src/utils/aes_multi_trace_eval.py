@@ -120,11 +120,20 @@ class AESMultiTraceEvaluator:
         assert np.all(np.isfinite(accumulated_predictions)) and np.all(rank_over_time > -1)
         return rank_over_time
     
-    def __call__(self, get_rank_over_time: bool = True, logits: Optional[torch.Tensor] = None):
+    def __call__(self, get_rank_over_time: bool = True, logits: Optional[torch.Tensor] = None, repetitions: Optional[int] = None):
         if get_rank_over_time:
             logitss, ground_truth_keys = self.get_key_predictions(input_logits=logits)
-            rank_over_time = self.get_rank_over_time(logitss, ground_truth_keys)
-            return rank_over_time
+            if repetitions is None:
+                rank_over_time = self.get_rank_over_time(logitss, ground_truth_keys)
+                return rank_over_time
+            else:
+                ranks_over_time = []
+                for repetition in range(repetitions):
+                    order = np.random.permutation(len(logitss))
+                    rank_over_time = self.get_rank_over_time(logitss[order, :], ground_truth_keys[order])
+                    ranks_over_time.append(rank_over_time)
+                ranks_over_time = np.stack(ranks_over_time)
+                return ranks_over_time
         else:
             loss, rank = self.get_loss_and_rank()
             return loss, rank

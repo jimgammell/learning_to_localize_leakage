@@ -2,6 +2,7 @@ import os
 import sys
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
+from tqdm import tqdm
 from scipy.stats import spearmanr
 import torch
 from torch import nn
@@ -29,6 +30,12 @@ for dataset_name in ['ascadv1-fixed', 'ascadv1-variable', 'dpav4', 'aes-hd', 'ot
     supervised_model_checkpoints = [
         os.path.join(results_dir, 'supervised_models_for_attribution', 'classification', f'seed={seed}', 'early_stop_checkpoint.ckpt')
         for seed in [55, 56, 57, 58, 59]
+    ]
+    hsweep_checkpoints = [
+        os.path.join(results_dir, 'supervised_hparam_sweep', f'trial_{idx}', 'early_stop_checkpoint.ckpt') for idx in range(50)
+    ]
+    dropout_ablation_checkpoints = [
+        os.path.join(results_dir, 'supervised_dropout_ablation_hparam_sweep', f'trial_{idx}', 'early_stop_checkpoint.ckpt') for idx in range(50)
     ]
     all_checkpoints = [
         os.path.join(results_dir, 'all_runs', 'fair', f'seed={seed}', 'all_training', 'final_checkpoint.ckpt')
@@ -76,6 +83,93 @@ for dataset_name in ['ascadv1-fixed', 'ascadv1-variable', 'dpav4', 'aes-hd', 'ot
         assessment = np.load(path)
         osnr[target] = assessment
     osnr = np.mean(np.stack(list(osnr.values())), axis=0)
+
+    mttd_vals, loss_vals, rank_vals, agreement_vals = [], [], [], []
+    for idx, ckpt in enumerate(dropout_ablation_checkpoints):
+        lightning_module = SupervisedModule.load_from_checkpoint(ckpt, map_location='cpu')
+        classifier = lightning_module.classifier
+        eval_on_attack_dataset(classifier, profiling_dataset, attack_dataset, dataset_name, output_dir=os.path.dirname(ckpt), repeat_mttd_calculation=True, name='rep_attack_performance')
+        if dataset_name not in ['otiait', 'otp']:
+            mttd, loss, rank = evaluate_model_performance(os.path.dirname(ckpt), ret_vals=True, repeat_mttd_calculation=True)
+            mttd_vals.append(float(mttd.mean()))
+            loss_vals.append(float(loss))
+            rank_vals.append(float(rank))
+            leakage_assessment = np.load(os.path.join(os.path.dirname(ckpt), '1-occlusion.npz'))['attribution']
+            agreement = spearmanr(leakage_assessment, osnr).statistic
+            agreement_vals.append(agreement)
+        else:
+            loss, rank = evaluate_model_performance(os.path.dirname(ckpt), ret_vals=True)
+            loss_vals.append(float(loss))
+            rank_vals.append(float(rank))
+            leakage_assessment = np.load(os.path.join(os.path.dirname(ckpt), '1-occlusion.npz'))['attribution']
+            agreement = spearmanr(leakage_assessment, osnr).statistic
+            agreement_vals.append(agreement)
+    fig, axes = plt.subplots(1, 3, figsize=(12, 4))
+    axes[0].plot(loss_vals, agreement_vals, color='blue', marker='.', linestyle='none')
+    axes[0].set_xlabel('Loss')
+    axes[0].set_ylabel('Oracle Agreement (1-occlusion)')
+    axes[0].set_xscale('log')
+    axes[1].plot(rank_vals, agreement_vals, color='blue', marker='.', linestyle='none')
+    axes[1].set_xlabel('Rank')
+    axes[1].set_ylabel('Oracle Agreement (1-occlusion)')
+    axes[1].set_xscale('log')
+    if dataset_name not in ['otiait', 'otp']:
+        axes[2].plot(mttd_vals, agreement_vals, color='blue', marker='.', linestyle='none')
+        axes[2].set_xlabel('MTTD')
+        axes[2].set_ylabel('Oracle Agreement (1-occlusion)')
+        axes[2].set_xscale('log')
+    fig.tight_layout()
+    fig.savefig(os.path.join(results_dir, 'supervised_dropout_ablation_hparam_sweep', 'perf_vs_agreement.png'))
+    plt.close(fig)
+    if dataset_name not in ['otiait', 'otp']:
+        boa_idx = np.nanargmax(agreement_vals)
+        print(f'Best oracle agreement on {dataset_name}: MTTD={mttd_vals[boa_idx]},  Oracle agreement={agreement_vals[boa_idx]}')
+        bmttd_idx = np.argmin(mttd_vals)
+        print(f'Best MTTD on {dataset_name}: MTTD={mttd_vals[bmttd_idx]},  Oracle agreement={agreement_vals[bmttd_idx]}')
+    else:
+        boa_idx = np.nanargmax(agreement_vals)
+        print(f'Best oracle agreement on {dataset_name}: rank={rank_vals[boa_idx]},  Oracle agreement={agreement_vals[boa_idx]}')
+        brnk_idx = np.argmin(rank_vals)
+        print(f'Best rank on {dataset_name}: rank={rank_vals[bmttd_idx]},  Oracle agreement={agreement_vals[bmttd_idx]}')
+
+    mttd_vals, loss_vals, rank_vals, agreement_vals = [], [], [], []
+    for idx, ckpt in enumerate(hsweep_checkpoints):
+        lightning_module = SupervisedModule.load_from_checkpoint(ckpt, map_location='cpu')
+        classifier = lightning_module.classifier
+        eval_on_attack_dataset(classifier, profiling_dataset, attack_dataset, dataset_name, output_dir=os.path.dirname(ckpt))
+        if dataset_name not in ['otiait', 'otp']:
+            mttd, loss, rank = evaluate_model_performance(os.path.dirname(ckpt), ret_vals=True)
+            mttd_vals.append(float(mttd))
+            loss_vals.append(float(loss))
+            rank_vals.append(float(rank))
+            leakage_assessment = np.load(os.path.join(os.path.dirname(ckpt), '1-occlusion.npz'))['attribution']
+            agreement = spearmanr(leakage_assessment, osnr).statistic
+            agreement_vals.append(agreement)
+        else:
+            loss, rank = evaluate_model_performance(os.path.dirname(ckpt), ret_vals=True)
+            loss_vals.append(float(loss))
+            rank_vals.append(float(rank))
+            leakage_assessment = np.load(os.path.join(os.path.dirname(ckpt), '1-occlusion.npz'))['attribution']
+            agreement = spearmanr(leakage_assessment, osnr).statistic
+            agreement_vals.append(agreement)
+    fig, axes = plt.subplots(1, 3, figsize=(12, 4))
+    axes[0].plot(loss_vals, agreement_vals, color='blue', marker='.', linestyle='none')
+    axes[0].set_xlabel('Loss')
+    axes[0].set_ylabel('Oracle Agreement (1-occlusion)')
+    axes[0].set_xscale('log')
+    axes[1].plot(rank_vals, agreement_vals, color='blue', marker='.', linestyle='none')
+    axes[1].set_xlabel('Rank')
+    axes[1].set_ylabel('Oracle Agreement (1-occlusion)')
+    axes[1].set_xscale('log')
+    if dataset_name not in ['otiait', 'otp']:
+        axes[2].plot(mttd_vals, agreement_vals, color='blue', marker='.', linestyle='none')
+        axes[2].set_xlabel('MTTD')
+        axes[2].set_ylabel('Oracle Agreement (1-occlusion)')
+        axes[2].set_xscale('log')
+    fig.tight_layout()
+    fig.savefig(os.path.join(results_dir, 'supervised_hparam_sweep', 'perf_vs_agreement.png'))
+    plt.close(fig)
+
     for idx, supervised_model_checkpoint in enumerate(supervised_model_checkpoints):
         lightning_module = SupervisedModule.load_from_checkpoint(supervised_model_checkpoint, map_location='cpu')
         classifier = lightning_module.classifier

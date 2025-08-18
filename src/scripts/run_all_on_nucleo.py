@@ -10,6 +10,7 @@ import json
 from matplotlib import pyplot as plt
 import numpy as np
 from scipy.special import log_softmax
+from scipy.stats import spearmanr
 import estraces
 import torch
 from torch.utils.data import TensorDataset, random_split, Dataset
@@ -95,6 +96,7 @@ indices = np.random.permutation(100000)
 profiling_dataset = NucleoDataset(dataset_path, desync_level=5, indices=indices[:-20000])
 attack_dataset = NucleoDataset(dataset_path, desync_level=0, indices=indices[-20000:])
 snr_attack_dataset = NucleoDataset(dataset_path, desync_level=0, indices=indices[-20000:], hw_targets=False, add_channel_dim=False)
+snr_profiling_dataset = NucleoDataset(dataset_path, desync_level=0, indices=indices[:-20000], hw_targets=False, add_channel_dim=False)
 datamodule = DataModule(
     profiling_dataset, attack_dataset,
     data_mean=profiling_dataset.traces.mean(axis=0),
@@ -118,7 +120,31 @@ fig.tight_layout()
 fig.savefig(os.path.join(FIG_DIR, 'gt_snr.png'))
 plt.close(fig)
 
+prof_stats_calculator = FirstOrderStatistics(snr_profiling_dataset, targets=['subbytes', 'r0', 'subbytes__r0', 'r1', 'subbytes__r1', 'r0__k__pt'])
+prof_snr_vals = prof_stats_calculator.snr_vals
+prof_gt_snr = np.stack([prof_snr_vals['r0'], prof_snr_vals['subbytes__r0'], prof_snr_vals['r1'], prof_snr_vals['subbytes__r1']]).mean(axis=0)
+
 gt_snr = np.stack([snr_vals['r0'], snr_vals['subbytes__r0'], snr_vals['r1'], snr_vals['subbytes__r1']]).mean(axis=0)
+
+rand_agreements = np.stack([
+    spearmanr(gt_snr, np.random.randn(*gt_snr.shape)).statistic for _ in range(5)
+])
+print(f'Random oracle agreement: {rand_agreements.mean()} +/- {rand_agreements.std()}')
+print(f'Agreement between profiling + attack oracle: {spearmanr(prof_gt_snr, gt_snr).statistic}')
+
+for trial_idx in range(50):
+    trial_path = os.path.join(r'/home/jgammell/Desktop/learning_to_localize_leakage/outputs/nucleo_trials/all_pretrain', f'trial_idx={trial_idx}')
+    checkpoint_path = os.path.join(trial_path, 'lightning_logs', 'version_1', 'checkpoints', 'epoch=119-step=30000.ckpt')
+    module = ALLModule.load_from_checkpoint(checkpoint_path)
+    assessment = module.selection_mechanism.get_log_gamma().detach().cpu().numpy()
+    fig, ax = plt.subplots(1, 1, figsize=(4, 4))
+    ax.plot(assessment.reshape(-1), color='blue', linestyle='-', linewidth=0.2, markersize=1)
+    ax.set_xlabel(r'Time $t$')
+    ax.set_ylabel(r'Estimated leakiness of $X_t$')
+    fig.tight_layout()
+    fig.savefig(os.path.join(trial_path, 'assessment.png'))
+    plt.close(fig)
+assert False
 
 #endregion
 #region Supervised training

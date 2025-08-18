@@ -14,6 +14,8 @@ class PerinCNN(nn.Module):
         output_dropout: float = 0.0
     ):
         super().__init__()
+        self.input_shape = input_shape
+        self.output_classes = output_classes
         self.noise_conditional = noise_conditional
         self.conv_stage = nn.Sequential(OrderedDict([
             ('conv_1', nn.Conv1d(2 if noise_conditional else 1, 4, kernel_size=41, stride=21, padding=20, padding_mode='circular')),
@@ -25,7 +27,7 @@ class PerinCNN(nn.Module):
             ('act_2', nn.SELU()),
             ('pool_2', nn.AvgPool1d(2))
         ]))
-        dim = self.conv_stage(torch.randn(1, input_shape[0]+1 if noise_conditional else input_shape, *input_shape[1:])).numel()
+        dim = self.conv_stage(torch.randn(1, input_shape[0]+1 if noise_conditional else input_shape[0], *input_shape[1:])).numel()
         self.dense_stage = nn.Sequential(OrderedDict([
             ('dense_1', nn.Linear(dim, 32)),
             ('act_1', nn.SELU()),

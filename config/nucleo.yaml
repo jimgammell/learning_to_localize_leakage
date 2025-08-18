@@ -1,1 +1,27 @@
 dataset: nucleo
+supervised_train_steps: 30000
+supervised_htune_trial_count: 50
+all_classifiers_pretrain_steps: 15000
+all_train_steps: 15000
+all_classifiers_pretrain_htune_trial_count: 20
+all_htune_trial_count: 30
+default_kwargs: {}
+supervised_training_kwargs:
+  classifier_name: perin-cnn
+  classifier_kwargs: {}
+  lr_scheduler_name: CosineDecayLRSched
+  lr_scheduler_kwargs: {}
+  lr: 1e-3
+  beta_1: 0.9
+  beta_2: 0.999
+  eps: 1.e-8
+  weight_decay: 0.0
+  input_dropout: 0.0
+  hidden_dropout: 0.0
+  output_dropout: 0.0
+classifiers_pretrain_kwargs:
+  classifiers_name: perin-cnn
+  classifiers_kwargs: {}
+all_kwargs:
+  classifiers_name: perin-cnn
+  classifiers_kwargs: {}

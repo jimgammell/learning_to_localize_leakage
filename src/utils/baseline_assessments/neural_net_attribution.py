@@ -25,7 +25,8 @@ class ReshapeOutput(nn.Module):
 
 class NeuralNetAttribution:
     def __init__(self, dataloader, model: nn.Module, seed: Optional[int] = None, device: Optional[str] = None):
-        self.dataloader = DataLoader(dataloader.dataset, batch_size=len(dataloader.dataset), num_workers=dataloader.num_workers)
+        #self.dataloader = DataLoader(dataloader.dataset, batch_size=len(dataloader.dataset), num_workers=dataloader.num_workers)
+        self.dataloader = dataloader
         self.base_model = deepcopy(model)
         self.device = device if device is not None else 'cuda' if torch.cuda.is_available() else 'cpu'
         self.base_model.eval()
@@ -40,7 +41,7 @@ class NeuralNetAttribution:
         count = 0
         if print:
             progress_bar = tqdm(total=len(self.dataloader))
-        for trace, target in self.dataloader:
+        for trace, target in tqdm(self.dataloader):
             batch_size = trace.size(0)
             trace, target = trace.to(self.device), target.to(self.device)
             if not timing:
@@ -120,7 +121,7 @@ class NeuralNetAttribution:
         print(f'Doing {n}-occlusion')
         occludor = Occlusion(self.model)
         def attr_fn(trace, target):
-            return occludor.attribute(trace, sliding_window_shapes=(1, n), strides=(1,), target=target.to(torch.long), perturbations_per_eval=4).abs().mean(axis=0).cpu()
+            return occludor.attribute(trace, sliding_window_shapes=(1, n), strides=(1,), target=target.to(torch.long), perturbations_per_eval=1).abs().mean(axis=0).cpu()
         return self.accumulate_attributions(attr_fn, print=True)
     
     @torch.no_grad()

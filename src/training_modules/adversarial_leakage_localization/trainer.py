@@ -15,6 +15,7 @@ from datasets.data_module import DataModule
 from .module import Module
 from .plot_things import *
 from utils.dnn_performance_auc import compute_dnn_performance_auc
+from datasets.nucleo import Nucleo
 
 class Trainer:
     def __init__(self,
@@ -41,6 +42,9 @@ class Trainer:
         max_steps: int = 1000,
         override_kwargs: dict = {}
     ):
+        if isinstance(self.profiling_dataset, Nucleo):
+            self.profiling_dataset.configure_target('hw')
+            self.profiling_dataset.desync_level = 10
         if not os.path.exists(os.path.join(logging_dir, 'training_curves.pickle')):
             data_module = DataModule(
                 self.profiling_dataset,
@@ -89,14 +93,14 @@ class Trainer:
         override_kwargs: dict = {},
         starting_seed: int = 0
     ):
-        lr_vals = [m*10**-4 for m in range(1, 11)]
+        lr_vals = [m*10**-4 for m in range(1, 11)] if not isinstance(self.profiling_dataset, Nucleo) else np.logspace(-4, -2, trial_count)
         results = defaultdict(list)
         for trial_idx in range(trial_count):
             set_seed(starting_seed + trial_idx)
             experiment_dir = os.path.join(logging_dir, f'trial_{trial_idx}')
             os.makedirs(experiment_dir, exist_ok=True)
             hparams = {
-                'theta_lr': lr_vals[trial_idx]
+                'theta_lr': float(lr_vals[trial_idx])
             }
             override_kwargs.update(hparams)
             self.pretrain_classifiers(
@@ -129,6 +133,9 @@ class Trainer:
         reference: Optional[np.ndarray] = None,
         ablation='none'
     ):
+        if isinstance(self.profiling_dataset, Nucleo):
+            self.profiling_dataset.configure_target('hw')
+            self.profiling_dataset.desync_level = 0
         if not os.path.exists(os.path.join(logging_dir, 'training_curves.pickle')):
             data_module = DataModule(
                 self.profiling_dataset,

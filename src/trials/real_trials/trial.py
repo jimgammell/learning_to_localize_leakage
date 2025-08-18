@@ -27,12 +27,13 @@ OPTIMAL_WINDOW_SIZES = {
     'dpav4': 41,
     'aes-hd': 31,
     'otiait': 3,
-    'otp': 5
+    'otp': 5,
+    'nucleo': 3 # FIXME
 }
 
 class Trial:
     def __init__(self,
-        dataset_name: Literal['ascadv1-fixed', 'ascadv1-variable', 'dpav4', 'aes-hd', 'otiait', 'otp'],
+        dataset_name: Literal['ascadv1-fixed', 'ascadv1-variable', 'dpav4', 'aes-hd', 'otiait', 'otp', 'nucleo'],
         trial_config: Dict[str, Any],
         seed_count: int = 1,
         logging_dir: Optional[str] = None,
@@ -83,6 +84,8 @@ class Trial:
             ]
         elif self.dataset_name in ['dpav4', 'aes-hd', 'otiait', 'otp']: # since these are unprotected, I'm only considering first-order leakage
             self.oracle_targets = ['label']
+        elif self.dataset_name in 'nucleo':
+            self.oracle_targets = ['r0', 'subbytes__r0', 'r1', 'subbytes__r1']
         else:
             assert False
     
@@ -112,6 +115,10 @@ class Trial:
             from datasets.one_truth_prevails import OneTruthPrevails
             self.profiling_dataset = OneTruthPrevails(root=self.data_dir, train=True)
             self.attack_dataset = OneTruthPrevails(root=self.data_dir, train=False)
+        elif self.dataset_name == 'nucleo':
+            from datasets.nucleo import Nucleo
+            self.profiling_dataset = Nucleo(root=self.data_dir, train=True)
+            self.attack_dataset = Nucleo(root=self.data_dir, train=False)
         else:
             assert False
 
@@ -140,18 +147,24 @@ class Trial:
             assert False
     
     def run_parametric_trials(self):
+        if self.dataset_name == 'nucleo':
+            self.profiling_dataset.desync_level = 0
+            self.profiling_dataset.configure_target('id')
+            self.attack_dataset.configure_target('id')
         set_seed(0)
         print('Running parametric statistics-based methods.')
         os.makedirs(self.first_order_parametric_stats_dir, exist_ok=True)
+        for target in self.oracle_targets:
+            stats_computor = FirstOrderStatistics(self.attack_dataset, target, chunk_size=1)
+            snr = stats_computor.snr_vals[target].reshape(-1)
+            np.save(os.path.join(self.first_order_parametric_stats_dir, f'attack_snr_{target}.npy'), snr)
         if not os.path.exists(os.path.join(self.first_order_parametric_stats_dir, 'random.npy')):
             random_assessment = np.random.rand(5, self.profiling_dataset.timesteps_per_trace)
             np.save(os.path.join(self.first_order_parametric_stats_dir, 'random.npy'), random_assessment)
         else:
             random_assessment = np.load(os.path.join(self.first_order_parametric_stats_dir, 'random.npy'))
-        for seed_idx in range(5):
-            self.evaluate_leakage_assessment(random_assessment[seed_idx, :], dest=os.path.join(self.first_order_parametric_stats_dir, f'random_evaluation_metrics_{seed_idx}.npz'), print_res=True)
         if not os.path.exists(os.path.join(self.first_order_parametric_stats_dir, 'first_order_stats.npz')):
-            stats_computor = FirstOrderStatistics(self.profiling_dataset, 'label')
+            stats_computor = FirstOrderStatistics(self.profiling_dataset, 'label', chunk_size=1)
             snr = stats_computor.snr_vals['label'].reshape(-1)
             sosd = stats_computor.sosd_vals['label'].reshape(-1)
             cpa = stats_computor.cpa_vals['label'].reshape(-1)
@@ -164,8 +177,14 @@ class Trial:
         self.evaluate_leakage_assessment(snr, dest=os.path.join(self.first_order_parametric_stats_dir, 'snr_evaluation_metrics.npz'), print_res=True)
         self.evaluate_leakage_assessment(sosd, dest=os.path.join(self.first_order_parametric_stats_dir, 'sosd_evaluation_metrics.npz'), print_res=True)
         self.evaluate_leakage_assessment(cpa, dest=os.path.join(self.first_order_parametric_stats_dir, 'cpa_evaluation_metrics.npz'), print_res=True)
+        for seed_idx in range(5):
+            self.evaluate_leakage_assessment(random_assessment[seed_idx, :], dest=os.path.join(self.first_order_parametric_stats_dir, f'random_evaluation_metrics_{seed_idx}.npz'), print_res=True)
     
     def run_supervised_trials(self):
+        if self.dataset_name == 'nucleo':
+            self.profiling_dataset.desync_level = 10
+            self.profiling_dataset.configure_target('hw')
+            self.attack_dataset.configure_target('hw')
         print('Running supervised trials.')
         base_seed = 0
         base_supervised_kwargs = copy(self.trial_config['default_kwargs'])
@@ -174,26 +193,11 @@ class Trial:
             self.supervised_hparam_sweep_dir, self.profiling_dataset, self.attack_dataset, training_kwargs=base_supervised_kwargs,
             trial_count=self.trial_config['supervised_htune_trial_count'], max_steps=self.trial_config['supervised_train_steps'], starting_seed=base_seed
         )
-        supervised_experiment_methods.run_supervised_hparam_sweep(
-            self.supervised_dropout_ablation, self.profiling_dataset, self.attack_dataset, training_kwargs=base_supervised_kwargs, heavy_dropout_ablation=True,
-            trial_count=self.trial_config['supervised_htune_trial_count'], max_steps=self.trial_config['supervised_train_steps'], starting_seed=base_seed
-        )
-        print('Doing neural net attribution assessments...')
-        for seed_idx in self.run_particular_seeds:
-            for x in tqdm((self.trial_config['supervised_htune_trial_count']//5)*seed_idx + np.arange(self.trial_config['supervised_htune_trial_count']//5)):
-                model_dir = os.path.join(self.supervised_hparam_sweep_dir, f'trial_{x}')
-                print(f'Evaluating model in {model_dir}...')
-                self.evaluate_supervised_model(model_dir, seed_idx=0, print_res=True)
-                model_dir = os.path.join(self.supervised_dropout_ablation, f'trial_{x}')
-                print(f'Evaluating model in {model_dir}...')
-                self.evaluate_supervised_model(model_dir, seed_idx=0, print_res=True, skip_metrics=True)
-        print('Computing selection criteria...')
-        self.compute_selection_criterion_for_attribution_prefix('gradvis')
-        self.compute_selection_criterion_for_attribution_prefix('lrp')
-        self.compute_selection_criterion_for_attribution_prefix('saliency')
-        self.compute_selection_criterion_for_attribution_prefix('1-occlusion')
-        self.compute_selection_criterion_for_attribution_prefix('inputxgrad')
-        self.compute_selection_criterion_for_attribution_prefix(f'{OPTIMAL_WINDOW_SIZES[self.dataset_name]}-occlusion')
+        # FIXME 
+        #supervised_experiment_methods.run_supervised_hparam_sweep(
+        #    self.supervised_dropout_ablation, self.profiling_dataset, self.attack_dataset, training_kwargs=base_supervised_kwargs, heavy_dropout_ablation=True,
+        #    trial_count=self.trial_config['supervised_htune_trial_count'], max_steps=self.trial_config['supervised_train_steps'], starting_seed=base_seed
+        #)
         base_seed += self.trial_config['supervised_htune_trial_count']
         best_supervised_hparams = supervised_experiment_methods.get_best_supervised_model_hparams(
             self.supervised_hparam_sweep_dir, self.profiling_dataset, self.attack_dataset, self.dataset_name, self.load_oracle_assessment()
@@ -223,7 +227,7 @@ class Trial:
                     subdir, self.profiling_dataset, self.attack_dataset, training_kwargs=kwargs, dataset_name=self.dataset_name,
                     max_steps=self.trial_config['supervised_train_steps'], seed=seed, reference_leakage_assessment=self.load_oracle_assessment()
                 )
-                self.evaluate_supervised_model(subdir, seed_idx=seed_idx, print_res=True, cost='full')
+                self.evaluate_supervised_model(subdir, seed_idx=seed_idx, print_res=True, cost='reduced')
                 # experiments with a handful of publicly-released pretrained models as a sanity check
                 if self.dataset_name == 'ascadv1-fixed':
                     self.evaluate_supervised_model(os.path.join(self.pretrained_model_experiment_dir, 'benadjila_cnn_best'), seed_idx=seed_idx, print_res=True)
@@ -238,8 +242,28 @@ class Trial:
                 elif self.dataset_name == 'dpav4':
                     self.evaluate_supervised_model(os.path.join(self.pretrained_model_experiment_dir, 'wouters', f'seed={seed_idx}'), seed_idx=seed_idx, print_res=True)
                     self.evaluate_supervised_model(os.path.join(self.pretrained_model_experiment_dir, 'zaid', f'seed={seed_idx}'), seed_idx=seed_idx, print_res=True)
+        print('Doing neural net attribution assessments...')
+        for seed_idx in self.run_particular_seeds:
+            for x in tqdm((self.trial_config['supervised_htune_trial_count']//5)*seed_idx + np.arange(self.trial_config['supervised_htune_trial_count']//5)):
+                model_dir = os.path.join(self.supervised_hparam_sweep_dir, f'trial_{x}')
+                print(f'Evaluating model in {model_dir}...')
+                self.evaluate_supervised_model(model_dir, seed_idx=0, print_res=True)
+                #model_dir = os.path.join(self.supervised_dropout_ablation, f'trial_{x}')
+                #print(f'Evaluating model in {model_dir}...')
+                #self.evaluate_supervised_model(model_dir, seed_idx=0, print_res=True, skip_metrics=True)
+        print('Computing selection criteria...')
+        self.compute_selection_criterion_for_attribution_prefix('gradvis')
+        self.compute_selection_criterion_for_attribution_prefix('lrp')
+        self.compute_selection_criterion_for_attribution_prefix('saliency')
+        self.compute_selection_criterion_for_attribution_prefix('1-occlusion')
+        self.compute_selection_criterion_for_attribution_prefix('inputxgrad')
+        self.compute_selection_criterion_for_attribution_prefix(f'{OPTIMAL_WINDOW_SIZES[self.dataset_name]}-occlusion')
     
     def run_all_hsweep(self, output_dir, base_seed, base_all_kwargs):
+        if self.dataset_name == 'nucleo':
+            self.profiling_dataset.desync_level = 10
+            self.profiling_dataset.configure_target('hw')
+            self.attack_dataset.configure_target('hw')
         all_experiment_methods.run_all_hparam_sweep(
             output_dir, self.profiling_dataset, self.attack_dataset, training_kwargs=base_all_kwargs,
             classifiers_pretrain_trial_count=self.trial_config['all_classifiers_pretrain_htune_trial_count'],
@@ -251,17 +275,21 @@ class Trial:
         )
 
     def run_all_trials(self):
+        if self.dataset_name == 'nucleo':
+            self.profiling_dataset.desync_level = 10
+            self.profiling_dataset.configure_target('hw')
+            self.attack_dataset.configure_target('hw')
         base_seed = 0
         base_all_kwargs = copy(self.trial_config['default_kwargs'])
         base_all_kwargs.update(self.trial_config['classifiers_pretrain_kwargs'])
         base_all_kwargs.update(self.trial_config['all_kwargs'])
         self.run_all_hsweep(self.all_hparam_sweep_dir, 0, base_all_kwargs)
-        cooperative_all_kwargs = copy(base_all_kwargs)
-        cooperative_all_kwargs['adversarial_mode'] = False
-        self.run_all_hsweep(self.all_cooperative_ablation_dir, 0, cooperative_all_kwargs)
-        unconditional_all_kwargs = copy(base_all_kwargs)
-        unconditional_all_kwargs['omit_classifier_conditioning'] = True
-        self.run_all_hsweep(self.all_unconditional_ablation_dir, 0, unconditional_all_kwargs)
+        #cooperative_all_kwargs = copy(base_all_kwargs)
+        #cooperative_all_kwargs['adversarial_mode'] = False
+        #self.run_all_hsweep(self.all_cooperative_ablation_dir, 0, cooperative_all_kwargs)
+        #unconditional_all_kwargs = copy(base_all_kwargs)
+        #unconditional_all_kwargs['omit_classifier_conditioning'] = True
+        #self.run_all_hsweep(self.all_unconditional_ablation_dir, 0, unconditional_all_kwargs)
         #interpretive_all_kwargs = copy(base_all_kwargs)
         #interpretive_all_kwargs['classifier_to_interpret'] = supervised_experiment_methods.load_trained_supervised_model(os.path.join(self.supervised_attribution_dir, 'classification', 'seed=55'))
         #self.run_all_hsweep(self.all_interpretive_ablation_dir, 0, interpretive_all_kwargs)
@@ -307,7 +335,7 @@ class Trial:
             for key, val in results.items():
                 print(f'\t{key}: {val.mean()} +/- {val.std()}')
         base_seed += 5
-        print('Evaluating the sensitivity of ALL to hyperparameters.')
+        r"""print('Evaluating the sensitivity of ALL to hyperparameters.')
         for seed in base_seed + self.run_particular_seeds:
             hparams = copy(base_all_kwargs)
             if best_pretrain_hparams is not None:
@@ -318,7 +346,7 @@ class Trial:
                 training_kwargs=kwargs, max_steps=self.trial_config['all_train_steps'], seed=seed, reference_leakage_assessment=self.load_oracle_assessment(),
                 pretrain_max_steps=self.trial_config['all_classifiers_pretrain_steps'], pretrain_kwargs=best_pretrain_hparams,
                 pretrain_classifiers_dir=os.path.join(self.all_dir, 'oracle', f'seed={seed-self.seed_count}', 'classifier_pretraining') if self.dataset_name in ['ascadv1-fixed', 'ascadv1-variable', 'aes-hd'] else None
-            )
+            )"""
 
 
     def compute_dnn_occlusion_tests(self, leakage_assessment, seed_idx, quiet: bool = True):
@@ -433,7 +461,7 @@ class Trial:
                 assert False
         else:
             model_dir = output_dir
-            compute_lrp = True
+            compute_lrp = True if self.dataset_name not in ['nucleo'] else False
         if not skip_metrics:
             supervised_experiment_methods.eval_on_attack_dataset(model_dir, self.profiling_dataset, self.attack_dataset, self.dataset_name, output_dir)
         supervised_experiment_methods.attribute_neural_net(

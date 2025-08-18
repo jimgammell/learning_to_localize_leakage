@@ -147,7 +147,7 @@ def get_best_supervised_model_hparams(sweep_dir: str, profiling_dataset: Dataset
             best_val_loss = val_loss
         attribute_neural_net(
             model_dir, profiling_dataset, attack_dataset, dataset_name,
-            compute_gradvis=True, compute_saliency=True, compute_inputxgrad=True, compute_lrp=True, compute_occlusion=[1]
+            compute_gradvis=True, compute_saliency=True, compute_inputxgrad=True, compute_lrp=dataset_name not in ['nucleo'], compute_occlusion=[1]
         )
         def record_result(key):
             assessment = np.load(os.path.join(model_dir, f'{key}.npz'))['attribution']
@@ -155,7 +155,7 @@ def get_best_supervised_model_hparams(sweep_dir: str, profiling_dataset: Dataset
                 results[key].append(0.)
             else:
                 results[key].append(spearmanr(assessment, reference_leakage_assessment).statistic)
-        for key in ['gradvis', 'saliency', 'lrp', 'inputxgrad', '1-occlusion']:
+        for key in ['gradvis', 'saliency', 'inputxgrad', '1-occlusion'] + (['lrp'] if dataset_name not in ['nucleo'] else []):
             record_result(key)
     fig, axes = plt.subplots(1, 5, figsize=(5*PLOT_WIDTH, PLOT_WIDTH))
     for (key, val), ax in zip(results.items(), axes):
@@ -170,7 +170,7 @@ def get_best_supervised_model_hparams(sweep_dir: str, profiling_dataset: Dataset
     best_indices = {
         'classification': int(best_model_dir.split('_')[-1]),
         **{
-            f'oracle_{method}': np.argmax(results[method]) for method in ['gradvis', 'saliency', 'lrp', 'inputxgrad', '1-occlusion']
+            f'oracle_{method}': np.argmax(results[method]) for method in ['gradvis', 'saliency', 'inputxgrad', '1-occlusion'] + (['lrp'] if dataset_name not in ['nucleo'] else [])
         }
     }
     best_hparams = {}
@@ -182,7 +182,10 @@ def get_best_supervised_model_hparams(sweep_dir: str, profiling_dataset: Dataset
     return best_hparams
 
 # Create plots showing the performance of a trained supervised model
-def eval_on_attack_dataset(model_dir: str, profile_dataset: Dataset, attack_dataset: Dataset, dataset_name: str, output_dir: Optional[str] = None):
+def eval_on_attack_dataset(
+        model_dir: str, profile_dataset: Dataset, attack_dataset: Dataset, dataset_name: str, output_dir: Optional[str] = None,
+        repeat_mttd_calculation: bool = False, name='attack_performance'
+):
     def get_model(model_dir):
         if isinstance(model_dir, str):
             return load_trained_supervised_model(model_dir, as_lightning_module=False)
@@ -195,8 +198,8 @@ def eval_on_attack_dataset(model_dir: str, profile_dataset: Dataset, attack_data
         output_dir = model_dir
     os.makedirs(output_dir, exist_ok=True)
     if dataset_name in ['ascadv1-fixed', 'ascadv1-variable', 'aes-hd', 'dpav4']:
-        if os.path.exists(os.path.join(output_dir, 'attack_performance.npy')):
-            rv = np.load(os.path.join(output_dir, 'attack_performance.npy'))
+        if os.path.exists(os.path.join(output_dir, f'{name}.npy')):
+            rv = np.load(os.path.join(output_dir, f'{name}.npy'))
         else:
             set_seed(0)
             dataloader = get_dataloader(
@@ -206,8 +209,11 @@ def eval_on_attack_dataset(model_dir: str, profile_dataset: Dataset, attack_data
                  else {})) # Benadjila models don't seem to have normalized data for training
             model = get_model(model_dir)
             evaluator = AESMultiTraceEvaluator(dataloader, model, seed=0, dataset_name=dataset_name)
-            rv = evaluator(get_rank_over_time=True)
-            np.save(os.path.join(output_dir, 'attack_performance.npy'), rv)
+            rv = evaluator(get_rank_over_time=True, repetitions=10 if repeat_mttd_calculation else None)
+            np.save(os.path.join(output_dir, f'{name}.npy'), rv)
+        if len(rv.shape) > 1:
+            assert len(rv.shape) == 2
+            rv = rv.mean(axis=0)
         fig, ax = plt.subplots(1, 1, figsize=(PLOT_WIDTH, PLOT_WIDTH))
         ax.plot(np.arange(1, len(rv)+1), rv, color='blue')
         ax.set_xlabel('Traces seen')
@@ -284,25 +290,47 @@ def attribute_neural_net(
         compute_attribution(lambda: occpoi_computor(extended=True), 'extended-occpoi.npz')
 
 def evaluate_model_performance(
-    base_dir: str
+    base_dir: str,
+    ret_vals: bool = False,
+    repeat_mttd_calculation: bool = False
 ):
     print(f'Computing attack performance for models in {base_dir}')
     model_dirs = [os.path.join(base_dir, x) for x in os.listdir(base_dir) if x.split('=')[0] == 'seed']
-    if all(os.path.exists(os.path.join(x, 'attack_performance.npy')) for x in model_dirs):
-        rank_over_time_curves = np.stack([
-            np.load(os.path.join(x, 'attack_performance.npy')) for x in model_dirs if os.path.exists(os.path.join(x, 'attack_performance.npy'))
-        ])
+    if len(model_dirs) == 0:
+        model_dirs = [base_dir]
+    if repeat_mttd_calculation:
+        rank_over_time_curves = np.load(os.path.join(base_dir, 'rep_attack_performance.npy'))
         traces_to_disclosure = np.stack([
-            np.nonzero(x-1)[0][-1] + 1 if len(np.nonzero(x-1)) > 0 else 1 for x in rank_over_time_curves
+            np.nonzero(x-1)[0][-1] + 1 if len(np.nonzero(x-1)[0]) > 0 else 1 for x in rank_over_time_curves
         ])
-        print(f'\tTraces to AES key disclosure: {traces_to_disclosure.mean()} +/- {traces_to_disclosure.std()}')
+    else:
+        if all(os.path.exists(os.path.join(x, 'attack_performance.npy')) for x in model_dirs):
+            rank_over_time_curves = np.stack([
+                np.load(os.path.join(x, 'attack_performance.npy')) for x in model_dirs if os.path.exists(os.path.join(x, 'attack_performance.npy'))
+            ])
+            traces_to_disclosure = np.stack([
+                np.nonzero(x-1)[0][-1] + 1 if len(np.nonzero(x-1)) > 0 else 1 for x in rank_over_time_curves
+            ])
+        else:
+            traces_to_disclosure = None
     losses_and_ranks = np.stack([
         np.load(os.path.join(x, 'attack_rank_and_loss.npy')) for x in model_dirs
     ])
     losses = losses_and_ranks[:, 0]
     ranks = losses_and_ranks[:, 1]
-    print(f'\tLoss: {losses.mean()} +/- {losses.std()}')
-    print(f'\tRanks: {ranks.mean()} +/- {ranks.std()}')
+    if ret_vals:
+        rv = []
+        if traces_to_disclosure is not None:
+            rv.append(traces_to_disclosure)
+        rv.extend([losses, ranks])
+        return tuple(rv)
+    else:
+        if traces_to_disclosure is not None:
+            print(rank_over_time_curves.shape)
+            print(traces_to_disclosure.shape)
+            print(f'\tTraces to AES key disclosure: {traces_to_disclosure.mean()} +/- {traces_to_disclosure.std()}')
+        print(f'\tLoss: {losses.mean()} +/- {losses.std()}')
+        print(f'\tRanks: {ranks.mean()} +/- {ranks.std()}')
 
 def evaluate_leakage_assessments(
     base_dir: str, oracle_assessment: np.ndarray

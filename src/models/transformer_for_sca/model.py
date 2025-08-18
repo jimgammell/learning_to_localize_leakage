@@ -48,6 +48,8 @@ class Transformer(nn.Module):
             TransformerLayer(self.config, layer_num) for layer_num in range(1, self.config.layer_count+1)
         ])
         self.head = Head(self.config) #self.heads = AttentionPoolingLayer(self.config)
+        self.input_shape = self.config.input_shape
+        self.output_classes = self.config.output_classes
     
     def forward(self, x, noise: Optional[torch.Tensor] = None):
         if self.config.noise_conditional:

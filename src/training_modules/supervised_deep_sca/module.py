@@ -117,7 +117,6 @@ class Module(L.LightningModule):
         for key, val in rv.items():
             self.log(f'val_{key}', val, on_step=False, on_epoch=True, prog_bar=True if key in ('loss', 'rank') else False)
 
-r"""
     @torch.no_grad()
     def on_validation_epoch_end(self):
         attack_dataloader = self.trainer.datamodule.test_dataloader()
@@ -158,4 +157,3 @@ r"""
         mean_rank = torch.tensor(mean_rank).mean().item()
         self.log('mttd', mttd, on_epoch=True, on_step=False, prog_bar=True)
         self.log('mean_rank', mean_rank, on_epoch=True, on_step=False, prog_bar=True)
-"""

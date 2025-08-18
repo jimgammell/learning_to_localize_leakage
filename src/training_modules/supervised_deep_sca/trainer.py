@@ -22,7 +22,8 @@ OPTIMAL_WINDOW_SIZES = {
     'dpav4': 41,
     'aes-hd': 31,
     'otiait': 3,
-    'otp': 5
+    'otp': 5,
+    'nucleo': 3
 }
 
 class ComputeLeakageAssessmentsCallback(Callback):
@@ -41,7 +42,7 @@ class ComputeLeakageAssessmentsCallback(Callback):
             assessments = {
                 'gradvis': attributor.compute_gradvis(),
                 'saliency': attributor.compute_saliency(),
-                'lrp': attributor.compute_lrp(),
+                #'lrp': attributor.compute_lrp(),
                 'inputxgrad': attributor.compute_inputxgrad(),
                 '1-occlusion': attributor.compute_n_occlusion(1)
             }
@@ -134,7 +135,7 @@ class Trainer:
                 early_stop_leakage_assessments = {
                     'gradvis': neural_net_attributor.compute_gradvis().reshape(-1),
                     'saliency': neural_net_attributor.compute_saliency().reshape(-1),
-                    'lrp': neural_net_attributor.compute_lrp().reshape(-1),
+                    #'lrp': neural_net_attributor.compute_lrp().reshape(-1),
                     'inputxgrad': neural_net_attributor.compute_inputxgrad().reshape(-1),
                     **{f'{m}-occlusion': neural_net_attributor.compute_n_occlusion(m) for m in occl_window_sizes}
                 }

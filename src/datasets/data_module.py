@@ -56,7 +56,11 @@ class DataModule(L.LightningDataModule):
     
     def setup(self, stage: str):
         if self.data_mean is None or self.data_var is None:
-            self.data_mean, self.data_var = calculate_dataset_stats(self.profiling_dataset)
+            if hasattr(self.profiling_dataset, 'traces'):
+                self.data_mean = self.profiling_dataset.traces.mean(axis=0)
+                self.data_var = self.profiling_dataset.traces.var(axis=0)
+            else:
+                self.data_mean, self.data_var = calculate_dataset_stats(self.profiling_dataset)
         self.data_mean, self.data_var = map(
             lambda x: torch.tensor(x, dtype=torch.float32) if isinstance(x, np.ndarray) else x.to(torch.float32), (self.data_mean, self.data_var)
         )

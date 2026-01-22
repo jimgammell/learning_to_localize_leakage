@@ -161,14 +161,4 @@ cython_debug/
 #  option (not recommended) you can uncomment the following to ignore the entire idea folder.
 #.idea/
 
-outputs
-resources
-outputs_backup
-outputs_backup_ii
-outputs_backup_iii
-outputs_backup_iv
-outputs_v
-outputs_good_backup
-good_experiments
-outputs.zip
-*.zip
+experiments/local_config/directories.yaml

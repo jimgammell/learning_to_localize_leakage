@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "leakage-localization"
+version = "2026.0"
+dependencies = [
+    "torch",
+    "numpy",
+    "matplotlib",
+    "scikit-learn",
+    "pyyaml"
+]
+requires-python = "==3.11.*"
+authors = [
+    {name = "Jim Gammell", email = "jgammell.purdue@gmail.com"}
+]
+description = "Methods for localizing side-channel leakage of cryptographic sensitive variables."
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE", "CITATION.cff"]
+
+[project.optional-dependencies]
+development = [
+    "ruff"
+]

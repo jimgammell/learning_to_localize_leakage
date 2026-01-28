@@ -10,7 +10,9 @@ dependencies = [
     "numpy",
     "matplotlib",
     "scikit-learn",
-    "pyyaml"
+    "pyyaml",
+    "einops",
+    "h5py"
 ]
 requires-python = "==3.11.*"
 authors = [

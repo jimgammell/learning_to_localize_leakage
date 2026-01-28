@@ -6,19 +6,16 @@ import yaml
 
 PROJ_ROOT = Path(__file__).resolve().parent.parent
 LOCAL_CONFIG_ROOT = PROJ_ROOT / 'local_config'
-ASCADV1_FIXED_CROPPED_ROOT: Optional[Path] = None
-ASCADV1_FIXED_UNCROPPED_ROOT: Optional[Path] = None
-ASCADV1_VARIABLE_CROPPED_ROOT: Optional[Path] = None
-ASCADV1_VARIABLE_UNCROPPED_ROOT: Optional[Path] = None
+LOCAL_DIRECTORY_CONFIG = LOCAL_CONFIG_ROOT / 'directories.yaml'
+ASCADV1_FIXED_ROOT: Optional[Path] = None
+ASCADV1_VARIABLE_ROOT: Optional[Path] = None
 DOWNLOADS_CACHE_ROOT: Optional[Path] = None
 OUTPUTS_ROOT: Optional[Path] = None
 
 def append_directory_clargs(p: argparse.ArgumentParser):
-    for key, description in zip(
-        ('ascadv1-fixed-cropped-root', 'Root directory for the cropped version of ASCADv1 (fixed key).'),
-        ('ascadv1-fixed-uncropped-root', 'Root directory for the uncropped version of ASCADv1 (fixed key).'),
-        ('ascadv1-variable-cropped-root', 'Root directory for the cropped version of ASCADv1 (variable key).'),
-        ('ascadv1-variable-uncropped-root', 'Root directory for the uncropped version of ASCADv1 (variable key).'),
+    for key, description in (
+        ('ascadv1-fixed-root', 'Root directory for ASCADv1-fixed.'),
+        ('ascadv1-variable-root', 'Root directory for ASCADv1-variable.'),
         ('downloads-cache-root', 'Root directory for caching downloaded files.'),
         ('outputs-root', 'Root directory for experiment outputs.')
     ):
@@ -26,14 +23,50 @@ def append_directory_clargs(p: argparse.ArgumentParser):
             f'--{key}',
             help=description,
             action='store',
-            type=Optional[str],
+            type=str,
             default=None
         )
 
 def load_directory_config() -> Dict[str, Path]:
-    config_path = LOCAL_CONFIG_ROOT / 'directories.yaml'
-    if not config_path.exists():
+    if not LOCAL_DIRECTORY_CONFIG.exists():
         return dict()
-    with open(config_path) as config_file:
+    with open(LOCAL_DIRECTORY_CONFIG) as config_file:
         directories = yaml.safe_load(config_file)
-        return {k: Path(v) for k, v in directories.items()}
+        return directories
+
+def init_directories(clargs: Dict[str, str], config: Dict[str, str]):
+    global ASCADV1_FIXED_ROOT, ASCADV1_VARIABLE_ROOT, DOWNLOADS_CACHE_ROOT, OUTPUTS_ROOT
+    for dirkey, dirpath in config.items():
+        if dirkey == 'ascadv1-fixed-root':
+            ASCADV1_FIXED_ROOT = Path(dirpath)
+            ASCADV1_FIXED_ROOT.mkdir(exist_ok=True)
+        elif dirkey == 'ascadv1-variable-root':
+            ASCADV1_VARIABLE_ROOT = Path(dirpath)
+            ASCADV1_VARIABLE_ROOT.mkdir(exist_ok=True)
+        elif dirkey == 'downloads-cache-root':
+            DOWNLOADS_CACHE_ROOT = Path(dirpath)
+            DOWNLOADS_CACHE_ROOT.mkdir(exist_ok=True)
+        elif dirkey == 'outputs-root':
+            OUTPUTS_ROOT = Path(dirpath)
+            OUTPUTS_ROOT.mkdir(exist_ok=True)
+        else:
+            raise RuntimeError(f'Unrecognized directory configured in {LOCAL_DIRECTORY_CONFIG}: {dirkey}')
+    for dirkey, dirpath in clargs.items():
+        if dirkey == 'ascadv1-fixed-root':
+            ASCADV1_FIXED_ROOT = Path(dirpath)
+        elif dirkey == 'ascadv1-variable-root':
+            ASCADV1_VARIABLE_ROOT = Path(dirpath)
+        elif dirkey == 'downloads-cache-root':
+            DOWNLOADS_CACHE_ROOT = Path(dirpath)
+            DOWNLOADS_CACHE_ROOT.mkdir(exist_ok=True, parents=True)
+        elif dirkey == 'outputs-root':
+            OUTPUTS_ROOT = Path(dirpath)
+            OUTPUTS_ROOT.mkdir(exist_ok=True, parents=True)
+    if DOWNLOADS_CACHE_ROOT is None:
+        raise RuntimeError(f'Directory DOWNLOADS_CACHE_ROOT is not configured. Please configure it by adding the line downloads-cache-root=/path/to/directory/ to {LOCAL_CONFIG_ROOT}.')
+    if OUTPUTS_ROOT is None:
+        raise RuntimeError(f'Directory OUTPUTS_ROOT is not configured. Please configure it by adding the line outputs-root=/path/to/directory/ to {LOCAL_CONFIG_ROOT}.')
+
+__all__ = [
+    'ASCADV1_FIXED_ROOT', 'ASCADV1_VARIABLE_ROOT', 'DOWNLOADS_CACHE_ROOT', 'OUTPUTS_ROOT'
+]

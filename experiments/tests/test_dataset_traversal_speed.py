@@ -44,6 +44,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--dataset', required=True, choices=get_args(DATASET))
     parser.add_argument('--truncate-length', default=None, type=int)
+    append_directory_clargs(parser)
     args = parser.parse_args()
 
     dataset_id: DATASET = args.dataset

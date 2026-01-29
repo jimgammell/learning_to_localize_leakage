@@ -1,6 +1,7 @@
 from typing import Literal, get_args
 from pathlib import Path
 
+from .common import PARTITION
 from .base_dataset import Base_NumpyDataset
 
 DATASET = Literal[

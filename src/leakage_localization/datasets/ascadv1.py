@@ -8,11 +8,14 @@ from numpy.typing import NDArray
 import torch
 
 from leakage_localization.utils import aes, get_sha256_hash
+from .common import PARTITION
 from .base_dataset import Base_NumpyDataset, Base_TorchDataset
 from .compute_trace_statistics import compute_trace_statistics
 from .convert_hdf5_to_binary import convert_hdf5_to_binary
 
-PARTITION = Literal['profile', 'attack']
+BYTES = Literal[
+    0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15
+]
 TARGET_VARIABLE = Literal[
     'subbytes',
     'r_in',
@@ -42,7 +45,7 @@ class ASCADv1_Config:
         if isinstance(self.target_byte, int):
             self.target_byte = [self.target_byte]
         self.target_byte = np.array(self.target_byte)
-        assert all(isinstance(x, np.int64) and 0 <= x < 16 for x in self.target_byte)
+        assert all(x in get_args(BYTES) for x in self.target_byte)
         if isinstance(self.target_variable, str):
             self.target_variable = [self.target_variable]
         self.target_variable = np.array(self.target_variable)
@@ -194,7 +197,11 @@ class ASCADv1_NumpyDataset(Base_NumpyDataset):
         plaintext = self.plaintexts[idx, :]
         masks = self.masks[idx, :]
         intermediate_variables = self.compute_intermediate_variables(key, plaintext, masks)
-        target = np.stack([intermediate_variables[target_variable] for target_variable in self.config.target_variable], axis=-2)
+        target = np.concatenate([
+            intermediate_variables[target_variable][..., 0, np.newaxis] if target_variable in ['r_in', 'r_out']
+            else intermediate_variables[target_variable][..., self.config.target_byte]
+            for target_variable in self.config.target_variable
+        ], axis=-2)
         return trace, target, intermediate_variables
     
     def __repr__(self) -> str:

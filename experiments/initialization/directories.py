@@ -73,5 +73,5 @@ def init_directories(clargs: Optional[Dict[str, str]] = None, config: Optional[D
         raise RuntimeError(f'Directory OUTPUTS_ROOT is not configured. Please configure it by adding the line outputs-root=/path/to/directory/ to {LOCAL_CONFIG_ROOT}.')
 
 __all__ = [
-    'ASCADV1_FIXED_ROOT', 'ASCADV1_VARIABLE_ROOT', 'DOWNLOADS_CACHE_ROOT', 'OUTPUTS_ROOT'
+    'ASCADV1_FIXED_ROOT', 'ASCADV1_VARIABLE_ROOT', 'DOWNLOADS_CACHE_ROOT', 'OUTPUTS_ROOT', 'append_directory_clargs'
 ]

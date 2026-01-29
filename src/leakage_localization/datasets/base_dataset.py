@@ -3,6 +3,7 @@ from abc import ABC, abstractmethod
 
 import h5py
 import numpy as np
+from numpy.typing import NDArray
 import torch
 from torch.utils.data import Dataset
 
@@ -12,11 +13,11 @@ class Base_NumpyDataset(ABC):
     timestep_count: int
 
     @abstractmethod
-    def compute_intermediate_variables(self, *args: np.ndarray) -> Dict[str, np.ndarray]:
+    def compute_intermediate_variables(self, *args: NDArray[np.integer]) -> Dict[str, NDArray[np.integer]]:
         pass
 
     @abstractmethod
-    def __getitem__(self, _idx: Union[int, Sequence[int]]) -> Tuple[np.ndarray, np.ndarray, Dict[str, np.ndarray]]:
+    def __getitem__(self, _idx: Union[int, Sequence[int]]) -> Tuple[NDArray[np.floating], NDArray[np.integer], Dict[str, NDArray[np.integer]]]:
         pass
     
     def __len__(self) -> int:

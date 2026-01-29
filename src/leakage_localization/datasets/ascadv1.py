@@ -4,12 +4,12 @@ from pathlib import Path
 
 import h5py
 import numpy as np
+from numpy.typing import NDArray
 import torch
-from torch.utils.data import Dataset
 
 from leakage_localization.utils import aes, get_sha256_hash
 from .base_dataset import Base_NumpyDataset, Base_TorchDataset
-from .compute_trace_statistics import compute_trace_mean_and_variance
+from .compute_trace_statistics import compute_trace_statistics
 from .convert_hdf5_to_binary import convert_hdf5_to_binary
 
 PARTITION = Literal['profile', 'attack']
@@ -61,7 +61,7 @@ class ASCADv1_NumpyDataset(Base_NumpyDataset):
             target_variable: Union[TARGET_VARIABLE, List[TARGET_VARIABLE]] = 'subbytes',
             variable_key: bool = False,
             cropped_traces: bool = False,
-            binary_trace_file: bool = False,
+            binary_trace_file: bool = True,
     ):
         self.config = ASCADv1_Config(
             root=root,
@@ -144,22 +144,20 @@ class ASCADv1_NumpyDataset(Base_NumpyDataset):
                 self.plaintexts = np.array(database['metadata']['plaintext'], dtype=np.uint8)
                 self.masks = np.array(database['metadata']['masks'], dtype=np.uint8)
 
-    def get_trace_mean_and_variance(self, use_progress_bar: bool = False) -> Tuple[np.ndarray, np.ndarray]:
+    def get_trace_statistics(self, use_progress_bar: bool = False) -> Dict[str, NDArray[np.floating]]:
         cache_path = self.config.root / (self.data_path.name.split('.')[0] + '.stats-cache.npz')
         if not cache_path.exists():
-            mean, var = compute_trace_mean_and_variance(self, chunk_size=4096, use_progress_bar=use_progress_bar)
-            np.savez(cache_path, mean=mean, var=var)
+            trace_mean, trace_var, trace_min, trace_max = compute_trace_statistics(self, chunk_size=4096, use_progress_bar=use_progress_bar)
+            np.savez(cache_path, mean=trace_mean, var=trace_var, min=trace_min, max=trace_max)
         cache = np.load(cache_path, allow_pickle=True)
-        mean = cache['mean']
-        var = cache['var']
-        return mean, var
+        return cache
     
     def compute_intermediate_variables(
             self,
-            key: np.ndarray,
-            plaintext: np.ndarray,
-            masks: np.ndarray
-    ) -> Dict[str, np.ndarray]:
+            key: NDArray[np.uint8],
+            plaintext: NDArray[np.uint8],
+            masks: NDArray[np.uint8]
+    ) -> Dict[str, NDArray[np.uint8]]:
         r = masks[..., self.config.target_byte]
         r_in = masks[..., -2, np.newaxis]
         r_out = masks[..., -1, np.newaxis]
@@ -180,10 +178,10 @@ class ASCADv1_NumpyDataset(Base_NumpyDataset):
         }
         return intermediate_variables
     
-    def __getitem__(self, _idx: Union[int, slice, np.ndarray, Sequence[int]]) -> Tuple[np.ndarray, np.ndarray, Dict[str, np.ndarray]]:
+    def __getitem__(self, _idx: Union[int, slice, NDArray[np.integer], Sequence[int]]) -> Tuple[NDArray[np.floating], NDArray[np.integer], Dict[str, NDArray[np.integer]]]:
         if isinstance(_idx, slice):
             _idx = np.arange(*_idx.indices(len(self.trace_indices)))
-        elif isinstance(_idx, int):
+        elif isinstance(_idx, (int, np.integer)):
             _idx = np.array([_idx])
         elif not isinstance(_idx, np.ndarray):
             _idx = np.array(_idx)
@@ -218,7 +216,7 @@ class ASCADv1_TorchDataset(Base_TorchDataset, ASCADv1_NumpyDataset):
         Base_TorchDataset.__init__(self, transform=transform, target_transform=target_transform)
         ASCADv1_NumpyDataset.__init__(self, **dataset_config)
     
-    def __getitem__(self, _idx: Union[int, slice, np.ndarray, Sequence[int]]) -> Tuple[torch.Tensor, torch.Tensor, Dict[str, torch.Tensor]]:
+    def __getitem__(self, _idx: Union[int, slice, NDArray[np.integer], Sequence[int]]) -> Tuple[torch.Tensor, torch.Tensor, Dict[str, torch.Tensor]]:
         trace, target, intermediate_variables = ASCADv1_NumpyDataset.__getitem__(self, _idx)
         trace = torch.from_numpy(trace).to(torch.float32)
         target = torch.from_numpy(target).to(torch.long)

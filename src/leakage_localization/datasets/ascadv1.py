@@ -134,7 +134,10 @@ class ASCADv1_NumpyDataset(Base_NumpyDataset):
             if self.config.partition == 'profile':
                 self.trace_indices = np.arange(50000)
             elif self.config.partition == 'attack':
-                self.trace_indices = np.arange(50000, 60000)
+                if self.binary_trace_file:
+                    self.trace_indices = np.arange(10000)
+                else:
+                    self.trace_indices = np.arange(50000, 60000)
             else:
                 assert False
             if self.config.cropped_traces:

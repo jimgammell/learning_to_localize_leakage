@@ -13,7 +13,8 @@ def visualize_snr_for_ascadv1(
         *,
         dataset_id: DATASET,
         partition_id: PARTITION,
-        dest: Path
+        dest: Path,
+        overwrite: bool
 ):
     assert dataset_id in ['ascadv1-fixed', 'ascadv1-variable']
     from leakage_localization.datasets.ascadv1 import repr_target, TARGET_BYTE, TARGET_VARIABLE

@@ -11,7 +11,8 @@ def compute_snr_for_dataset(
         *,
         dataset_id: DATASET,
         partition_id: PARTITION,
-        dest: Path
+        dest: Path,
+        overwrite: bool
 ):
     if dataset_id == 'ascadv1-fixed':
         from leakage_localization.datasets.ascadv1 import ASCADv1_NumpyDataset, TARGET_VARIABLE

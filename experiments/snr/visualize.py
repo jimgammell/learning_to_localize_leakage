@@ -44,10 +44,11 @@ def visualize_snr_for_dataset(
         *,
         dataset_id: DATASET,
         partition_id: PARTITION,
-        dest: Path
+        dest: Path,
+        overwrite: bool
 ):
     if dataset_id in ['ascadv1-fixed', 'ascadv1-variable']:
-        visualize_snr_for_ascadv1(dataset_id=dataset_id, partition_id=partition_id, dest=dest)
+        visualize_snr_for_ascadv1(dataset_id=dataset_id, partition_id=partition_id, dest=dest, overwrite=overwrite)
 
 if __name__ == '__main__':
     main(visualize_snr_for_dataset)

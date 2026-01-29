@@ -13,7 +13,9 @@ dependencies = [
     "scikit-learn",
     "pyyaml",
     "einops",
-    "h5py"
+    "h5py",
+    "numba",
+    "colorcet"
 ]
 requires-python = "==3.11.*"
 authors = [

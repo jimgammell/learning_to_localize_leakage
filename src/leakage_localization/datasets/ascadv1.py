@@ -13,7 +13,7 @@ from .base_dataset import Base_NumpyDataset, Base_TorchDataset
 from .compute_trace_statistics import compute_trace_statistics
 from .convert_hdf5_to_binary import convert_hdf5_to_binary
 
-BYTES = Literal[
+TARGET_BYTE = Literal[
     0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15
 ]
 TARGET_VARIABLE = Literal[
@@ -28,11 +28,43 @@ TARGET_VARIABLE = Literal[
     'plaintext'
 ]
 
+def repr_target(variable: TARGET_VARIABLE, byte: Optional[TARGET_BYTE] = None) -> str:
+    assert variable in get_args(TARGET_VARIABLE)
+    if byte is not None:
+        assert byte in get_args(TARGET_BYTE)
+    sbox_repr = r'\operatorname{Sbox}'
+    k_repr = f'k_{byte}' if byte is not None else 'k'
+    w_repr = f'w_{byte}' if byte is not None else 'w'
+    r_repr = f'r_{byte}' if byte is not None else 'r'
+    r_in_repr = r'r_{\mathrm{in}}'
+    r_out_repr = r'r_{\mathrm{out}}'
+    if variable == 'subbytes':
+        rv = f'${sbox_repr}({w_repr} \\oplus {k_repr})$'
+    elif variable == 'r_in':
+        rv = f'${r_in_repr}$'
+    elif variable == 'r':
+        rv = f'${r_repr}$'
+    elif variable == 'r_out':
+        rv = f'${r_out_repr}$'
+    elif variable == 'p__xor__k__xor__r_in':
+        rv = f'${w_repr} \\oplus {k_repr} \\oplus {r_in_repr}$'
+    elif variable == 'subbytes__xor__r':
+        rv = f'${sbox_repr}({w_repr} \\oplus {k_repr}) \\oplus {r_repr}$'
+    elif variable == 'subbytes__xor__r_out':
+        rv = f'${sbox_repr}({w_repr} \\oplus {k_repr}) \\oplus {r_out_repr}$'
+    elif variable == 'key':
+        rv = f'${k_repr}$'
+    elif variable == 'plaintext':
+        rv = f'${w_repr}$'
+    else:
+        assert False
+    return rv
+
 @dataclass
 class ASCADv1_Config:
     root: Union[str, Path]
     partition: PARTITION
-    target_byte: Union[int, Sequence[int]] = 2
+    target_byte: Union[TARGET_BYTE, Sequence[TARGET_BYTE]] = 2
     target_variable: Union[TARGET_VARIABLE, Sequence[TARGET_VARIABLE]] = 'subbytes'
     variable_key: bool = False
     cropped_traces: bool = True
@@ -45,7 +77,7 @@ class ASCADv1_Config:
         if isinstance(self.target_byte, int):
             self.target_byte = [self.target_byte]
         self.target_byte = np.array(self.target_byte)
-        assert all(x in get_args(BYTES) for x in self.target_byte)
+        assert all(x in get_args(TARGET_BYTE) for x in self.target_byte)
         if isinstance(self.target_variable, str):
             self.target_variable = [self.target_variable]
         self.target_variable = np.array(self.target_variable)
@@ -60,7 +92,7 @@ class ASCADv1_NumpyDataset(Base_NumpyDataset):
             *,
             root: Union[str, Path],
             partition: PARTITION,
-            target_byte: Union[int, List[int]] = 2,
+            target_byte: Union[TARGET_BYTE, List[TARGET_BYTE]] = 2,
             target_variable: Union[TARGET_VARIABLE, List[TARGET_VARIABLE]] = 'subbytes',
             variable_key: bool = False,
             cropped_traces: bool = False,

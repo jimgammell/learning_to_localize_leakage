@@ -6,6 +6,7 @@ from matplotlib import pyplot as plt
 import torch
 
 from . import directories
+from . import mpl_constants
 
 SEED: int = 0
 
@@ -33,4 +34,4 @@ def init(clargs: Optional[Dict[str, Any]] = None):
 
 init()
 from .directories import *
-__all__ = ['set_seed', 'init', *directories.__all__]
+from .mpl_constants import *

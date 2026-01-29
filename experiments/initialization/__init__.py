@@ -1,5 +1,5 @@
 import random
-from typing import Optional
+from typing import Optional, Dict, Any
 
 import numpy as np
 from matplotlib import pyplot as plt
@@ -18,7 +18,7 @@ def set_seed(seed: Optional[int] = None):
     np.random.seed(SEED)
     torch.manual_seed(SEED)
 
-def init():
+def init(clargs: Optional[Dict[str, Any]] = None):
     plt.rcParams.update({
         'font.size': 10,
         'font.family': 'Times New Roman',
@@ -28,5 +28,9 @@ def init():
     torch.backends.cudnn.benchmark = True
     torch.set_float32_matmul_precision('high')
     set_seed()
+    directory_config = directories.load_directory_config()
+    directories.init_directories(clargs, directory_config)
 
+init()
+from .directories import *
 __all__ = ['set_seed', 'init', *directories.__all__]

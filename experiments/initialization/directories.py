@@ -34,8 +34,13 @@ def load_directory_config() -> Dict[str, Path]:
         directories = yaml.safe_load(config_file)
         return directories
 
-def init_directories(clargs: Dict[str, str], config: Dict[str, str]):
+def init_directories(clargs: Optional[Dict[str, str]] = None, config: Optional[Dict[str, str]] = None):
     global ASCADV1_FIXED_ROOT, ASCADV1_VARIABLE_ROOT, DOWNLOADS_CACHE_ROOT, OUTPUTS_ROOT
+    assert (clargs is not None) or (config is not None)
+    if clargs is None:
+        clargs = dict()
+    if config is None:
+        config = dict()
     for dirkey, dirpath in config.items():
         if dirkey == 'ascadv1-fixed-root':
             ASCADV1_FIXED_ROOT = Path(dirpath)

@@ -6,6 +6,7 @@ build-backend = "setuptools.build_meta"
 name = "leakage-localization"
 version = "2026.0"
 dependencies = [
+    "tqdm",
     "torch",
     "numpy",
     "matplotlib",

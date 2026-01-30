@@ -1,4 +1,4 @@
-ascadv1-fixed-root: null
-ascadv1-variable-root: null
-downloads-cache-root: null
-outputs-root: null
+ascadv1-fixed-root: ./datasets/ascadv1_fixed/
+ascadv1-variable-root: ./datasets/ascadv1_variable/
+downloads-cache-root: ./downloads_cache/
+outputs-root: ./outputs/

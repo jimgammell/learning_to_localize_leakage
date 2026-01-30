@@ -20,7 +20,7 @@ def main(
     partition_id: PARTITION = args.partition
     dest: Optional[Path] = args.dest
     if dest is None:
-        dest = OUTPUTS_ROOT / f'{dataset_id}_snr'
+        dest = OUTPUTS_ROOT / f'{dataset_id}'.replace('-', '_') / 'snr'
     dest.mkdir(exist_ok=True, parents=True)
     overwrite: bool = args.overwrite
 

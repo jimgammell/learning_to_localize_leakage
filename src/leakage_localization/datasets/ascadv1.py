@@ -177,10 +177,25 @@ class ASCADv1_NumpyDataset(Base_NumpyDataset):
             self.traces = np.memmap(self.binary_trace_filename, dtype=np.int8, mode='r', shape=(self.trace_count, self.timestep_count), order='C')
         if self.keys is None or self.plaintexts is None or self.masks is None:
             assert self.data_path.exists()
+            if self.config.variable_key:
+                if self.config.partition == 'profile':
+                    indices = np.concatenate([np.arange(0, 300000, 3), np.arange(1, 300000, 3)])
+                    indices.sort()
+                elif self.config.partition == 'attack':
+                    indices = np.arange(2, 300000, 3)
+                else:
+                    assert False
+            else:
+                if self.config.partition == 'profile':
+                    indices = np.arange(0, 50000)
+                elif self.config.partition == 'attack':
+                    indices = np.arange(50000, 60000)
+                else:
+                    assert False
             with h5py.File(self.data_path, 'r') as database:
-                self.keys = np.array(database['metadata']['key'], dtype=np.uint8)
-                self.plaintexts = np.array(database['metadata']['plaintext'], dtype=np.uint8)
-                self.masks = np.array(database['metadata']['masks'], dtype=np.uint8)
+                self.keys = np.array(database['metadata']['key'][indices, ...], dtype=np.uint8)
+                self.plaintexts = np.array(database['metadata']['plaintext'][indices, ...], dtype=np.uint8)
+                self.masks = np.array(database['metadata']['masks'][indices, ...], dtype=np.uint8)
 
     def get_trace_statistics(self, use_progress_bar: bool = False) -> Dict[str, NDArray[np.floating]]:
         cache_path = self.config.root / (self.data_path.name.split('.')[0] + '.stats-cache.npz')
@@ -196,7 +211,10 @@ class ASCADv1_NumpyDataset(Base_NumpyDataset):
             plaintext: NDArray[np.uint8],
             masks: NDArray[np.uint8]
     ) -> Dict[str, NDArray[np.uint8]]:
-        r = masks[..., self.config.target_byte]
+        if not self.config.variable_key:
+            r = np.concatenate([np.zeros((*masks.shape[:-1], 2), dtype=np.uint8), masks[..., :-2]], axis=-1)
+        else:
+            r = masks[..., :-2]
         r_in = masks[..., -2, np.newaxis]
         r_out = masks[..., -1, np.newaxis]
         subbytes = aes.SBOX[key ^ plaintext]

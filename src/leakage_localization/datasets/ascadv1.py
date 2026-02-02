@@ -109,19 +109,6 @@ class ASCADv1_NumpyDataset(Base_NumpyDataset):
         self.binary_trace_file = binary_trace_file
 
         if self.config.variable_key:
-            if self.config.partition == 'profile':
-                if self.binary_trace_file:
-                    self.trace_indices = np.arange(200000)
-                else:
-                    self.trace_indices = np.concatenate([np.arange(0, 300000, 3), np.arange(1, 300000, 3)])
-                    self.trace_indices.sort()
-            elif self.config.partition == 'attack':
-                if self.binary_trace_file:
-                    self.trace_indices = np.arange(100000)
-                else:
-                    self.trace_indices = np.arange(2, 300000, 3)
-            else:
-                assert False
             if self.config.cropped_traces:
                 self.timestep_count = 1400
                 self.data_path = self.config.root / 'ascad-variable.h5'
@@ -130,16 +117,13 @@ class ASCADv1_NumpyDataset(Base_NumpyDataset):
                 self.timestep_count = 250000
                 self.data_path = self.config.root / 'atmega8515-raw-traces.h5'
                 self.checksum = '6f13d7c380c937892c09b439910c4313d551adf011d2f4d76ad8b9b3de27b852'
-        else:
             if self.config.partition == 'profile':
-                self.trace_indices = np.arange(50000)
+                self.trace_count = 200000
             elif self.config.partition == 'attack':
-                if self.binary_trace_file:
-                    self.trace_indices = np.arange(10000)
-                else:
-                    self.trace_indices = np.arange(50000, 60000)
+                self.trace_count = 100000
             else:
                 assert False
+        else:
             if self.config.cropped_traces:
                 self.timestep_count = 700
                 self.data_path = self.config.root / 'ASCAD_data' / 'ASCAD_databases' / 'ASCAD.h5'
@@ -148,6 +132,12 @@ class ASCADv1_NumpyDataset(Base_NumpyDataset):
                 self.timestep_count = 100000
                 self.data_path = self.config.root / 'ASCAD_data' / 'ASCAD_databases' / 'ATMega8515_raw_traces.h5'
                 self.checksum = '51e722f6c63a590ce2c4633c9a9534e8e1b22a9cde8e4532e32c11ac089d4625'
+            if self.config.partition == 'profile':
+                self.trace_count = 50000
+            elif self.config.partition == 'attack':
+                self.trace_count = 10000
+            else:
+                assert False
         if not self.data_path.exists():
             raise RuntimeError(f'Failed to find data file at {self.data_path}. Please follow instructions in README.md to download it.')
         checksum_passed_file = self.config.root / (self.data_path.name.split('.')[0] + '.checksum-passed')
@@ -156,7 +146,7 @@ class ASCADv1_NumpyDataset(Base_NumpyDataset):
                 raise RuntimeError(f'Checksum mismatch for file at {self.data_path}. File might be corrupt or incorrect.')
             with open(checksum_passed_file, 'w') as _:
                 pass
-        self.trace_count = len(self.trace_indices)
+        self.trace_indices = self.get_row_indices(h5=self.binary_trace_file)
 
         self.traces = None
         self.keys = None
@@ -166,10 +156,44 @@ class ASCADv1_NumpyDataset(Base_NumpyDataset):
             self.binary_trace_filename = self.config.root / (self.data_path.name.split('.')[0] + f'.{self.config.partition}.dat')
             self.generate_trace_binary_file(use_progress_bar=True)
     
+    def get_row_indices(self, h5: bool = False) -> NDArray[np.int64]:
+        if h5:
+            if self.config.variable_key:
+                if self.config.partition == 'profile':
+                    rv = np.concatenate([np.arange(0, 300000, 3), np.arange(1, 300000, 3)])
+                    rv.sort()
+                    return rv
+                elif self.config.partition == 'attack':
+                    return np.arange(2, 300000, 3)
+                else:
+                    assert False
+            else:
+                if self.config.partition == 'profile':
+                    return np.arange(0, 50000)
+                elif self.config.partition == 'attack':
+                    return np.arange(50000, 60000)
+                else:
+                    assert False
+        else:
+            if self.config.variable_key:
+                if self.config.partition == 'profile':
+                    return np.arange(200000)
+                elif self.config.partition == 'attack':
+                    return np.arange(100000)
+                else:
+                    assert False
+            else:
+                if self.config.partition == 'profile':
+                    return np.arange(50000)
+                elif self.config.partition == 'attack':
+                    return np.arange(10000)
+                else:
+                    assert False
+
     def generate_trace_binary_file(self, use_progress_bar: bool = False):
         if not self.binary_trace_filename.exists():
             with h5py.File(self.data_path, 'r') as database:
-                convert_hdf5_to_binary(database['traces'], self.binary_trace_filename, indices=self.trace_indices, chunk_size=4096, use_progress_bar=use_progress_bar)
+                convert_hdf5_to_binary(database['traces'], self.binary_trace_filename, indices=self.get_row_indices(h5=True), chunk_size=4096, use_progress_bar=use_progress_bar)
     
     def init_data(self):
         if self.traces is None:

@@ -15,7 +15,8 @@ dependencies = [
     "einops",
     "h5py",
     "numba",
-    "colorcet"
+    "colorcet",
+    "rotary-embedding-torch",
 ]
 requires-python = "==3.11.*"
 authors = [

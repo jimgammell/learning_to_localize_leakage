@@ -60,6 +60,16 @@ def repr_target(variable: TARGET_VARIABLE, byte: Optional[TARGET_BYTE] = None) -
         assert False
     return rv
 
+def target_preds_to_key_preds(
+        target_preds: NDArray[np.floating],
+        intermediate_variables: Dict[str, NDArray[np.uint8]]
+) -> NDArray[np.floating]:
+    plaintext = intermediate_variables['plaintext']
+    key_candidates = np.arange(256, dtype=np.uint8)
+    target_indices = aes.SBOX[key_candidates ^ plaintext[..., np.newaxis]]
+    key_preds = np.take_along_axis(target_preds, target_indices.astype(np.intp), axis=-1)
+    return key_preds
+
 @dataclass
 class ASCADv1_Config:
     root: Union[str, Path]

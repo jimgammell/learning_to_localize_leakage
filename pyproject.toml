@@ -17,6 +17,7 @@ dependencies = [
     "numba",
     "colorcet",
     "rotary-embedding-torch",
+    "lightning"
 ]
 requires-python = "==3.11.*"
 authors = [

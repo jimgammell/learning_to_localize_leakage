@@ -27,7 +27,7 @@ def compute_trace_statistics(
     for _ in range(ceil(row_count/chunk_size)):
         end_idx = min(start_idx + chunk_size, row_count)
         added_count = end_idx - start_idx
-        chunk, _, _ = dataset[start_idx:end_idx]
+        chunk, _, _ = dataset.np_getitem(slice(start_idx, end_idx))
         trace_mean = (start_idx/end_idx)*trace_mean + (added_count/end_idx)*chunk.mean(axis=0)
         trace_min = np.concatenate([trace_min[np.newaxis, :], chunk], axis=0).min(axis=0)
         trace_max = np.concatenate([trace_max[np.newaxis, :], chunk], axis=0).max(axis=0)
@@ -41,7 +41,7 @@ def compute_trace_statistics(
     for _ in range(ceil(row_count/chunk_size)):
         end_idx = min(start_idx + chunk_size, row_count)
         added_count = end_idx - start_idx
-        chunk, _, _ = dataset[start_idx:end_idx]
+        chunk, _, _ = dataset.np_getitem(slice(start_idx, end_idx))
         trace_var = (start_idx/end_idx)*trace_var + (added_count/end_idx)*((chunk - trace_mean)**2).mean(axis=0)
         if use_progress_bar:
             progress_bar.update(end_idx - start_idx)

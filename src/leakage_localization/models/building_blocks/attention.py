@@ -10,7 +10,7 @@ from rotary_embedding_torch import RotaryEmbedding
 @dataclass
 class AttentionConfig:
     embedding_dim: int
-    head_count: Optional[int] = None
+    head_count: Optional[int]
     dropout_rate: float
     use_bias: bool
     use_rope: bool

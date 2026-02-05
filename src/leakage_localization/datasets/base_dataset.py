@@ -36,7 +36,6 @@ class Base_TorchDataset(ABC, Dataset):
             transform: Optional[Callable[[torch.Tensor], torch.Tensor]] = None,
             target_transform: Optional[Callable[[torch.Tensor], torch.Tensor]] = None
     ):
-        super().__init__()
         self.transform = transform
         self.target_transform = target_transform
     

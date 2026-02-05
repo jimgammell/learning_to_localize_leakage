@@ -1,0 +1,44 @@
+data:
+  id: ascadv1-fixed
+  target_byte: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]
+  target_variable: subbytes
+  preprocessing: standardize
+  additive_gaussian_noise: 0.1
+  random_roll: 1000
+  val_prop: 0.2
+training:
+  total_epochs: 100
+  lr_warmup_epochs: 5
+  lr_const_epochs: 0
+  batch_size: 32
+  base_lr: 1.e-4
+  lr_decay_multiplier: 0.1
+  weight_decay: 1.e-4
+  label_smoothing: 0.
+  grad_clip_val: 1.
+  accumulate_grad_batches: 1
+  early_stop_metric: val/rank
+  compile: true
+mttd:
+  attack_count: 1000
+  traces_per_attack: 1000
+model:
+  trunk: perceiver
+  position_embedding: rope
+  pooling: attention
+  head: tied
+  patch_size: null
+  use_fourier_embed: true
+  fourier_embed_num_bands: 32
+  fourier_embed_sigma: 1.
+  embedding_dim: 256
+  expansion_factor: 4
+  trunk_blocks: 1
+  head_count: null
+  register_tokens: 0
+  input_dropout_rate: 0.
+  input_droppatch_rate: 0.1
+  hidden_dropout_rate: 0.1
+  use_bias: false
+  perceiver_latent_dim: 256
+  perceiver_self_attn_per_cross_attn_blocks: 2

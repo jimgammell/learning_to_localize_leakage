@@ -1,6 +1,7 @@
-from typing import Literal, Union, List, Optional, Callable, Tuple, Sequence, Dict, get_args
+from typing import Literal, Union, List, Optional, Callable, Tuple, Sequence, Dict, Any, get_args
 from dataclasses import dataclass
 from pathlib import Path
+from functools import partial
 
 import h5py
 import numpy as np
@@ -60,16 +61,6 @@ def repr_target(variable: TARGET_VARIABLE, byte: Optional[TARGET_BYTE] = None) -
         assert False
     return rv
 
-def target_preds_to_key_preds(
-        target_preds: NDArray[np.floating],
-        intermediate_variables: Dict[str, NDArray[np.uint8]]
-) -> NDArray[np.floating]:
-    plaintext = intermediate_variables['plaintext']
-    key_candidates = np.arange(256, dtype=np.uint8)
-    target_indices = aes.SBOX[key_candidates ^ plaintext[..., np.newaxis]]
-    key_preds = np.take_along_axis(target_preds, target_indices.astype(np.intp), axis=-1)
-    return key_preds
-
 @dataclass
 class ASCADv1_Config:
     root: Union[str, Path]
@@ -94,9 +85,13 @@ class ASCADv1_Config:
         assert all(x in get_args(TARGET_VARIABLE) for x in self.target_variable)
         assert isinstance(self.variable_key, bool)
         assert isinstance(self.cropped_traces, bool)
+        self.num_labels = len(self.target_byte)*len(self.target_variable)
+        self.num_classes = 256
 
 # wrapper around raw data without any PyTorch functionality
 class ASCADv1_NumpyDataset(Base_NumpyDataset):
+    int_var_keys = get_args(TARGET_VARIABLE)
+
     def __init__(
             self,
             *,
@@ -165,6 +160,17 @@ class ASCADv1_NumpyDataset(Base_NumpyDataset):
         if self.binary_trace_file:
             self.binary_trace_filename = self.config.root / (self.data_path.name.split('.')[0] + f'.{self.config.partition}.dat')
             self.generate_trace_binary_file(use_progress_bar=True)
+    
+    @staticmethod
+    def target_preds_to_key_preds(
+            target_preds: NDArray[np.floating],
+            intermediate_variables: Dict[str, NDArray[np.uint8]]
+    ) -> NDArray[np.floating]:
+        plaintext = intermediate_variables['plaintext']
+        key_candidates = np.arange(256, dtype=np.uint8)
+        target_indices = aes.SBOX[key_candidates ^ plaintext[..., np.newaxis]]
+        key_preds = np.take_along_axis(target_preds, target_indices.astype(np.intp), axis=-1)
+        return key_preds
     
     def get_row_indices(self, h5: bool = False) -> NDArray[np.int64]:
         if h5:
@@ -268,7 +274,7 @@ class ASCADv1_NumpyDataset(Base_NumpyDataset):
         }
         return intermediate_variables
     
-    def __getitem__(self, _idx: Union[int, slice, NDArray[np.integer], Sequence[int]]) -> Tuple[NDArray[np.floating], NDArray[np.integer], Dict[str, NDArray[np.integer]]]:
+    def np_getitem(self, _idx: Union[int, slice, NDArray[np.integer], Sequence[int]]) -> Tuple[NDArray[np.floating], NDArray[np.integer], Dict[str, NDArray[np.integer]]]:
         if isinstance(_idx, slice):
             _idx = np.arange(*_idx.indices(len(self.trace_indices)))
         elif isinstance(_idx, (int, np.integer)):
@@ -277,6 +283,8 @@ class ASCADv1_NumpyDataset(Base_NumpyDataset):
             _idx = np.array(_idx)
         if not ((0 <= _idx).all() and (_idx < len(self.trace_indices)).all()):
             raise IndexError
+        if len(_idx) == 1:
+            _idx = _idx[0]
         self.init_data()
         idx = self.trace_indices[_idx]
         trace = self.traces[idx, :]
@@ -288,8 +296,11 @@ class ASCADv1_NumpyDataset(Base_NumpyDataset):
             intermediate_variables[target_variable][..., 0, np.newaxis] if target_variable in ['r_in', 'r_out']
             else intermediate_variables[target_variable][..., self.config.target_byte]
             for target_variable in self.config.target_variable
-        ], axis=-2)
+        ], axis=-1)
         return trace, target, intermediate_variables
+    
+    def __getitem__(self, *args, **kwargs) -> Any:
+        return self.np_getitem(*args, **kwargs)
     
     def __repr__(self) -> str:
         return f'{self.__class__.__name__}(' + ', '.join((
@@ -312,11 +323,14 @@ class ASCADv1_TorchDataset(Base_TorchDataset, ASCADv1_NumpyDataset):
     
     def __getitem__(self, _idx: Union[int, slice, NDArray[np.integer], Sequence[int]]) -> Tuple[torch.Tensor, torch.Tensor, Dict[str, torch.Tensor]]:
         trace, target, intermediate_variables = ASCADv1_NumpyDataset.__getitem__(self, _idx)
-        trace = torch.from_numpy(trace).to(torch.float32)
-        target = torch.from_numpy(target).to(torch.long)
-        intermediate_variables = {k: torch.from_numpy(v).to(torch.long) for k, v in intermediate_variables.items()}
+        trace = torch.tensor(trace, dtype=torch.float32)
+        target = torch.tensor(target, dtype=torch.long)
+        intermediate_variables = {k: torch.tensor(v, dtype=torch.long) for k, v in intermediate_variables.items()}
         if self.transform is not None:
             trace = self.transform(trace)
         if self.target_transform is not None:
             target = self.target_transform(target)
         return trace, target, intermediate_variables
+    
+    def __len__(self) -> int:
+        return ASCADv1_NumpyDataset.__len__(self)

@@ -33,7 +33,7 @@ def get_rank(
         assert isinstance(targets, np.ndarray)
         targets = targets.astype(np.int64)
     *batch_dims, class_count = preds.shape
-    assert batch_dims == targets.shape
+    assert batch_dims == list(targets.shape)
     batch_size = np.prod(batch_dims, dtype=np.int64)
     preds = preds.reshape(batch_size, class_count)
     targets = targets.reshape(batch_size)
@@ -44,7 +44,7 @@ def get_rank(
 
 def get_rank_torch(preds: torch.Tensor, targets: torch.Tensor) -> torch.Tensor:
     *batch_dims, class_count = preds.shape
-    assert batch_dims == targets.shape
+    assert batch_dims == list(targets.shape)
     preds = preds.reshape(-1, class_count)
     targets = targets.reshape(-1)
     correct_logit = preds.gather(1, targets[:, None])

@@ -1,11 +1,13 @@
 from typing import Literal, Optional, List, get_args
 from dataclasses import dataclass
+from math import sqrt
 
 import torch
 from torch import nn
 
 from .building_blocks.feature_preprocessing import Embed, FourierEmbed, Patchifier
 from .building_blocks.pooling import AttentionPool, AveragePool, TokenPool
+from .building_blocks.attention import SelfAttention, CrossAttention
 from .trunks.transformer import TransformerTrunk
 from .trunks.perceiver import PerceiverTrunk
 
@@ -102,6 +104,7 @@ class Model(nn.Module):
             trunk: TRUNK,
             position_embedding: POSITION_EMBEDDING,
             pooling: POOLING,
+            head: HEAD,
             patch_size: Optional[int],
             use_fourier_embed: bool,
             fourier_embed_num_bands: Optional[int],
@@ -117,7 +120,6 @@ class Model(nn.Module):
             input_droppatch_rate: float,
             hidden_dropout_rate: float,
             use_bias: bool,
-            use_rope: bool,
     ):
         super().__init__()
 
@@ -128,6 +130,7 @@ class Model(nn.Module):
             trunk=trunk,
             position_embedding=position_embedding,
             pooling=pooling,
+            head=head,
             patch_size=patch_size,
             use_fourier_embed=use_fourier_embed,
             fourier_embed_num_bands=fourier_embed_num_bands,
@@ -143,12 +146,11 @@ class Model(nn.Module):
             input_droppatch_rate=input_droppatch_rate,
             hidden_dropout_rate=hidden_dropout_rate,
             use_bias=use_bias,
-            use_rope=use_rope,
         )
 
         if self.config.use_fourier_embed:
             self.fourier_embedding = FourierEmbed(
-                in_dims=self.config.input_length,
+                in_dims=1,
                 num_bands=self.config.fourier_embed_num_bands,
                 sigma=self.config.fourier_embed_sigma
             )
@@ -204,6 +206,7 @@ class Model(nn.Module):
                 head_count=self.config.head_count,
                 dropout_rate=self.config.hidden_dropout_rate,
                 use_bias=self.config.use_bias,
+                expansion_factor=self.config.expansion_factor
             )
         elif self.config.pooling == 'average':
             self.pool = AveragePool(
@@ -219,7 +222,7 @@ class Model(nn.Module):
             assert False
         
         if self.config.head == 'tied':
-            self.head = nn.Linear(self.config.embedding_dim, self.config.output_dim)
+            self.heads = nn.Linear(self.config.embedding_dim, self.config.output_dim)
         elif self.config.head == 'untied':
             self.heads = nn.ModuleList([
                 nn.Linear(self.config.embedding_dim, self.config.output_dim)
@@ -227,13 +230,35 @@ class Model(nn.Module):
             ])
         else:
             assert False
+        
+        for mod in self.modules():
+            if isinstance(mod, nn.Linear):
+                nn.init.trunc_normal_(mod.weight, std=0.02)
+                if mod.bias is not None:
+                    nn.init.zeros_(mod.bias)
+            if isinstance(mod, nn.LayerNorm):
+                nn.init.ones_(mod.weight)
+                if mod.bias is not None:
+                    nn.init.zeros_(mod.bias)
+        if self.config.trunk == 'perceiver':
+            layer_count = self.config.trunk_blocks*(1 + self.config.perceiver_self_attn_per_cross_attn_blocks)
+        elif self.config.trunk == 'transformer':
+            layer_count = self.config.trunk_blocks
+        else:
+            assert False
+        for mod in self.heads.modules():
+            if isinstance(mod, (SelfAttention, CrossAttention)):
+                nn.init.trunc_normal_(mod.to_out.weight, std=0.02/sqrt(2*layer_count))
+        for mod in self.heads.modules():
+            if isinstance(mod, nn.Linear):
+                nn.init.xavier_uniform_(mod.weight)
     
     def forward(self, x: torch.Tensor, attn_mask: Optional[torch.Tensor] = None) -> torch.Tensor:
-        batch_size, seq_len, *_ = x.shape
+        batch_size, _, seq_len = x.shape
         device = x.device
         if attn_mask is not None:
             attn_mask = attn_mask.squeeze()
-        x = x.reshape(batch_size, seq_len, 1)
+        x = x.permute(0, 2, 1)
         if self.config.input_dropout_rate > 0:
             x = nn.functional.dropout(x, p=self.config.input_dropout_rate, training=self.training)
         if self.config.use_fourier_embed:
@@ -263,7 +288,7 @@ class Model(nn.Module):
         x = self.trunk(x, attn_mask=attn_mask)
         x = self.pool(x)
         if self.config.head == 'tied':
-            x = self.head(x)
+            x = self.heads(x)
         elif self.config.head == 'untied':
             x = torch.cat([
                 head(xp) for head, xp in zip(self.heads, x.unbind(dim=1))

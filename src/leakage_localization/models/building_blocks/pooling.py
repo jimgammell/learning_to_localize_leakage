@@ -43,7 +43,7 @@ class AttentionPool(CrossAttentionBlock):
         kwargs['use_rope'] = False
         super().__init__(**kwargs)
 
-        self.pre_query = nn.Parameter(torch.empty((output_tokens, self.config.embedding_dim,)))
+        self.pre_query = nn.Parameter(torch.empty((output_tokens, kwargs['embedding_dim'])))
         nn.init.trunc_normal_(self.pre_query, std=0.02)
     
     def forward(self, x: torch.Tensor, attn_mask: Optional[torch.Tensor] = None) -> torch.Tensor:

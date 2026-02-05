@@ -162,6 +162,7 @@ cython_debug/
 #.idea/
 
 experiments/local_config/directories.yaml
-datasets
+/datasets/
+!/src/**/datasets/
 downloads_cache
 outputs

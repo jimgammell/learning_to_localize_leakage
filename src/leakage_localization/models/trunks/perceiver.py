@@ -1,9 +1,14 @@
-from typing import Optional
+from typing import Optional, Literal
 
 import torch
 from torch import nn
 
 from ..building_blocks.blocks import SelfAttentionBlock, CrossAttentionBlock
+
+FNN_STYLE = Literal[
+    'mlp',
+    'gated'
+]
 
 class PerceiverBlock(nn.Module):
     def __init__(
@@ -16,6 +21,7 @@ class PerceiverBlock(nn.Module):
             use_bias: bool,
             use_rope: bool,
             expansion_factor: int,
+            fnn_style: FNN_STYLE,
     ):
         super().__init__()
 
@@ -25,7 +31,8 @@ class PerceiverBlock(nn.Module):
             dropout_rate=dropout_rate,
             use_bias=use_bias,
             use_rope=use_rope,
-            expansion_factor=expansion_factor
+            expansion_factor=expansion_factor,
+            fnn_style=fnn_style
         )
         self.self_attn_blocks = nn.ModuleList([
             SelfAttentionBlock(
@@ -34,7 +41,8 @@ class PerceiverBlock(nn.Module):
                 dropout_rate=dropout_rate,
                 use_bias=use_bias,
                 use_rope=use_rope,
-                expansion_factor=expansion_factor
+                expansion_factor=expansion_factor,
+                fnn_style=fnn_style
             ) for _ in range(self_attn_blocks)
         ])
     
@@ -57,6 +65,7 @@ class PerceiverTrunk(nn.Module):
             use_bias: bool,
             use_rope: bool,
             expansion_factor: int,
+            fnn_style: FNN_STYLE,
     ):
         super().__init__()
 
@@ -70,7 +79,8 @@ class PerceiverTrunk(nn.Module):
                 dropout_rate=dropout_rate,
                 use_bias=use_bias,
                 use_rope=use_rope,
-                expansion_factor=expansion_factor
+                expansion_factor=expansion_factor,
+                fnn_style=fnn_style
             ) for _ in range(perceiver_blocks)
         ])
     

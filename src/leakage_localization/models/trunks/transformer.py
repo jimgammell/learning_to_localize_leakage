@@ -1,9 +1,14 @@
-from typing import Optional
+from typing import Optional, Literal
 
 import torch
 from torch import nn
 
 from ..building_blocks.blocks import SelfAttentionBlock
+
+FNN_STYLE = Literal[
+    'mlp',
+    'gated'
+]
 
 class TransformerTrunk(nn.Module):
     def __init__(
@@ -15,7 +20,8 @@ class TransformerTrunk(nn.Module):
             dropout_rate: float,
             use_bias: bool,
             use_rope: bool,
-            expansion_factor: int
+            expansion_factor: int,
+            fnn_style: FNN_STYLE
     ):
         super().__init__()
 
@@ -26,7 +32,8 @@ class TransformerTrunk(nn.Module):
                 dropout_rate=dropout_rate,
                 use_bias=use_bias,
                 use_rope=use_rope,
-                expansion_factor=expansion_factor
+                expansion_factor=expansion_factor,
+                fnn_style=fnn_style
             ) for _ in range(transformer_blocks)
         ])
     

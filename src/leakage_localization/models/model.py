@@ -28,6 +28,10 @@ HEAD = Literal[
     'tied',
     'untied'
 ]
+FNN_STYLE = Literal[
+    'mlp',
+    'gated'
+]
 
 @dataclass
 class ModelConfig:
@@ -38,6 +42,7 @@ class ModelConfig:
     position_embedding: POSITION_EMBEDDING
     pooling: POOLING
     head: HEAD
+    fnn_style: FNN_STYLE
     patch_size: Optional[int]
     use_fourier_embed: bool
     fourier_embed_num_bands: Optional[int]
@@ -62,6 +67,7 @@ class ModelConfig:
         assert self.position_embedding in get_args(POSITION_EMBEDDING)
         assert self.pooling in get_args(POOLING)
         assert self.head in get_args(HEAD)
+        assert self.fnn_style in get_args(FNN_STYLE)
         if self.pooling == 'average':
             assert self.head == 'untied'
         if self.patch_size is not None:
@@ -105,6 +111,7 @@ class Model(nn.Module):
             position_embedding: POSITION_EMBEDDING,
             pooling: POOLING,
             head: HEAD,
+            fnn_style: FNN_STYLE,
             patch_size: Optional[int],
             use_fourier_embed: bool,
             fourier_embed_num_bands: Optional[int],
@@ -131,6 +138,7 @@ class Model(nn.Module):
             position_embedding=position_embedding,
             pooling=pooling,
             head=head,
+            fnn_style=fnn_style,
             patch_size=patch_size,
             use_fourier_embed=use_fourier_embed,
             fourier_embed_num_bands=fourier_embed_num_bands,
@@ -184,7 +192,8 @@ class Model(nn.Module):
                 dropout_rate=self.config.hidden_dropout_rate,
                 use_bias=self.config.use_bias,
                 use_rope=self.config.position_embedding == 'rope',
-                expansion_factor=self.config.expansion_factor
+                expansion_factor=self.config.expansion_factor,
+                fnn_style=self.config.fnn_style
             )
         elif self.config.trunk == 'transformer':
             self.trunk = TransformerTrunk(
@@ -194,7 +203,8 @@ class Model(nn.Module):
                 dropout_rate=self.config.hidden_dropout_rate,
                 use_bias=self.config.use_bias,
                 use_rope=self.config.position_embedding == 'rope',
-                expansion_factor=self.config.expansion_factor
+                expansion_factor=self.config.expansion_factor,
+                fnn_style=self.config.fnn_style
             )
         else:
             assert False
@@ -206,7 +216,8 @@ class Model(nn.Module):
                 head_count=self.config.head_count,
                 dropout_rate=self.config.hidden_dropout_rate,
                 use_bias=self.config.use_bias,
-                expansion_factor=self.config.expansion_factor
+                expansion_factor=self.config.expansion_factor,
+                fnn_style=self.config.fnn_style
             )
         elif self.config.pooling == 'average':
             self.pool = AveragePool(

@@ -80,6 +80,7 @@ def construct_training_module(
             'position_embedding': config['model']['position_embedding'],
             'pooling': config['model']['pooling'],
             'head': config['model']['head'],
+            'fnn_style': config['model']['fnn_style'],
             'patch_size': config['model']['patch_size'],
             'use_fourier_embed': config['model']['use_fourier_embed'],
             'fourier_embed_num_bands': config['model']['fourier_embed_num_bands'],

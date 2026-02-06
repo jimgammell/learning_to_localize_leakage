@@ -27,6 +27,7 @@ model:
   position_embedding: learned
   pooling: attention
   head: tied
+  fnn_style: gated
   patch_size: null
   use_fourier_embed: false
   fourier_embed_num_bands: null

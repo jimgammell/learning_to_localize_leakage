@@ -166,3 +166,5 @@ experiments/local_config/directories.yaml
 !/src/**/datasets/
 downloads_cache
 outputs
+.claude
+.vscode

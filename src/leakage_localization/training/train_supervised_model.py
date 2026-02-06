@@ -22,7 +22,7 @@ def train_supervised_model(
             mode=early_stop_mode,
             save_top_k=1,
             dirpath=dest,
-            filename=f'best_{early_stop_metric}',
+            filename=f'best_{early_stop_metric}'.replace('/', '_'),
             verbose=True,
             enable_version_counter=False
         )

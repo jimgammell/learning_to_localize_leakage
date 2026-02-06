@@ -10,7 +10,7 @@ training:
   total_epochs: 100
   lr_warmup_epochs: 5
   lr_const_epochs: 0
-  batch_size: 64
+  batch_size: 32
   base_lr: 2.e-4
   lr_decay_multiplier: 0.05
   weight_decay: 1.e-4
@@ -32,8 +32,8 @@ model:
   use_fourier_embed: false
   fourier_embed_num_bands: null
   fourier_embed_sigma: null
-  embedding_dim: 512
-  expansion_factor: 4
+  embedding_dim: 256
+  expansion_factor: 2
   trunk_blocks: 1
   head_count: null
   register_tokens: 0

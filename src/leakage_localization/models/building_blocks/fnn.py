@@ -71,14 +71,13 @@ class GatedFNN(nn.Module):
             use_bias=use_bias
         )
 
-        self.dense_val = nn.Linear(self.config.embedding_dim, self.config.expansion_factor*self.config.embedding_dim, bias=self.config.use_bias)
-        self.dense_gate = nn.Linear(self.config.embedding_dim, self.config.expansion_factor*self.config.embedding_dim, bias=self.config.use_bias)
-        self.dense_out = nn.Linear(self.config.expansion_factor*self.config.embedding_dim, self.config.embedding_dim, bias=self.config.use_bias)
+        self.to_gv = nn.Linear(self.config.embedding_dim, 2*self.config.expansion_factor*self.config.embedding_dim, bias=self.config.use_bias)
+        self.to_out = nn.Linear(self.config.expansion_factor*self.config.embedding_dim, self.config.embedding_dim, bias=self.config.use_bias)
     
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        val = self.dense_val(x)
-        gate = self.dense_gate(x)
-        out = self.dense_out(val * nn.functional.silu(gate))
+        gv = self.to_gv(x)
+        gate, val = gv.split(self.config.expansion_factor*self.config.embedding_dim, dim=-1)
+        out = self.to_out(val * nn.functional.silu(gate))
         if self.config.dropout_rate > 0:
             out = nn.functional.dropout(out, p=self.config.dropout_rate, training=self.training)
         return out

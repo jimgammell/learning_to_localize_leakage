@@ -10,9 +10,9 @@ training:
   total_epochs: 100
   lr_warmup_epochs: 5
   lr_const_epochs: 0
-  batch_size: 32
-  base_lr: 1.e-4
-  lr_decay_multiplier: 0.1
+  batch_size: 64
+  base_lr: 2.e-4
+  lr_decay_multiplier: 0.05
   weight_decay: 1.e-4
   label_smoothing: 0.
   grad_clip_val: 1.
@@ -24,14 +24,14 @@ mttd:
   traces_per_attack: 1000
 model:
   trunk: perceiver
-  position_embedding: rope
+  position_embedding: learned
   pooling: attention
   head: tied
   patch_size: null
-  use_fourier_embed: true
-  fourier_embed_num_bands: 32
-  fourier_embed_sigma: 1.
-  embedding_dim: 256
+  use_fourier_embed: false
+  fourier_embed_num_bands: null
+  fourier_embed_sigma: null
+  embedding_dim: 512
   expansion_factor: 4
   trunk_blocks: 1
   head_count: null

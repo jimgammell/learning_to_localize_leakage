@@ -6,6 +6,28 @@ import yaml
 
 from experiments.initialization import *
 
+def _apply_overrides(config: Dict[str, Any], overrides: list) -> None:
+    i = 0
+    while i < len(overrides):
+        arg = overrides[i]
+        if not arg.startswith('--'):
+            raise ValueError(f'Expected --key.subkey value, got: {arg}')
+        key = arg[2:]
+        if i + 1 >= len(overrides) or overrides[i + 1].startswith('--'):
+            raise ValueError(f'No value provided for override {arg}')
+        raw_value = overrides[i + 1]
+        i += 2
+        keys = key.split('.')
+        d = config
+        for k in keys[:-1]:
+            if k not in d or not isinstance(d[k], dict):
+                raise ValueError(f'Invalid config path: {key}')
+            d = d[k]
+        if keys[-1] not in d:
+            raise ValueError(f'Key {key} not found in config')
+        d[keys[-1]] = yaml.safe_load(raw_value)
+
+
 def main(
         run_fn: Callable[[Path, Dict[str, Any]], None]
 ):
@@ -14,7 +36,7 @@ def main(
     parser.add_argument('--config-file', required=True, type=str)
     parser.add_argument('--config-root', type=Path, default=LOCAL_CONFIG_ROOT)
     append_directory_clargs(parser)
-    args = parser.parse_args()
+    args, overrides = parser.parse_known_args()
 
     dest: Path = args.dest
     dest.mkdir(exist_ok=True, parents=True)
@@ -24,6 +46,8 @@ def main(
 
     with open(config_path, 'r') as f:
         config = yaml.safe_load(f)
+
+    _apply_overrides(config, overrides)
 
     run_fn(
         dest=dest,

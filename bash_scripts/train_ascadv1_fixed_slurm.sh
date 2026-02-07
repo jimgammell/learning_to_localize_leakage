@@ -6,9 +6,16 @@
 #SBATCH --gres=gpu:1
 #SBATCH --cpus-per-gpu=14
 #SBATCH --time=24:00:00
-#SBATCH --output=train-ascadv1f-perceiver.out
-#SBATCH --error=train-ascadv1f-perceiver.out
+#SBATCH --output=train-ascadv1f-perceiver-%a.out
+#SBATCH --error=train-ascadv1f-perceiver-%a.out
+#SBATCH --array=0-7
+
+LRS=(1.e-6 3.e-6 1.e-5 3.e-5 1.e-4 3.e-4 1.e-3 3.e-3)
+LR=${LRS[$SLURM_ARRAY_TASK_ID]}
 
 source ~/.bashrc
 micromamba activate leakage-localization
-bash ./bash_scripts/train_ascadv1_fixed.sh
+python -m experiments.train.supervised \
+    --dest=./outputs/ascadv1_fixed/supervised_lr${LR} \
+    --config-file=ascadv1_fixed \
+    --training.base_lr ${LR}

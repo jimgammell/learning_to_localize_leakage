@@ -25,9 +25,9 @@ class SelfAttentionBlock(nn.Module):
     ):
         super().__init__()
 
-        self.attn_norm = nn.LayerNorm(embedding_dim, eps=1e-5, elementwise_affine=True, bias=use_bias)
+        self.attn_norm = nn.LayerNorm(embedding_dim, eps=1e-5, elementwise_affine=True, bias=True)
         self.attn = SelfAttention(embedding_dim=embedding_dim, head_count=head_count, dropout_rate=dropout_rate, use_bias=use_bias, use_rope=use_rope)
-        self.fnn_norm = nn.LayerNorm(embedding_dim, eps=1e-5, elementwise_affine=True, bias=use_bias)
+        self.fnn_norm = nn.LayerNorm(embedding_dim, eps=1e-5, elementwise_affine=True, bias=True)
         if fnn_style == 'mlp':
             self.fnn = MLP(embedding_dim=embedding_dim, expansion_factor=expansion_factor, dropout_rate=dropout_rate, use_bias=use_bias)
         elif fnn_style == 'gated':
@@ -54,8 +54,8 @@ class CrossAttentionBlock(nn.Module):
     ):
         super().__init__()
 
-        self.attn_input_norm = nn.LayerNorm(embedding_dim, eps=1e-5, elementwise_affine=True, bias=use_bias)
-        self.attn_context_norm = nn.LayerNorm(embedding_dim, eps=1e-5, elementwise_affine=True, bias=use_bias)
+        self.attn_input_norm = nn.LayerNorm(embedding_dim, eps=1e-5, elementwise_affine=True, bias=True)
+        self.attn_context_norm = nn.LayerNorm(embedding_dim, eps=1e-5, elementwise_affine=True, bias=True)
         self.attn = CrossAttention(embedding_dim=embedding_dim, head_count=head_count, dropout_rate=dropout_rate, use_bias=use_bias, use_rope=use_rope)
         self.fnn_norm = nn.LayerNorm(embedding_dim, eps=1e-5, elementwise_affine=True, bias=use_bias)
         if fnn_style == 'mlp':

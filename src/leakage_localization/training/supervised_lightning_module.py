@@ -129,7 +129,7 @@ class SupervisedModule(lightning.LightningModule):
             reduction='none'
         ).reshape(batch_size, output_count)
         per_output_loss = granular_loss.mean(dim=0)
-        loss = per_output_loss.mean()
+        loss = per_output_loss.sum()
 
         self.metrics[f'{phase}/acc'].update(logits.reshape(batch_size*output_count, -1), target.reshape(batch_size*output_count))
         self.metrics[f'{phase}/rank'].update(logits, target)

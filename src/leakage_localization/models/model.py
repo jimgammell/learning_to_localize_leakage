@@ -257,7 +257,7 @@ class Model(nn.Module):
             layer_count = self.config.trunk_blocks
         else:
             assert False
-        for mod in self.heads.modules():
+        for mod in self.trunk.modules():
             if isinstance(mod, (SelfAttention, CrossAttention)):
                 nn.init.trunc_normal_(mod.to_out.weight, std=0.02/sqrt(2*layer_count))
         for mod in self.heads.modules():

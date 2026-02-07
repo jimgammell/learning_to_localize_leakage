@@ -141,9 +141,9 @@ class SupervisedModule(lightning.LightningModule):
             for idx in range(self.config.num_labels):
                 self.metrics[f'{phase}/mttd/{idx}'].update(logits[:, idx:idx+1, :], {k: v[:, idx:idx+1] for k, v in intermediate_variables.items()})
 
-        self.log(f'{phase}/loss', loss, on_epoch=True, on_step=False, prog_bar=True)
-        self.log(f'{phase}/acc', self.metrics[f'{phase}/acc'], on_epoch=True, on_step=False, prog_bar=True)
-        self.log(f'{phase}/rank', self.metrics[f'{phase}/rank'], on_epoch=True, on_step=False, prog_bar=True)
+        self.log(f'{phase}/loss', loss, on_epoch=True, on_step=False, prog_bar=False)
+        self.log(f'{phase}/acc', self.metrics[f'{phase}/acc'], on_epoch=True, on_step=False, prog_bar=False)
+        self.log(f'{phase}/rank', self.metrics[f'{phase}/rank'], on_epoch=True, on_step=False, prog_bar=False)
         for idx in range(self.config.num_labels):
             self.log(f'{phase}/loss/{idx}', per_output_loss[idx], on_epoch=True, on_step=False)
             self.log(f'{phase}/acc/{idx}', self.metrics[f'{phase}/acc/{idx}'], on_epoch=True, on_step=False)
@@ -155,6 +155,21 @@ class SupervisedModule(lightning.LightningModule):
 
         return loss
     
+    def _log_rank_stats(self, phase: str):
+        per_byte_ranks = torch.tensor([
+            self.metrics[f'{phase}/rank/{idx}'].compute().item()
+            for idx in range(self.config.num_labels)
+        ])
+        self.log(f'{phase}/rank_min', per_byte_ranks.min(), prog_bar=True)
+        self.log(f'{phase}/rank_med', per_byte_ranks.median(), prog_bar=True)
+        self.log(f'{phase}/rank_max', per_byte_ranks.max(), prog_bar=True)
+
+    def on_train_epoch_end(self):
+        self._log_rank_stats('train')
+
+    def on_validation_epoch_end(self):
+        self._log_rank_stats('val')
+
     def training_step(self, batch: Tuple[torch.Tensor, torch.Tensor, Dict[str, torch.Tensor]]) -> torch.Tensor:
         return self._step(batch, phase='train')
     def validation_step(self, batch: Tuple[torch.Tensor, torch.Tensor, Dict[str, torch.Tensor]]) -> torch.Tensor:

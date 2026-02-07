@@ -150,7 +150,8 @@ def train_model(dest: Path, config: Dict[str, Any]):
         total_steps=config['training']['total_steps'],
         grad_clip_val=config['training']['grad_clip_val'],
         accumulate_grad_batches=config['training']['accumulate_grad_batches'],
-        early_stop_metric=config['training']['early_stop_metric']
+        early_stop_metric=config['training']['early_stop_metric'],
+        early_stop_mode=config['training']['early_stop_mode']
     )
 
 if __name__ == '__main__':

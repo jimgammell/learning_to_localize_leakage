@@ -13,8 +13,8 @@
 #                         roll  noise  droppatch  dropout
 ROLL=(                    0     100    0          0        0      0      100    100)
 NOISE=(                   0.    0.     0.1        0.       0.     0.     0.1    0.1)
-DROPPATCH=(               0.    0.     0.         0.2      0.     0.     0.2    0.2)
-DROPOUT=(                 0.    0.     0.         0.       0.1    0.     0.     0.1)
+INPUT_DROPOUT=(           0.    0.     0.         0.2      0.     0.     0.2    0.2)
+HIDDEN_DROPOUT=(          0.    0.     0.         0.       0.1    0.     0.     0.1)
 NAMES=(baseline roll noise droppatch dropout roll+noise roll+noise+droppatch all)
 
 IDX=$SLURM_ARRAY_TASK_ID
@@ -27,5 +27,5 @@ python -m experiments.train.supervised \
     --training.base_lr 3.e-4 \
     --data.random_roll ${ROLL[$IDX]} \
     --data.additive_gaussian_noise ${NOISE[$IDX]} \
-    --model.input_droppatch_rate ${DROPPATCH[$IDX]} \
-    --model.hidden_dropout_rate ${DROPOUT[$IDX]}
+    --model.input_dropout_rate ${INPUT_DROPOUT[$IDX]} \
+    --model.hidden_dropout_rate ${HIDDEN_DROPOUT[$IDX]}

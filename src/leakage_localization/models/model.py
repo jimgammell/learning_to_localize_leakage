@@ -17,6 +17,7 @@ TRUNK = Literal[
 ]
 POSITION_EMBEDDING = Literal[
     'learned',
+    'sinusoidal',
     'rope'
 ]
 POOLING = Literal[
@@ -58,6 +59,7 @@ class ModelConfig:
     use_bias: bool
     perceiver_latent_dim: Optional[int]
     perceiver_self_attn_per_cross_attn_blocks: Optional[int]
+    perceiver_cross_attn_head_count: Optional[int]
 
     def __post_init__(self):
         assert isinstance(self.input_length, int) and self.input_length > 0
@@ -96,9 +98,12 @@ class ModelConfig:
         if self.trunk == 'perceiver':
             assert isinstance(self.perceiver_latent_dim, int) and self.perceiver_latent_dim > 0
             assert isinstance(self.perceiver_self_attn_per_cross_attn_blocks, int) and self.perceiver_self_attn_per_cross_attn_blocks > 0
+            if self.perceiver_cross_attn_head_count is not None:
+                assert isinstance(self.perceiver_cross_attn_head_count, int) and self.perceiver_cross_attn_head_count > 0 and self.embedding_dim % self.perceiver_cross_attn_head_count == 0
         else:
             assert self.perceiver_latent_dim is None
             assert self.perceiver_self_attn_per_cross_attn_blocks is None
+            assert self.perceiver_cross_attn_head_count is None
 
 class Model(nn.Module):
     def __init__(
@@ -122,6 +127,7 @@ class Model(nn.Module):
             register_tokens: int,
             perceiver_latent_dim: Optional[int],
             perceiver_self_attn_per_cross_attn_blocks: Optional[int],
+            perceiver_cross_attn_head_count: Optional[int],
             head_count: Optional[int],
             input_dropout_rate: float,
             input_droppatch_rate: float,
@@ -149,6 +155,7 @@ class Model(nn.Module):
             register_tokens=register_tokens,
             perceiver_latent_dim=perceiver_latent_dim,
             perceiver_self_attn_per_cross_attn_blocks=perceiver_self_attn_per_cross_attn_blocks,
+            perceiver_cross_attn_head_count=perceiver_cross_attn_head_count,
             head_count=head_count,
             input_dropout_rate=input_dropout_rate,
             input_droppatch_rate=input_droppatch_rate,
@@ -179,16 +186,18 @@ class Model(nn.Module):
             in_dims=in_dims,
             in_seq_len=in_seq_len,
             embedding_dim=self.config.embedding_dim,
-            learned_position_embedding=self.config.position_embedding == 'learned'
+            position_embedding=self.config.position_embedding if self.config.position_embedding != 'rope' else 'none'
         )
 
         if self.config.trunk == 'perceiver':
+            cross_attn_head_count = self.config.perceiver_cross_attn_head_count if self.config.perceiver_cross_attn_head_count is not None else self.config.head_count
             self.trunk = PerceiverTrunk(
                 latent_dim=self.config.perceiver_latent_dim,
                 perceiver_blocks=self.config.trunk_blocks,
                 self_attn_per_cross_attn_blocks=self.config.perceiver_self_attn_per_cross_attn_blocks,
                 embedding_dim=self.config.embedding_dim,
-                head_count=self.config.head_count,
+                cross_attn_head_count=cross_attn_head_count,
+                self_attn_head_count=self.config.head_count,
                 dropout_rate=self.config.hidden_dropout_rate,
                 use_bias=self.config.use_bias,
                 use_rope=self.config.position_embedding == 'rope',

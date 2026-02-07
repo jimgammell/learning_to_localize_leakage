@@ -16,7 +16,8 @@ class PerceiverBlock(nn.Module):
             *,
             self_attn_blocks: int,
             embedding_dim: int,
-            head_count: int,
+            cross_attn_head_count: int,
+            self_attn_head_count: int,
             dropout_rate: float,
             use_bias: bool,
             use_rope: bool,
@@ -27,7 +28,7 @@ class PerceiverBlock(nn.Module):
 
         self.cross_attn_block = CrossAttentionBlock(
             embedding_dim=embedding_dim,
-            head_count=head_count,
+            head_count=cross_attn_head_count,
             dropout_rate=dropout_rate,
             use_bias=use_bias,
             use_rope=use_rope,
@@ -37,7 +38,7 @@ class PerceiverBlock(nn.Module):
         self.self_attn_blocks = nn.ModuleList([
             SelfAttentionBlock(
                 embedding_dim=embedding_dim,
-                head_count=head_count,
+                head_count=self_attn_head_count,
                 dropout_rate=dropout_rate,
                 use_bias=use_bias,
                 use_rope=use_rope,
@@ -60,7 +61,8 @@ class PerceiverTrunk(nn.Module):
             perceiver_blocks: int,
             self_attn_per_cross_attn_blocks: int,
             embedding_dim: int,
-            head_count: int,
+            cross_attn_head_count: int,
+            self_attn_head_count: int,
             dropout_rate: float,
             use_bias: bool,
             use_rope: bool,
@@ -75,7 +77,8 @@ class PerceiverTrunk(nn.Module):
             PerceiverBlock(
                 self_attn_blocks=self_attn_per_cross_attn_blocks,
                 embedding_dim=embedding_dim,
-                head_count=head_count,
+                cross_attn_head_count=cross_attn_head_count,
+                self_attn_head_count=self_attn_head_count,
                 dropout_rate=dropout_rate,
                 use_bias=use_bias,
                 use_rope=use_rope,

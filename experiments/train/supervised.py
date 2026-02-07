@@ -95,7 +95,8 @@ def construct_training_module(
             'hidden_dropout_rate': config['model']['hidden_dropout_rate'],
             'use_bias': config['model']['use_bias'],
             'perceiver_latent_dim': config['model']['perceiver_latent_dim'],
-            'perceiver_self_attn_per_cross_attn_blocks': config['model']['perceiver_self_attn_per_cross_attn_blocks']
+            'perceiver_self_attn_per_cross_attn_blocks': config['model']['perceiver_self_attn_per_cross_attn_blocks'],
+            'perceiver_cross_attn_head_count': config['model']['perceiver_cross_attn_head_count']
         },
         num_labels=train_set.dataset.config.num_labels,
         num_classes=train_set.dataset.config.num_classes,

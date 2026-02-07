@@ -25,7 +25,7 @@ mttd:
   traces_per_attack: 1000
 model:
   trunk: perceiver
-  position_embedding: learned
+  position_embedding: sinusoidal
   pooling: attention
   head: tied
   fnn_style: gated
@@ -35,12 +35,13 @@ model:
   fourier_embed_sigma: null
   embedding_dim: 256
   expansion_factor: 4
-  trunk_blocks: 4
+  trunk_blocks: 1
   head_count: null
   register_tokens: 0
   input_dropout_rate: 0.
   input_droppatch_rate: 0.
   hidden_dropout_rate: 0.
   use_bias: true
-  perceiver_latent_dim: 256
-  perceiver_self_attn_per_cross_attn_blocks: 2
+  perceiver_latent_dim: 1024
+  perceiver_self_attn_per_cross_attn_blocks: 6
+  perceiver_cross_attn_head_count: 1

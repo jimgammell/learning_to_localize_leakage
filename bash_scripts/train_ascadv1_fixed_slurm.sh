@@ -10,22 +10,13 @@
 #SBATCH --error=train-ascadv1f-perceiver-%a.out
 #SBATCH --array=0-7
 
-#                         roll  noise  droppatch  dropout
-ROLL=(                    0     100    0          0        0      0      100    100)
-NOISE=(                   0.    0.     0.1        0.       0.     0.     0.1    0.1)
-INPUT_DROPOUT=(           0.    0.     0.         0.2      0.     0.     0.2    0.2)
-HIDDEN_DROPOUT=(          0.    0.     0.         0.       0.1    0.     0.     0.1)
-NAMES=(baseline roll noise droppatch dropout roll+noise roll+noise+droppatch all)
+LR=(2.e-4 3.e-4 4.e-4 5.e-4 6.e-4 7.e-4 8.e-4 9.e-4)
 
 IDX=$SLURM_ARRAY_TASK_ID
 
 source ~/.bashrc
 micromamba activate leakage-localization
 python -m experiments.train.supervised \
-    --dest=./outputs/ascadv1_fixed/supervised_reg_${NAMES[$IDX]} \
+    --dest=./outputs/ascadv1_fixed/perceiver_supervised_reg_lr${LR[$IDX]} \
     --config-file=ascadv1_fixed \
-    --training.base_lr 3.e-4 \
-    --data.random_roll ${ROLL[$IDX]} \
-    --data.additive_gaussian_noise ${NOISE[$IDX]} \
-    --model.input_dropout_rate ${INPUT_DROPOUT[$IDX]} \
-    --model.hidden_dropout_rate ${HIDDEN_DROPOUT[$IDX]}
+    --training.base_lr ${LR[$IDX]}

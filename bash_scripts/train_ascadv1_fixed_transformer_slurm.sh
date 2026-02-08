@@ -10,7 +10,7 @@
 #SBATCH --error=train-ascadv1f-transformer-%a.out
 #SBATCH --array=0-7
 
-LR=(7e-5 1e-4 3e-4 5e-4)
+LR=(7.e-5 1.e-4 3.e-4 5.e-4)
 ROLL=(0 10)
 
 IDX=$SLURM_ARRAY_TASK_ID

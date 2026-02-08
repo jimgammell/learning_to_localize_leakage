@@ -10,13 +10,14 @@
 #SBATCH --error=train-ascadv1f-transformer-%a.out
 #SBATCH --array=0-7
 
-LR=(2.e-4 3.e-4 4.e-4 5.e-4 6.e-4 7.e-4 8.e-4 9.e-4)
+ROLL=(0 1 2 4 8 16 32 64)
 
 IDX=$SLURM_ARRAY_TASK_ID
 
 source ~/.bashrc
 micromamba activate leakage-localization
 python -m experiments.train.supervised \
-    --dest=./outputs/ascadv1_fixed/transformer_supervised_reg_lr${LR[$IDX]} \
+    --dest=./outputs/ascadv1_fixed/transformer_supervised_reg_roll${ROLL[$IDX]} \
     --config-file=ascadv1_fixed_transformer \
-    --training.base_lr ${LR[$IDX]}
+    --training.base_lr 2.e-4 \
+    --data.random_roll ${ROLL[$IDX]}

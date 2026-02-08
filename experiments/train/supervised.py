@@ -3,6 +3,7 @@ from typing import Dict, Any, Tuple
 from copy import copy
 from math import ceil
 
+import lightning
 from torch.utils.data import Dataset, Subset, DataLoader
 
 from .entrypoint import main
@@ -132,6 +133,8 @@ def construct_loaders(
 
 def train_model(dest: Path, config: Dict[str, Any]):
     dest.mkdir(exist_ok=True, parents=True)
+    if 'seed' in config['training']:
+        lightning.seed_everything(config['training']['seed'])
     train_set, val_set, test_set = construct_datasets(config)
     steps_per_epoch = ceil(len(train_set)/config['training']['batch_size'])
     config['training']['total_steps'] = steps_per_epoch*config['training']['total_epochs']

@@ -28,7 +28,7 @@ def construct_datasets(
         )
         attack_set = ASCADv1_TorchDataset(
             root=ASCADV1_FIXED_ROOT,
-            partition='profile',
+            partition='attack',
             target_byte=config['data']['target_byte'],
             target_variable=config['data']['target_variable'],
             variable_key=False,

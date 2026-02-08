@@ -42,6 +42,6 @@ model:
   input_droppatch_rate: 0.
   hidden_dropout_rate: 0.
   use_bias: true
-  perceiver_latent_dim: 1024
+  perceiver_latent_dim: 100
   perceiver_self_attn_per_cross_attn_blocks: 6
   perceiver_cross_attn_head_count: 1

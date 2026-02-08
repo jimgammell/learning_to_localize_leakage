@@ -14,11 +14,13 @@ LR=(7.e-5 1.e-4 3.e-4 5.e-4)
 ROLL=(0 10)
 
 IDX=$SLURM_ARRAY_TASK_ID
+LR_IDX=$((IDX % 4))
+ROLL_IDX=$((IDX / 4))
 
 source ~/.bashrc
 micromamba activate leakage-localization
 python -m experiments.train.supervised \
-    --dest=./outputs/ascadv1_fixed/supervised_reg_${NAMES[$IDX]} \
+    --dest=./outputs/ascadv1_fixed/supervised_reg_lr${LR[$LR_IDX]}_roll${ROLL[$ROLL_IDX]} \
     --config-file=ascadv1_fixed_transformer \
-    --training.base_lr ${LR[$IDX]} \
-    --data.random_roll ${ROLL[$IDX]} 
+    --training.base_lr ${LR[$LR_IDX]} \
+    --data.random_roll ${ROLL[$ROLL_IDX]}

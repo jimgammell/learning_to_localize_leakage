@@ -253,25 +253,13 @@ class Model(nn.Module):
         
         for mod in self.modules():
             if isinstance(mod, nn.Linear):
-                nn.init.trunc_normal_(mod.weight, std=0.02)
+                nn.init.xavier_uniform_(mod.weight)
                 if mod.bias is not None:
                     nn.init.zeros_(mod.bias)
             if isinstance(mod, nn.LayerNorm):
                 nn.init.ones_(mod.weight)
                 if mod.bias is not None:
                     nn.init.zeros_(mod.bias)
-        if self.config.trunk == 'perceiver':
-            layer_count = self.config.trunk_blocks*(1 + self.config.perceiver_self_attn_per_cross_attn_blocks)
-        elif self.config.trunk == 'transformer':
-            layer_count = self.config.trunk_blocks
-        else:
-            assert False
-        for mod in self.trunk.modules():
-            if isinstance(mod, (SelfAttention, CrossAttention)):
-                nn.init.trunc_normal_(mod.to_out.weight, std=0.02/sqrt(2*layer_count))
-        for mod in self.heads.modules():
-            if isinstance(mod, nn.Linear):
-                nn.init.xavier_uniform_(mod.weight)
     
     def forward(self, x: torch.Tensor, attn_mask: Optional[torch.Tensor] = None) -> torch.Tensor:
         batch_size, _, seq_len = x.shape

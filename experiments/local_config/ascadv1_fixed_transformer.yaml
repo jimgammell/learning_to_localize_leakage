@@ -26,7 +26,7 @@ mttd:
 model:
   trunk: transformer
   position_embedding: sinusoidal
-  pooling: attention
+  pooling: token
   head: tied
   fnn_style: mlp
   patch_size: 1000
@@ -38,9 +38,9 @@ model:
   trunk_blocks: 6
   head_count: null
   register_tokens: 0
-  input_dropout_rate: 0.1
+  input_dropout_rate: 0.
   input_droppatch_rate: 0.
-  hidden_dropout_rate: 0.1
+  hidden_dropout_rate: 0.
   use_bias: true
   perceiver_latent_dim: null
   perceiver_self_attn_per_cross_attn_blocks: null

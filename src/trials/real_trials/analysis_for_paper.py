@@ -383,7 +383,7 @@ def plot_leakiness_assessments(base_dir, dest, only_ascadv1_variable: bool = Fal
 
 def load_traces_over_time(base_dir):
     traces = defaultdict(lambda: defaultdict(list))
-    for dataset_name in DATASET_NAMES.keys():
+    for dataset_name in ['ascadv1_variable']: #DATASET_NAMES.keys():
         for seed in [50, 51, 52, 53, 54]:
             all_curves_path = os.path.join(base_dir, dataset_name, 'all_runs', 'fair', f'seed={seed}', 'all_training', 'training_curves.pickle')
             if not os.path.exists(all_curves_path):
@@ -411,15 +411,15 @@ def load_traces_over_time(base_dir):
 
 def plot_traces_over_time(full_traces, dest, oracle_agreement_vals, only_ascadv1_variable: bool = False):
     to_kwargs = {
-        'all': {'color': 'blue', 'label': r'\textbf{ALL (ours)}'},
+        'all': {'color': 'blue', 'label': r'\textbf{\textsf{ALL} (ours)}'},
         'gradvis': {'color': 'green', 'label': 'Gradient-based methods', 'markersize': 5, 'marker': 'o', 'alpha': 0.5},
         'saliency': {'color': 'green', 'markersize': 5, 'marker': 'o', 'alpha': 0.5},
         'lrp': {'color': 'green', 'markersize': 5, 'marker': 'o', 'alpha': 0.5},
         'inputxgrad': {'color': 'green', 'markersize': 5, 'marker': 'o', 'alpha': 0.5},
-        '1-occlusion': {'color': 'red', 'label': '1-occlusion', 'markersize': 5, 'marker': 's', 'alpha': 0.8},
-        'm-occlusion': {'color': 'red', 'label': r'$m^*$-occlusion', 'markersize': 5, 'marker': '.', 'alpha': 1.0},
+        '1-occlusion': {'color': 'red', 'label': '1-Occlusion', 'markersize': 5, 'marker': 's', 'alpha': 0.8},
+        'm-occlusion': {'color': 'teal', 'label': r'$m^*$-Occlusion', 'markersize': 5, 'marker': '.', 'alpha': 1.0},
         'occpoi': {'color': 'orange', 'label': 'OccPOI (final)'},
-        'm-second-order-occlusion': {'color': 'purple', 'label': r'$m^*$-occlusion$^2$ (final)'}
+        'm-second-order-occlusion': {'color': 'purple', 'label': r'$2^{\mathrm{nd}}$-order $m^*$-Occlusion (final)'}
     }
     dataset_names = list(DATASET_NAMES.keys()) if not only_ascadv1_variable else ['ascadv1_variable']
     cols = ceil(len(dataset_names)/2)
@@ -725,8 +725,8 @@ def get_eval_metrics(base_dir):
             rev_dnno_auc[dataset_name]['all'].append(eval_metrics['rev_dnno'])
             ta_mttd[dataset_name]['all'].append(eval_metrics['ta_ttd'] + (1 if dataset_name in ['otiait', 'otp'] else 0))
     oracle_agreement = {k1: {k2: np.stack(v) for k2, v in oracle_agreement[k1].items()} for k1 in oracle_agreement}
-    fwd_dnno_auc = {k1: {k2: np.stack(v) for k2, v in fwd_dnno_auc[k1].items()} for k1 in fwd_dnno_auc}
-    rev_dnno_auc = {k1: {k2: np.stack(v) for k2, v in rev_dnno_auc[k1].items()} for k1 in rev_dnno_auc}
+    fwd_dnno_auc = {k1: {k2: np.stack(v).mean(axis=1) for k2, v in fwd_dnno_auc[k1].items()} for k1 in fwd_dnno_auc}
+    rev_dnno_auc = {k1: {k2: np.stack(v).mean(axis=1) for k2, v in rev_dnno_auc[k1].items()} for k1 in rev_dnno_auc}
     ta_mttd = {k1: {k2: np.stack(v) for k2, v in ta_mttd[k1].items()} for k1 in ta_mttd}
     for dataset_name in DATASET_NAMES.keys():
         print(f'Dataset: {dataset_name}')
@@ -755,6 +755,7 @@ def get_dnn_occlusion_curves(base_dir):
             subdir = os.path.join(base_dir, dataset_name, 'supervised_models_for_attribution', 'classification', f'seed={seed}')
             method_names = [x.split('_dnno')[0] for x in os.listdir(subdir) if x.split('_')[-1] == 'dnno.npz']
             for method_name in method_names:
+                print(subdir)
                 rv = np.load(os.path.join(subdir, f'{method_name}_dnno.npz'), allow_pickle=True)
                 fwd_dnno = rv['fwd_dnno']
                 rev_dnno = rv['rev_dnno']
@@ -1241,23 +1242,26 @@ def plot_model_selection_criteria(base_dir, dest):
 def do_analysis_for_paper():
     fig_dir = os.path.join(OUTPUT_DIR, 'plots_for_paper')
     os.makedirs(fig_dir, exist_ok=True)
+    oracle_agreement_vals = get_oracle_agreement_vals(OUTPUT_DIR)
+    create_performance_comparison_table(OUTPUT_DIR, os.path.join(fig_dir, 'oracle_agreement_table'), oracle_agreement_vals)
     oracle_agreement_vals, fwd_dnno_auc_vals, rev_dnno_auc_vals, ta_mttd_vals = get_eval_metrics(OUTPUT_DIR)
     create_performance_comparison_table(OUTPUT_DIR, os.path.join(fig_dir, 'full_oracle_agreement_table'), oracle_agreement_vals)
     create_performance_comparison_table(OUTPUT_DIR, os.path.join(fig_dir, 'fwd_dnno_auc_table'), fwd_dnno_auc_vals, bigger_is_better=False)
     create_performance_comparison_table(OUTPUT_DIR, os.path.join(fig_dir, 'rev_dnno_auc_table'), rev_dnno_auc_vals)
     create_performance_comparison_table(OUTPUT_DIR, os.path.join(fig_dir, 'ta_mttd_table'), ta_mttd_vals, bigger_is_better=False)
+    traces = load_traces_over_time(OUTPUT_DIR)
+    plot_traces_over_time(traces, os.path.join(fig_dir, 'traces_over_time.pdf'), oracle_agreement_vals, only_ascadv1_variable=True)
+    assert False
     plot_hsweep_histograms(OUTPUT_DIR, os.path.join(fig_dir, 'oracle_agreement_boxplots.pdf'))
     plot_ablation_histograms(OUTPUT_DIR, os.path.join(fig_dir, 'ablation_histograms.pdf'))
     plot_model_selection_criteria(OUTPUT_DIR, os.path.join(fig_dir, 'model_selection_criterion.pdf'))
     print_runtimes(OUTPUT_DIR)
-    assert False
     plot_attack_curves(OUTPUT_DIR, os.path.join(fig_dir, 'attack_curves.pdf'))
     plot_all_training_curves(OUTPUT_DIR, os.path.join(fig_dir, 'all_training_curves.pdf'))
     gamma_bar_sweep, theta_lr_scalar_sweep, etat_lr_scalar_sweep = load_all_sensitivity_analysis_data(OUTPUT_DIR)
     plot_all_sensitivity_analysis(gamma_bar_sweep, theta_lr_scalar_sweep, etat_lr_scalar_sweep, os.path.join(fig_dir, 'all_sensitivity_analysis.pdf'))
     oracle_agreement_vals = get_oracle_agreement_vals(OUTPUT_DIR)
     create_performance_comparison_table(OUTPUT_DIR, os.path.join(fig_dir, 'oracle_agreement_table'), oracle_agreement_vals)
-    assert False
     traces = load_traces_over_time(OUTPUT_DIR)
     plot_traces_over_time(traces, os.path.join(fig_dir, 'traces_over_time.pdf'), oracle_agreement_vals)
     print('Plotting attack curves...')

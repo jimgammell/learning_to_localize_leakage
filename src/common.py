@@ -12,13 +12,12 @@ import numpy as np
 import torch
 from torch import multiprocessing
 
-if socket.gethostname() == 'ee350-csme-precision':
-    plt.rcParams.update({
-        'font.size': 10,
-        'font.family': 'Times New Roman',
-        'text.usetex': True,
-        'text.latex.preamble': r'\usepackage{times} \usepackage{amsmath} \usepackage{amssymb}'
-    })
+plt.rcParams.update({
+    'font.size': 10,
+    'font.family': 'Times New Roman',
+    'text.usetex': True,
+    'text.latex.preamble': r'\usepackage{times} \usepackage{amsmath} \usepackage{amssymb}'
+})
 
 if torch.cuda.is_available():
     torch.backends.cudnn.benchmark = True

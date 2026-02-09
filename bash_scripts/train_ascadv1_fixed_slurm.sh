@@ -10,7 +10,7 @@
 #SBATCH --error=train-ascadv1f-perceiver-%a.out
 #SBATCH --array=0-7
 
-LR=(2.e-4 3.e-4 4.e-4 5.e-4 6.e-4 7.e-4 8.e-4 9.e-4)
+LR=(1.e-5 3.e-5 5.e-5 7.e-5 9.e-5 1.e-4 3.e-4 5.e-4 7.e-4 9.e-4)
 
 IDX=$SLURM_ARRAY_TASK_ID
 

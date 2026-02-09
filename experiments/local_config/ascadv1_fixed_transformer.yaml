@@ -4,7 +4,7 @@ data:
   target_variable: subbytes
   preprocessing: standardize
   additive_gaussian_noise: 0.
-  random_roll: 0
+  random_roll: 4
   val_prop: 0.2
 training:
   total_epochs: 200

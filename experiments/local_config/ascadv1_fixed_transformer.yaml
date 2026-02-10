@@ -26,7 +26,7 @@ mttd:
   traces_per_attack: 1000
 model:
   trunk: transformer
-  position_embedding: sinusoidal
+  position_embedding: rope
   pooling: token
   head: tied
   fnn_style: mlp

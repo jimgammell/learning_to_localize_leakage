@@ -1,6 +1,6 @@
 import argparse
 from pathlib import Path
-from typing import Callable, Dict, Any
+from typing import Callable, Dict, Any, Optional
 
 import yaml
 
@@ -33,6 +33,7 @@ def main(
 ):
     parser = argparse.ArgumentParser()
     parser.add_argument('--dest', required=True, type=Path)
+    parser.add_argument('--optuna-study-path', type=Path, default=None)
     parser.add_argument('--config-file', required=True, type=str)
     parser.add_argument('--config-root', type=Path, default=LOCAL_CONFIG_ROOT)
     append_directory_clargs(parser)
@@ -40,6 +41,7 @@ def main(
 
     dest: Path = args.dest
     dest.mkdir(exist_ok=True, parents=True)
+    optuna_study_path: Optional[Path] = args.optuna_study_path
     config_root: Path = args.config_root
     config_path = config_root / f'{args.config_file}.yaml'
     assert config_path.exists()
@@ -49,7 +51,11 @@ def main(
 
     _apply_overrides(config, overrides)
 
+    if optuna_study_path is not None:
+        assert len(overrides) == 0
+
     run_fn(
         dest=dest,
-        config=config
+        config=config,
+        optuna_study_path=optuna_study_path
     )

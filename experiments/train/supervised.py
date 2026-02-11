@@ -1,13 +1,17 @@
 from pathlib import Path
-from typing import Dict, Any, Tuple
+from typing import Dict, Any, Tuple, List
 from copy import copy
 from math import ceil
+from functools import partial
 
+import pandas
 import lightning
 from torch.utils.data import Dataset, Subset, DataLoader
+import optuna
 
 from .entrypoint import main
 from experiments.initialization import *
+from .hyperparameter_tuning import get_study, sample_hparams
 from leakage_localization.datasets.ascadv1 import ASCADv1_TorchDataset
 from leakage_localization.datasets.transforms import Compose, Standardize, Normalize, RandomRoll, AdditiveGaussianNoise
 from leakage_localization.training.train_supervised_model import train_supervised_model
@@ -131,7 +135,11 @@ def construct_loaders(
     )
     return train_loader, val_loader, test_loader
 
-def train_model(dest: Path, config: Dict[str, Any]):
+def train_model(
+        dest: Path,
+        config: Dict[str, Any],
+        aux_callbacks: Optional[List[lightning.Callback]] = None
+    ):
     dest.mkdir(exist_ok=True, parents=True)
     if 'seed' in config['training']:
         lightning.seed_everything(config['training']['seed'])
@@ -155,8 +163,59 @@ def train_model(dest: Path, config: Dict[str, Any]):
         grad_clip_val=config['training']['grad_clip_val'],
         accumulate_grad_batches=config['training']['accumulate_grad_batches'],
         early_stop_metric=config['training']['early_stop_metric'],
-        early_stop_mode=config['training']['early_stop_mode']
+        early_stop_mode=config['training']['early_stop_mode'],
+        aux_callbacks=aux_callbacks
     )
 
+class PruningCallback(lightning.Callback):
+    def __init__(
+            self,
+            trial: optuna.Trial,
+            config: Dict[str, Any]
+    ):
+        super().__init__()
+        self.trial = trial
+        self.config = config
+    
+    def on_validation_epoch_end(self, trainer: lightning.Trainer, pl_module: lightning.LightningModule):
+        tracked_metric_key = self.config['training']['early_stop_metric']
+        tracked_metric = trainer.callback_metrics[tracked_metric_key].item()
+        self.trial.report(tracked_metric, step=trainer.current_epoch)
+        if self.trial.should_prune():
+            raise optuna.TrialPruned()
+
+def _optuna_objective(
+        trial: optuna.Trial,
+        dest: Path,
+        config: Dict[str, Any]
+) -> float:
+    trial_dest = dest / f'trial_{trial.number}'
+    config = sample_hparams(trial, config)
+    pruning_callback = PruningCallback(trial, config)
+    train_model(trial_dest, config, aux_callbacks=[pruning_callback])
+    metrics = pandas.read_csv(trial_dest / 'metrics.csv')
+    tracked_metric_key = config['training']['early_stop_metric']
+    tracked_metric = metrics[tracked_metric_key]
+    if config['training']['early_stop_mode'] == 'max':
+        objective = tracked_metric.max()
+    elif config['training']['early_stop_mode'] == 'min':
+        objective = tracked_metric.min()
+    else:
+        assert False
+    return objective
+
+def run(
+        dest: Path,
+        config: Dict[str, Any],
+        optuna_study_path: Optional[Path]
+):
+    if optuna_study_path is not None:
+        optuna_study_path.parent.mkdir(exist_ok=True, parents=True)
+        optuna_study = get_study(optuna_study_path, config)
+        optuna_objective = partial(_optuna_objective, dest=dest, config=config)
+        optuna_study.optimize(optuna_objective, n_trials=1) # will use slurm to handle multiple runs
+    else:
+        train_model(dest, config)
+
 if __name__ == '__main__':
-    main(train_model)
+    main(run)

@@ -1,7 +1,8 @@
-from typing import Optional, Literal
+from typing import Optional, Literal, List
 from pathlib import Path
 
 from torch.utils.data import DataLoader
+import lightning
 from lightning import Trainer, LightningModule
 from lightning.pytorch.callbacks import ModelCheckpoint
 from lightning.pytorch.loggers import CSVLogger
@@ -13,7 +14,8 @@ def train_supervised_model(
         total_steps: int,
         grad_clip_val: Optional[float] = None,
         accumulate_grad_batches: int = 1,
-        early_stop_metric: Optional[str] = 'val_rank', early_stop_mode: Literal['min', 'max'] = 'max'
+        early_stop_metric: Optional[str] = 'val_rank', early_stop_mode: Literal['min', 'max'] = 'max',
+        aux_callbacks: Optional[List[lightning.Callback]] = None
 ):
     callbacks = []
     if early_stop_metric is not None:
@@ -33,6 +35,8 @@ def train_supervised_model(
         enable_version_counter=False
     )
     callbacks.append(final_checkpoint_callback)
+    if aux_callbacks is not None:
+        callbacks += aux_callbacks
     logger = CSVLogger(
         save_dir=dest,
         name='',

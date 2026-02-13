@@ -40,7 +40,7 @@ def get_study(
         config: Dict[str, Any]
 ) -> optuna.Study:
     storage = optuna.storages.JournalStorage(
-        optuna.storages.journal.JournalFileBackend(study_path)
+        optuna.storages.journal.JournalFileBackend(str(study_path))
     )
     sampler = optuna.samplers.TPESampler(
         n_startup_trials=100,

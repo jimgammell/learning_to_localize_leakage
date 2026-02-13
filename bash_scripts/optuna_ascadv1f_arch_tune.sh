@@ -8,7 +8,7 @@
 #SBATCH --time=4:00:00
 #SBATCH --output=./outputs/ascadv1_fixed/optuna_arch_search/slurm_%a.out
 #SBATCH --error=./outputs/ascadv1_fixed/optuna_arch_search/slurm_%a.out
-#SBATCH --array=0-999%12
+#SBATCH --array=0-999%8
 
 source ~/.bashrc
 micromamba activate leakage-localization

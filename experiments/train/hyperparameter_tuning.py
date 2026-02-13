@@ -2,6 +2,7 @@ from pathlib import Path
 from typing import Dict, Any, List, Optional
 from functools import partial
 from copy import deepcopy
+import os
 
 import optuna
 
@@ -48,7 +49,7 @@ def get_study(
         multivariate=True,
         group=True,
         constant_liar=True,
-        seed=SEED
+        seed=SEED + int(os.environ.get('SLURM_ARRAY_TASK_ID', 0))
     )
     pruner = optuna.pruners.HyperbandPruner(
         min_resource=50,

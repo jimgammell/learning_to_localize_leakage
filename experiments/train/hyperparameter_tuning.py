@@ -58,7 +58,7 @@ def get_study(
         storage=storage,
         sampler=sampler,
         pruner=pruner,
-        study_name=None,
+        study_name=study_path.stem,
         direction={'min': 'minimize', 'max': 'maximize'}[config['training']['early_stop_mode']],
         load_if_exists=True
     )

@@ -190,6 +190,7 @@ def _optuna_objective(
         config: Dict[str, Any]
 ) -> float:
     trial_dest = dest / f'trial_{trial.number}'
+    config['training']['seed'] = trial.number
     config = sample_hparams(trial, config)
     pruning_callback = PruningCallback(trial, config)
     train_model(trial_dest, config, aux_callbacks=[pruning_callback])

@@ -53,4 +53,7 @@ def train_supervised_model(
         default_root_dir=dest,
     )
     trainer.fit(training_module, train_dataloaders=train_loader, val_dataloaders=val_loader)
-    trainer.test(training_module, dataloaders=test_loader)
+    try:
+        trainer.test(training_module, dataloaders=test_loader)
+    except Exception as e:
+        print(f"Warning: test step failed with {type(e).__name__}: {e}")

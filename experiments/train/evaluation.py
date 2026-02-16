@@ -44,7 +44,8 @@ def main():
     trainer = Trainer(
         accelerator='gpu',
         precision='bf16-mixed',
-        default_root_dir=dest
+        default_root_dir=dest,
+        logger=False
     )
     trainer.test(module, dataloaders=test_loader)
 

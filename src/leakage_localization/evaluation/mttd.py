@@ -17,10 +17,10 @@ def _accumulate_ranks(
 ) -> NDArray[np.integer]:
     attack_count, trace_count = indices.shape
     _, byte_count, class_count = log_key_probs.shape
-    mean_rank_over_time = np.zeros((trace_count, byte_count), dtype=np.float32)
+    full_rank_over_time = np.full((attack_count, trace_count, byte_count), np.nan, dtype=np.float64)
     for attack_idx in prange(attack_count):
-        rank_over_time = np.empty((trace_count, byte_count), dtype=np.int64)
-        predictions = np.zeros((trace_count, byte_count, class_count), dtype=np.float32)
+        rank_over_time = np.full((trace_count, byte_count), np.nan, dtype=np.float64)
+        predictions = np.full((trace_count, byte_count, class_count), np.nan, dtype=np.float64)
         for res_idx, trace_idx in enumerate(indices[attack_idx, :]):
             for byte_idx in range(byte_count):
                 if res_idx == 0:
@@ -28,9 +28,9 @@ def _accumulate_ranks(
                 else:
                     predictions[res_idx, byte_idx, :] = predictions[res_idx - 1, byte_idx, :] + log_key_probs[trace_idx, byte_idx, :]
                 ranks = _get_rank(predictions[res_idx, byte_idx, np.newaxis, :], keys[trace_idx, byte_idx, np.newaxis])
-                rank_over_time[res_idx, byte_idx] = ranks
-        mean_rank_over_time = (attack_idx/(attack_idx+1))*mean_rank_over_time + (1/(attack_idx+1))*rank_over_time
-    return mean_rank_over_time
+                rank_over_time[res_idx, byte_idx] = ranks.astype(np.float64)[0]
+        full_rank_over_time[attack_idx, :, :] = rank_over_time
+    return full_rank_over_time
 
 def accumulate_ranks(
         logits: torch.Tensor,
@@ -40,8 +40,8 @@ def accumulate_ranks(
         traces_per_attack: Optional[int] = None
 ) -> NDArray[np.floating]:
     total_trace_count, byte_count, class_count = logits.shape
-    assert all((total_trace_count, byte_count) == x.shape for x in int_vars.values())
-    log_target_probs = torch.log_softmax(logits, dim=-1).cpu().numpy()
+    assert all(total_trace_count == x.shape[0] for x in int_vars.values())
+    log_target_probs = torch.log_softmax(logits.double(), dim=-1).cpu().numpy()
     int_vars = {k: v.cpu().numpy() for k, v in int_vars.items()}
     log_key_probs = target_preds_to_key_preds(log_target_probs, int_vars)
     if traces_per_attack is None:
@@ -51,6 +51,7 @@ def accumulate_ranks(
         for idx in range(attack_count)
     ])
     rank_over_time = _accumulate_ranks(log_key_probs, int_vars['key'], indices)
+    assert np.isfinite(rank_over_time).all()
     return rank_over_time
 
 class MinimumTracesToDisclosure(Metric):
@@ -93,5 +94,5 @@ class MinimumTracesToDisclosure(Metric):
             preds, intermediate_variables, self.target_preds_to_key_preds,
             attack_count=self.attack_count, traces_per_attack=self.traces_per_attack
         )
-        mttd = np.argmin(np.abs(rank_over_time - 1), axis=0).max()
-        return torch.tensor(mttd, dtype=torch.float32)
+        mttd = np.argmax(rank_over_time == 1, axis=1).mean(axis=0) + 1
+        return torch.tensor(mttd, dtype=torch.float32).max()

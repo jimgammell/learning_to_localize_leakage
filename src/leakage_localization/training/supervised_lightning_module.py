@@ -86,9 +86,6 @@ class SupervisedModule(lightning.LightningModule):
             }, **{
                 f'{phase}/mttd': MinimumTracesToDisclosure(**self.config.mttd_kwargs)
                 for phase in ['test']
-            }, **{
-                f'{phase}/mttd/{idx}': MinimumTracesToDisclosure(**self.config.mttd_kwargs)
-                for phase in ['test'] for idx in range(self.config.num_labels)
             }
         })
     
@@ -138,8 +135,6 @@ class SupervisedModule(lightning.LightningModule):
             self.metrics[f'{phase}/rank/{idx}'].update(logits[:, idx, :], target[:, idx])
         if phase == 'test':
             self.metrics[f'{phase}/mttd'].update(logits, intermediate_variables)
-            for idx in range(self.config.num_labels):
-                self.metrics[f'{phase}/mttd/{idx}'].update(logits[:, idx:idx+1, :], {k: v[:, idx:idx+1] for k, v in intermediate_variables.items()})
 
         self.log(f'{phase}/loss', loss, on_epoch=True, on_step=False, prog_bar=False)
         self.log(f'{phase}/acc', self.metrics[f'{phase}/acc'], on_epoch=True, on_step=False, prog_bar=False)
@@ -150,8 +145,6 @@ class SupervisedModule(lightning.LightningModule):
             self.log(f'{phase}/rank/{idx}', self.metrics[f'{phase}/rank/{idx}'], on_epoch=True, on_step=False)
         if phase == 'test':
             self.log(f'{phase}/mttd', self.metrics[f'{phase}/mttd'], on_epoch=True, on_step=False, prog_bar=True)
-            for idx in range(self.config.num_labels):
-                self.log(f'{phase}/mttd/{idx}', self.metrics[f'{phase}/mttd/{idx}'], on_epoch=True, on_step=False)
 
         return loss
     

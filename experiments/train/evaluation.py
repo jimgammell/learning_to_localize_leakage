@@ -4,6 +4,8 @@ from typing import Optional, Dict, Any
 
 import yaml
 from lightning import Trainer
+from matplotlib import pyplot as plt
+import pandas
 
 from experiments.initialization import *
 from .supervised import construct_datasets, construct_loaders
@@ -14,6 +16,34 @@ def load_training_module(
 ) -> SupervisedModule:
     module = SupervisedModule.load_from_checkpoint(ckpt_path, map_location='cpu', weights_only=False)
     return module
+
+def plot_training_curves(
+        metrics_path: Path,
+        dest: Path
+):
+    metrics_df = pandas.read_csv(metrics_path)
+    train_df = metrics_df.dropna(subset=['train/loss'])
+    val_df = metrics_df.dropna(subset=['val/loss'])
+
+    for metric in ['loss', 'acc', 'rank']:
+        fig, axes = plt.subplots(1, 2, figsize=(WIDTH, 0.6*WIDTH))
+        axes[0].plot(train_df['epoch'], train_df[f'train/{metric}'], label='train', color='blue', linestyle=':')
+        axes[0].plot(val_df['epoch'], val_df[f'val/{metric}'], label='val', color='blue', linestyle='-')
+        axes[0].set_xlabel('Epoch')
+        axes[0].set_ylabel(f'Metric: {metric}')
+        axes[0].set_title('Avg. over bytes')
+        axes[0].legend()
+
+        for byte in range(16):
+            axes[1].plot(train_df['epoch'], train_df[f'train/{metric}/{byte}'], color='blue', linestyle=':')
+            axes[1].plot(val_df['epoch'], val_df[f'val/{metric}/{byte}'], color='blue', linestyle='-')
+        axes[1].set_xlabel('Epoch')
+        axes[1].set_ylabel(f'Metric: {metric}')
+        axes[1].set_title('Per-byte')
+
+        fig.tight_layout()
+        fig.savefig(dest / f'{metric}_curves.pdf', dpi=300)
+        plt.close(fig)
 
 def main():
     parser = argparse.ArgumentParser()
@@ -48,6 +78,10 @@ def main():
         logger=False
     )
     trainer.test(module, dataloaders=test_loader)
+
+    metrics_path = ckpt_path.parent / 'metrics.csv'
+    if metrics_path.exists():
+        plot_training_curves(metrics_path, dest)
 
 if __name__ == '__main__':
     main()

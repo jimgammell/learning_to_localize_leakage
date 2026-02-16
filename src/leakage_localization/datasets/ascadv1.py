@@ -151,7 +151,7 @@ class ASCADv1_NumpyDataset(Base_NumpyDataset):
                 raise RuntimeError(f'Checksum mismatch for file at {self.data_path}. File might be corrupt or incorrect.')
             with open(checksum_passed_file, 'w') as _:
                 pass
-        self.trace_indices = self.get_row_indices(h5=self.binary_trace_file)
+        self.trace_indices = self.get_row_indices(h5=not self.binary_trace_file)
 
         self.traces = None
         self.keys = None

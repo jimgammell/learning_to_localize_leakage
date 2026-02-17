@@ -5,7 +5,7 @@
 #SBATCH --account=cocosys
 #SBATCH --gres=gpu:1
 #SBATCH --cpus-per-gpu=14
-#SBATCH --time=4:00:00
+#SBATCH --time=8:00:00
 #SBATCH --output=./outputs/ascadv1_variable/optuna_arch_search/slurm_%a.out
 #SBATCH --error=./outputs/ascadv1_variable/optuna_arch_search/slurm_%a.out
 #SBATCH --array=0-999%12

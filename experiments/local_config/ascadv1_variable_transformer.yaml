@@ -7,7 +7,7 @@ data:
   random_roll: 4
   val_prop: 0.2
 training:
-  total_epochs: 200
+  total_epochs: 100
   lr_warmup_epochs: 5
   lr_const_epochs: 0
   batch_size: 64
@@ -66,11 +66,11 @@ search_space:
   model:
     patch_size:
       type: categorical
-      choices: [250, 500, 1000, 2000, 5000]
+      choices: [500, 1000, 2000, 5000]
     embedding_dim:
       type: int
       low: 128
-      high: 1024
+      high: 640
       step: 128
     trunk_blocks:
       type: int

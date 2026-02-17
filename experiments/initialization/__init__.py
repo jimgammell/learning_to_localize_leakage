@@ -1,5 +1,6 @@
 import random
 from typing import Optional, Dict, Any
+import shutil
 
 import numpy as np
 from matplotlib import pyplot as plt
@@ -20,11 +21,15 @@ def set_seed(seed: Optional[int] = None):
     torch.manual_seed(SEED)
 
 def init(clargs: Optional[Dict[str, Any]] = None):
+    latex_available = shutil.which('latex') is not None
     plt.rcParams.update({
         'font.size': 10,
-        'font.family': 'Times New Roman',
-        'text.usetex': True,
-        'text.latex.preamble': r'\usepackage{times} \usepackage{amsmath} \usepackage{amssymb}'
+        'font.family': 'serif',
+        'text.usetex': latex_available,
+        **(
+            {'text.latex.preamble': r'\usepackage{times} \usepackage{amsmath} \usepackage{amssymb}'}
+            if latex_available else {}
+        )
     })
     torch.backends.cudnn.benchmark = True
     torch.set_float32_matmul_precision('high')

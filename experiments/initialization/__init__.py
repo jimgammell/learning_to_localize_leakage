@@ -1,6 +1,7 @@
 import random
 from typing import Optional, Dict, Any
 import shutil
+import logging
 
 import numpy as np
 from matplotlib import pyplot as plt
@@ -22,6 +23,8 @@ def set_seed(seed: Optional[int] = None):
 
 def init(clargs: Optional[Dict[str, Any]] = None):
     latex_available = shutil.which('latex') is not None
+    if not latex_available:
+        logging.warning('Latex installation not found. Falling back to non-Latex plotting, which might look ugly.')
     plt.rcParams.update({
         'font.size': 10,
         'font.family': 'serif',

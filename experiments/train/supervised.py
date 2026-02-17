@@ -40,6 +40,25 @@ def construct_datasets(
             cropped_traces=False,
             binary_trace_file=True
         )
+    elif config['data']['id'] == 'ascadv1-variable':
+        profiling_set = ASCADv1_TorchDataset(
+            root=ASCADV1_VARIABLE_ROOT,
+            partition='profile',
+            target_byte=config['data']['target_byte'],
+            target_variable=config['data']['target_variable'],
+            variable_key=True,
+            cropped_traces=False,
+            binary_trace_file=True
+        )
+        attack_set = ASCADv1_TorchDataset(
+            root=ASCADV1_VARIABLE_ROOT,
+            partition='attack',
+            target_byte=config['data']['target_byte'],
+            target_variable=config['data']['target_variable'],
+            variable_key=True,
+            cropped_traces=False,
+            binary_trace_file=True
+        )
     else:
         assert False
     

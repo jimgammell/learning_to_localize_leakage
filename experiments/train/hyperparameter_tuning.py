@@ -44,8 +44,8 @@ def get_study(
         optuna.storages.journal.JournalFileBackend(str(study_path))
     )
     sampler = optuna.samplers.TPESampler(
-        n_startup_trials=100,
-        n_ei_candidates=64,
+        n_startup_trials=24,
+        n_ei_candidates=24,
         multivariate=True,
         group=True,
         constant_liar=True,

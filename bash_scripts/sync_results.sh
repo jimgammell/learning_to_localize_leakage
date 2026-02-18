@@ -1,1 +1,0 @@
-rsync -av gautschi:/scratch/gautschi/jgammell/learning_to_localize_leakage/outputs/ ./outputs/

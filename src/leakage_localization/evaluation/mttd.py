@@ -94,5 +94,11 @@ class MinimumTracesToDisclosure(Metric):
             preds, intermediate_variables, self.target_preds_to_key_preds,
             attack_count=self.attack_count, traces_per_attack=self.traces_per_attack
         )
-        mttd = np.argmax(rank_over_time == 1, axis=1).mean(axis=0) + 1
-        return torch.tensor(mttd, dtype=torch.float32).max()
+        assert np.isfinite(rank_over_time).all()
+        assert (rank_over_time >= 1).all()
+        incorrect = rank_over_time > 1
+        first_correct = incorrect.shape[1] - np.argmax(incorrect[:, ::-1, :], axis=1) + 1
+        first_correct[~incorrect.any(axis=1)] = 1
+        per_byte_mttd = (first_correct).astype(np.float32).mean(axis=0)
+        mttd = per_byte_mttd.max() # time until disclosure of full key
+        return torch.tensor(mttd, dtype=torch.float32)

@@ -1,10 +1,11 @@
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Sequence
 from math import ceil
 
 from tqdm import tqdm
 import h5py
 import numpy as np
+import trsfile
 
 def convert_hdf5_to_binary(
         dataset: h5py.Dataset,
@@ -31,3 +32,30 @@ def convert_hdf5_to_binary(
         start_idx = end_idx
     assert end_idx == start_idx
     dest_memmap.flush()
+
+def convert_trs_to_binary(
+        data_paths: Sequence[Path],
+        dest: Path,
+        use_progress_bar: bool = False
+):
+    data_files = [
+        trsfile.open(data_path, 'r')
+        for data_path in data_paths
+    ]
+    row_count = sum(len(data_file) for data_file in data_files)
+    col_count = len(data_files[0][0].samples)
+    dest_memmap = np.memmap(dest, mode='w+', dtype=np.int8, shape=(row_count, col_count), order='C')
+    if use_progress_bar:
+        progress_bar = tqdm(total=row_count)
+    memmap_idx = 0
+    for data_file in data_files:
+        for trace in data_file:
+            assert 0 <= memmap_idx < row_count
+            dest_memmap[memmap_idx, :] = trace.samples
+            memmap_idx += 1
+            if use_progress_bar:
+                progress_bar.update(1)
+    assert memmap_idx == row_count
+    dest_memmap.flush()
+    for data_file in data_files:
+        data_file.close()

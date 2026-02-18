@@ -12,7 +12,7 @@ from leakage_localization.utils import aes, get_sha256_hash
 from .common import PARTITION
 from .base_dataset import Base_NumpyDataset, Base_TorchDataset
 from .compute_trace_statistics import compute_trace_statistics
-from .convert_hdf5_to_binary import convert_hdf5_to_binary
+from .convert_to_binary import convert_hdf5_to_binary
 
 TARGET_BYTE = Literal[
     0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15
@@ -115,17 +115,17 @@ class ASCADv1_NumpyDataset(Base_NumpyDataset):
 
         if self.config.variable_key:
             if self.config.cropped_traces:
-                self.timestep_count = 1400
+                self.timestep_count = 1_400
                 self.data_path = self.config.root / 'ascad-variable.h5'
                 self.checksum = 'd834da6ca5a288c4ba5add8e336845270a055d6eaf854dcf2f325a2eb6d7de06'
             else:
-                self.timestep_count = 250000
+                self.timestep_count = 250_000
                 self.data_path = self.config.root / 'atmega8515-raw-traces.h5'
                 self.checksum = '6f13d7c380c937892c09b439910c4313d551adf011d2f4d76ad8b9b3de27b852'
             if self.config.partition == 'profile':
-                self.trace_count = 200000
+                self.trace_count = 200_000
             elif self.config.partition == 'attack':
-                self.trace_count = 100000
+                self.trace_count = 100_000
             else:
                 assert False
         else:
@@ -134,13 +134,13 @@ class ASCADv1_NumpyDataset(Base_NumpyDataset):
                 self.data_path = self.config.root / 'ASCAD_data' / 'ASCAD_databases' / 'ASCAD.h5'
                 self.checksum = 'f56625977fb6db8075ab620b1f3ef49a2a349ae75511097505855376e9684f91'
             else:
-                self.timestep_count = 100000
+                self.timestep_count = 100_000
                 self.data_path = self.config.root / 'ASCAD_data' / 'ASCAD_databases' / 'ATMega8515_raw_traces.h5'
                 self.checksum = '51e722f6c63a590ce2c4633c9a9534e8e1b22a9cde8e4532e32c11ac089d4625'
             if self.config.partition == 'profile':
-                self.trace_count = 50000
+                self.trace_count = 50_000
             elif self.config.partition == 'attack':
-                self.trace_count = 10000
+                self.trace_count = 10_000
             else:
                 assert False
         if not self.data_path.exists():

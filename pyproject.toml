@@ -20,7 +20,7 @@ dependencies = [
     "lightning",
     "optuna",
     "pandas",
-    "trsfile",
+    "trsfile==0.3.2",
 ]
 requires-python = "==3.11.*"
 authors = [

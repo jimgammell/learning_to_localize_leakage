@@ -75,19 +75,26 @@ class CHESCTF2018_NumpyDataset(Base_NumpyDataset):
                 r'PinataAcqTask2.2_10k_upload.trs',
                 r'PinataAcqTask2.3_10k_upload.trs',
             ]
+            self.sample_offsets = [0, 800, 0]
             self.trace_count = 30_000
         elif self.config.partition == 'attack':
             self.datanames = [
                 r'PinataAcqTask2.4_10k_upload.trs',
             ]
             self.trace_count = 10_000
+            self.sample_offsets = [0]
         else:
             assert False
         self.timestep_count = 650_000
 
         self.binary_trace_path = self.config.root / f'ches_ctf_2018.{self.config.partition}.dat'
         if not self.binary_trace_path.exists():
-            convert_trs_to_binary([self.config.root / dataname for dataname in self.datanames], self.binary_trace_path, use_progress_bar=True)
+            convert_trs_to_binary(
+                [self.config.root / dataname for dataname in self.datanames],
+                sample_offsets=self.sample_offsets,
+                dest=self.binary_trace_path,
+                use_progress_bar=True
+            )
         self.metadata_path = self.config.root / f'ches_ctf_2018.{self.config.partition}.metadata.npz'
         if not self.metadata_path.exists():
             keys, plaintexts, ciphertexts = [], [], []
@@ -95,7 +102,7 @@ class CHESCTF2018_NumpyDataset(Base_NumpyDataset):
                 datapath = self.config.root / dataname
                 with trsfile.open(datapath, 'r') as data_file:
                     for x in data_file:
-                        plaintext, ciphertext, key = np.split(np.frombuffer(x.parameters['LEGACY_DATA'].value, dtype=np.uint8), 3)
+                        plaintext, ciphertext, key = np.split(np.frombuffer(x.data, dtype=np.uint8, count=48), 3)
                         plaintexts.append(plaintext)
                         ciphertexts.append(ciphertext)
                         keys.append(key)

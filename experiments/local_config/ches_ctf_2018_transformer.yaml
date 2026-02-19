@@ -34,9 +34,9 @@ model:
   use_fourier_embed: false
   fourier_embed_num_bands: null
   fourier_embed_sigma: null
-  embedding_dim: 512
+  embedding_dim: 1024
   expansion_factor: 4
-  trunk_blocks: 7
+  trunk_blocks: 8
   head_count: null
   register_tokens: 0
   input_dropout_rate: 0.0

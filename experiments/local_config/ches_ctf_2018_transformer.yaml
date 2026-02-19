@@ -55,7 +55,7 @@ search_space:
   training:
     base_lr:
       type: float
-      low: 1.e-4
+      low: 1.e-5
       high: 1.e-3
       log: true
     lr_decay_multiplier:

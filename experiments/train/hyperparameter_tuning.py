@@ -44,7 +44,7 @@ def get_study(
         optuna.storages.journal.JournalFileBackend(str(study_path))
     )
     sampler = optuna.samplers.TPESampler(
-        n_startup_trials=24,
+        n_startup_trials=96,
         n_ei_candidates=24,
         multivariate=True,
         group=True,
@@ -52,7 +52,7 @@ def get_study(
         seed=SEED + int(os.environ.get('SLURM_ARRAY_TASK_ID', 0))
     )
     pruner = optuna.pruners.HyperbandPruner(
-        min_resource=50,
+        min_resource=100,
         reduction_factor=3
     )
     study = optuna.create_study(

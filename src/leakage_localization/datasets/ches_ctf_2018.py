@@ -75,7 +75,7 @@ class CHESCTF2018_NumpyDataset(Base_NumpyDataset):
                 r'PinataAcqTask2.2_10k_upload.trs',
                 r'PinataAcqTask2.3_10k_upload.trs',
             ]
-            self.sample_offsets = [0, 800, 0]
+            self.sample_offsets = [0, 0, 0]
             self.trace_count = 30_000
         elif self.config.partition == 'attack':
             self.datanames = [
@@ -126,6 +126,7 @@ class CHESCTF2018_NumpyDataset(Base_NumpyDataset):
             self.ciphertexts = metadata['ciphertexts']
     
     def get_trace_statistics(self, use_progress_bar: bool = False) -> Dict[str, NDArray[np.floating]]:
+        assert self.config.partition == 'profile'
         cache_path = self.config.root / 'ches_ctf_2018.stats-cache.npz'
         if not cache_path.exists():
             trace_mean, trace_var, trace_min, trace_max = compute_trace_statistics(self, chunk_size=4096, use_progress_bar=use_progress_bar)

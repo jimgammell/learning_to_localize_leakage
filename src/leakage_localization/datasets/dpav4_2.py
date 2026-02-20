@@ -31,7 +31,7 @@ def prepare_dataset(root: Path, partition: PARTITION):
     else:
         assert False
     row_count = len(indices)
-    col_count = 1_700_000
+    col_count = 1_704_046
     plaintexts = np.empty((row_count, 16), dtype=np.uint8)
     ciphertexts = np.empty((row_count, 16), dtype=np.uint8)
     masks = np.empty((row_count, 16), dtype=np.uint8)

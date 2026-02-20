@@ -55,7 +55,7 @@ def prepare_dataset(root: Path, partition: PARTITION):
             progress_bar.update(1)
     np.savez(root / f'metadata.{partition}.npz', plaintexts=plaintexts, ciphertexts=ciphertexts, masks=masks, keys=keys)
     
-    traces = np.memmap(root / f'traces.{partition}.dat', shape=(row_count, col_count), dtype=np.int8, mode='r+', order='C')
+    traces = np.memmap(root / f'traces.{partition}.dat', shape=(row_count, col_count), dtype=np.int8, mode='w+', order='C')
     progress_bar = tqdm(total=row_count, desc='Trace extraction')
     for key in range(16):
         for file_idx in range(5000*key, 5000*(key+1)):

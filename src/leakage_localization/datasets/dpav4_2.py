@@ -23,7 +23,7 @@ MASK = np.array([
     3, 12, 53, 58, 80, 95, 102, 105, 150, 153, 160, 175, 197, 202, 243, 252
 ], dtype=np.uint8)
 
-def prepare_dataset(root: Path, dest: Path, partition: PARTITION):
+def prepare_dataset(root: Path, partition: PARTITION):
     if partition == 'profile':
         indices = np.arange(0, 75_000)
     elif partition == 'attack':
@@ -38,7 +38,7 @@ def prepare_dataset(root: Path, dest: Path, partition: PARTITION):
     keys = np.empty((row_count, 16), dtype=np.uint8)
     with open(root / 'v4_2' / 'dpav4_2_index', 'r') as index_file:
         progress_bar = tqdm(total=row_count, desc='Metadata extraction')
-        for line_idx, line in index_file.readlines():
+        for line_idx, line in enumerate(index_file.readlines()):
             if line_idx < indices[0]:
                 continue
             key = np.frombuffer(bytearray.fromhex(line[0:32]), dtype=np.uint8)
@@ -53,9 +53,9 @@ def prepare_dataset(root: Path, dest: Path, partition: PARTITION):
             for byte in range(16):
                 masks[line_idx, byte] = int(MASK[int(offset3[byte] + 1) % 16])
             progress_bar.update(1)
-    np.savez(dest / f'metadata.{partition}.npz', plaintexts=plaintexts, ciphertexts=ciphertexts, masks=masks, keys=keys)
+    np.savez(root / f'metadata.{partition}.npz', plaintexts=plaintexts, ciphertexts=ciphertexts, masks=masks, keys=keys)
     
-    traces = np.memmap(dest / f'traces.{partition}.dat', shape=(row_count, col_count), dtype=np.int8, mode='r+', order='C')
+    traces = np.memmap(root / f'traces.{partition}.dat', shape=(row_count, col_count), dtype=np.int8, mode='r+', order='C')
     progress_bar = tqdm(total=row_count, desc='Trace extraction')
     for key in range(16):
         for file_idx in range(5000*key, 5000*(key+1)):

@@ -10,16 +10,18 @@ LOCAL_DIRECTORY_CONFIG = LOCAL_CONFIG_ROOT / 'directories.yaml'
 ASCADV1_FIXED_ROOT: Optional[Path] = None
 ASCADV1_VARIABLE_ROOT: Optional[Path] = None
 CHES_CTF_2018_ROOT: Optional[Path] = None
+DPAV4d2_ROOT: Optional[Path] = None
 DOWNLOADS_CACHE_ROOT: Optional[Path] = None
 OUTPUTS_ROOT: Optional[Path] = None
 
 def append_directory_clargs(p: argparse.ArgumentParser):
     for key, description in (
-        ('ascadv1-fixed-root', 'Root directory for ASCADv1-fixed.'),
-        ('ascadv1-variable-root', 'Root directory for ASCADv1-variable.'),
-        ('ches-ctf-2018-root', 'Root directory for CHES-CTF-2018.'),
-        ('downloads-cache-root', 'Root directory for caching downloaded files.'),
-        ('outputs-root', 'Root directory for experiment outputs.')
+        ('ascadv1-fixed-root', 'Root directory for ASCADv1-fixed'),
+        ('ascadv1-variable-root', 'Root directory for ASCADv1-variable'),
+        ('ches-ctf-2018-root', 'Root directory for CHES-CTF-2018'),
+        ('dpav4_2-root', 'Root directory for DPAv4.2'),
+        ('downloads-cache-root', 'Root directory for caching downloaded files'),
+        ('outputs-root', 'Root directory for experiment outputs')
     ):
         p.add_argument(
             f'--{key}',
@@ -53,6 +55,9 @@ def init_directories(clargs: Optional[Dict[str, str]] = None, config: Optional[D
         elif dirkey == 'ches-ctf-2018-root':
             CHES_CTF_2018_ROOT = Path(dirpath)
             CHES_CTF_2018_ROOT.mkdir(exist_ok=True)
+        elif dirkey == 'dpav4_2-root':
+            DPAV4d2_ROOT = Path(dirpath)
+            DPAV4d2_ROOT.mkdir(exist_ok=True)
         elif dirkey == 'downloads-cache-root':
             DOWNLOADS_CACHE_ROOT = Path(dirpath)
             DOWNLOADS_CACHE_ROOT.mkdir(exist_ok=True)
@@ -68,6 +73,8 @@ def init_directories(clargs: Optional[Dict[str, str]] = None, config: Optional[D
             ASCADV1_VARIABLE_ROOT = Path(dirpath)
         elif dirkey == 'ches-ctf-2018-root':
             CHES_CTF_2018_ROOT = Path(dirpath)
+        elif dirkey == 'dpav4_2-root':
+            DPAV4d2_ROOT = Path(dirpath)
         elif dirkey == 'downloads-cache-root':
             DOWNLOADS_CACHE_ROOT = Path(dirpath)
             DOWNLOADS_CACHE_ROOT.mkdir(exist_ok=True, parents=True)
@@ -80,6 +87,6 @@ def init_directories(clargs: Optional[Dict[str, str]] = None, config: Optional[D
         raise RuntimeError(f'Directory OUTPUTS_ROOT is not configured. Please configure it by adding the line outputs-root=/path/to/directory/ to {LOCAL_CONFIG_ROOT}.')
 
 __all__ = [
-    'ASCADV1_FIXED_ROOT', 'ASCADV1_VARIABLE_ROOT', 'CHES_CTF_2018_ROOT',
+    'ASCADV1_FIXED_ROOT', 'ASCADV1_VARIABLE_ROOT', 'CHES_CTF_2018_ROOT', 'DPAV4d2_ROOT',
     'DOWNLOADS_CACHE_ROOT', 'OUTPUTS_ROOT', 'append_directory_clargs', 'LOCAL_CONFIG_ROOT',
 ]

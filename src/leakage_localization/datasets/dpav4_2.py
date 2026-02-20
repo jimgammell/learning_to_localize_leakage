@@ -39,7 +39,7 @@ def prepare_dataset(root: Path, partition: PARTITION):
     with open(root / 'v4_2' / 'dpav4_2_index', 'r') as index_file:
         progress_bar = tqdm(total=row_count, desc='Metadata extraction')
         for line_idx, line in enumerate(index_file.readlines()):
-            if line_idx < indices[0]:
+            if line_idx < indices[0] or line_idx > indices[-1]:
                 continue
             key = np.frombuffer(bytearray.fromhex(line[0:32]), dtype=np.uint8)
             plaintext = np.frombuffer(bytearray.fromhex(line[33:65]), dtype=np.uint8)

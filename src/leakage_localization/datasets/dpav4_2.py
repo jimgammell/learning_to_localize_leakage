@@ -62,6 +62,8 @@ def prepare_dataset(root: Path, partition: PARTITION):
     idx = 0
     for key in range(16):
         for file_idx in range(5000*key, 5000*(key+1)):
+            if file_idx < indices[0] or file_idx > indices[-1]:
+                continue
             trace_filename = f'DPACV42_{file_idx:06}.trc.bz2'
             trace_path = root / 'v4_2' / 'DPA_contestv4_2' / f'k{key:02}' / trace_filename
             trace = np.frombuffer(bz2.BZ2File(trace_path).read()[357:-357], dtype=np.int8)

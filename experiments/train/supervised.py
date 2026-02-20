@@ -112,7 +112,6 @@ def construct_training_module(
         model_constructor=Model,
         model_kwargs={
             'input_length': train_set.dataset.timestep_count,
-            'output_dim': train_set.dataset.config.num_classes,
             'output_count': train_set.dataset.config.num_labels,
             'trunk': config['model']['trunk'],
             'position_embedding': config['model']['position_embedding'],
@@ -136,8 +135,8 @@ def construct_training_module(
             'perceiver_self_attn_per_cross_attn_blocks': config['model']['perceiver_self_attn_per_cross_attn_blocks'],
             'perceiver_cross_attn_head_count': config['model']['perceiver_cross_attn_head_count']
         },
+        leakage_model=config['model']['leakage_model'],
         num_labels=train_set.dataset.config.num_labels,
-        num_classes=train_set.dataset.config.num_classes,
         total_steps=config['training']['total_steps'],
         lr_warmup_steps=config['training']['lr_warmup_steps'],
         lr_const_steps=config['training']['lr_const_steps'],

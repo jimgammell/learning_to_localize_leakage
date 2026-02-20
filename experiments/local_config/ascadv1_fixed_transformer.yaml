@@ -25,6 +25,7 @@ mttd:
   attack_count: 1000
   traces_per_attack: 1000
 model:
+  leakage_model: id
   trunk: transformer
   position_embedding: rope
   pooling: token

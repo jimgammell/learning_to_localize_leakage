@@ -75,7 +75,7 @@ class CHESCTF2018_NumpyDataset(Base_NumpyDataset):
                 r'PinataAcqTask2.2_10k_upload.trs',
                 r'PinataAcqTask2.3_10k_upload.trs',
             ]
-            self.sample_offsets = [0, 0, 0]
+            self.sample_offsets = [0, 0, 0] # the repo I'm referencing shifts the traces in the second file by 800 samples. However, an issue opened on their repo suggests not to do this, so I'm trying without.
             self.trace_count = 30_000
         elif self.config.partition == 'attack':
             self.datanames = [

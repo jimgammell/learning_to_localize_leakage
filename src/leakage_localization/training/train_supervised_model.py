@@ -19,16 +19,19 @@ def train_supervised_model(
 ):
     callbacks = []
     if early_stop_metric is not None:
+        best_ckpt_name = f'best_{early_stop_metric}'.replace('/', '_')
         early_stop_callback = ModelCheckpoint(
             monitor=early_stop_metric,
             mode=early_stop_mode,
             save_top_k=1,
             dirpath=dest,
-            filename=f'best_{early_stop_metric}'.replace('/', '_'),
+            filename=best_ckpt_name,
             verbose=True,
             enable_version_counter=False
         )
         callbacks.append(early_stop_callback)
+    else:
+        best_ckpt_name = 'latest'
     final_checkpoint_callback = ModelCheckpoint(
         dirpath=dest,
         filename='latest',
@@ -52,7 +55,7 @@ def train_supervised_model(
         gradient_clip_val=grad_clip_val,
         default_root_dir=dest,
     )
-    trainer.fit(training_module, train_dataloaders=train_loader, val_dataloaders=val_loader)
+    trainer.fit(training_module, train_dataloaders=train_loader, val_dataloaders=val_loader, ckpt_path=dest / f'{best_ckpt_name}.ckpt')
     try:
         trainer.test(training_module, dataloaders=test_loader)
     except Exception as e:

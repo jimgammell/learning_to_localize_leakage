@@ -1,6 +1,6 @@
 # Adapted from https://github.com/AISyLab/feature_selection_dlsca/blob/master/experiments/DPAV42
 
-from typing import Literal, Union, Sequence, List, Dict, Tuple, Any, get_args
+from typing import Literal, Union, Sequence, List, Dict, Tuple, Any, Optional, Callable, get_args
 from pathlib import Path
 from dataclasses import dataclass
 
@@ -8,6 +8,7 @@ from tqdm import tqdm
 import numpy as np
 from numpy.typing import NDArray
 import bz2
+import torch
 
 from .common import PARTITION
 from .base_dataset import Base_NumpyDataset, Base_TorchDataset
@@ -123,6 +124,7 @@ class DPAv4d2_NumpyDataset(Base_NumpyDataset):
             self.trace_count = 5_000
         else:
             assert False
+        self.timestep_count = 1_704_046
         
         self.binary_trace_path = self.config.root / f'traces.{self.config.partition}.dat'
         self.metadata_path = self.config.root / f'metadata.{self.config.partition}.npz'
@@ -211,3 +213,27 @@ class DPAv4d2_NumpyDataset(Base_NumpyDataset):
             f'target_byte={self.config.target_byte}',
             f'target_variable={self.config.target_variable}'
         )) + ')'
+
+class DPAv4d2_TorchDataset(Base_TorchDataset, DPAv4d2_NumpyDataset):
+    def __init__(
+            self,
+            transform: Optional[Callable[[torch.Tensor], torch.Tensor]] = None,
+            target_transform: Optional[Callable[[torch.Tensor], torch.Tensor]] = None,
+            **dataset_config
+    ):
+        Base_TorchDataset.__init__(self, transform=transform, target_transform=target_transform)
+        DPAv4d2_NumpyDataset.__init__(self, **dataset_config)
+    
+    def __getitem__(self, _idx: Union[int, slice, NDArray[np.integer], Sequence[int]]) -> Tuple[torch.Tensor, torch.Tensor, Dict[str, NDArray[np.integer]]]:
+        trace, target, intermediate_variables = DPAv4d2_NumpyDataset.__getitem__(self, _idx)
+        trace = torch.tensor(trace, dtype=torch.float32)
+        target = torch.tensor(target, dtype=torch.long)
+        intermediate_variables = {k: torch.tensor(v, dtype=torch.long) for k, v in intermediate_variables.items()}
+        if self.transform is not None:
+            trace = self.transform(trace)
+        if self.target_transform is not None:
+            target = self.target_transform(target)
+        return trace, target, intermediate_variables
+    
+    def __len__(self) -> int:
+        return DPAv4d2_NumpyDataset.__len__(self)

@@ -57,6 +57,6 @@ def train_supervised_model(
     )
     trainer.fit(training_module, train_dataloaders=train_loader, val_dataloaders=val_loader)
     try:
-        trainer.test(training_module, dataloaders=test_loader, ckpt_path=dest / f'{best_ckpt_name}.ckpt')
+        trainer.test(training_module, dataloaders=test_loader, ckpt_path='best')
     except Exception as e:
         print(f"Warning: test step failed with {type(e).__name__}: {e}")

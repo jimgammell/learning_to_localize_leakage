@@ -65,18 +65,21 @@ search_space:
       high: 1.0
       log: true
   model:
+    leakage_model:
+      type: categorical
+      choices: [bit, id, hw, bit+id, bit+hw, id+hw, bit+id+hw]
     patch_size:
       type: categorical
-      choices: [1000, 2000, 5000, 10000]
+      choices: [5000, 10000, 25000, 50000]
     embedding_dim:
       type: int
       low: 128
-      high: 1024
+      high: 768
       step: 128
     trunk_blocks:
       type: int
       low: 1
-      high: 8
+      high: 4
     input_dropout_rate:
       type: float
       low: 0.0

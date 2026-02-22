@@ -42,3 +42,24 @@ class ByteLogitsToBitLogits(nn.Module):
         bit_logits = logp1 - logp0
         bit_logits = bit_logits.reshape(*batch_dims, 8)
         return bit_logits
+
+class ByteLogitsToHwLogits(nn.Module):
+    hw_mask: torch.Tensor
+
+    def __init__(self):
+        super().__init__()
+        byte_values = torch.arange(256)
+        bits = ((byte_values.unsqueeze(1) >> torch.arange(8)) & 1)
+        hw = bits.sum(dim=1)
+        hw_mask = torch.stack([(hw == i) for i in range(9)], dim=0)
+        self.register_buffer('hw_mask', hw_mask, persistent=False)
+    
+    def forward(self, byte_logits: torch.Tensor) -> torch.Tensor:
+        *batch_dims, id_count = byte_logits.shape
+        assert id_count == 256
+        byte_logits = byte_logits.reshape(-1, id_count)
+        log_byte_probs = nn.functional.log_softmax(byte_logits, dim=-1)
+        log_hw_probs = torch.where(self.hw_mask.unsqueeze(0), log_byte_probs.unsqueeze(1), float('-inf'))
+        log_hw_probs = torch.logsumexp(log_hw_probs, dim=-1)
+        log_hw_probs = log_hw_probs.reshape(*batch_dims, 9)
+        return log_hw_probs

@@ -151,7 +151,7 @@ class DPAv4d2_NumpyDataset(Base_NumpyDataset):
         cache_path = self.config.root / 'stats-cache.npz'
         if not cache_path.exists():
             trace_mean, trace_var, trace_min, trace_max = compute_trace_statistics(self, chunk_size=4096, use_progress_bar=use_progress_bar)
-            np.savez(cache_path, mean=trace_mean, var=trace_var, min=trace_min, max=trace_min)
+            np.savez(cache_path, mean=trace_mean, var=trace_var, min=trace_min, max=trace_max)
         cache = np.load(cache_path, allow_pickle=True)
         return cache
     

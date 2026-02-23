@@ -31,9 +31,11 @@ def apply_perm_indices(i: NDArray[np.integer], m0: NDArray[np.integer], m1: NDAr
     perm_i = G[G[G[G[(15 - i)^x0]^x1]^x2]^x3]
     return perm_i
 
-def extract_raw_dataset(datafiles: List[Path], trace_dest: Path, metadata_dest: Path, use_progress_bar: bool = False, exclude_indices: Optional[Sequence[int]] = None):
+def extract_raw_dataset(datafiles: List[Path], trace_dest: Path, metadata_dest: Path, use_progress_bar: bool = False, exclude_indices: Optional[Sequence[int]] = None, chunk_size: int = 4096):
     if exclude_indices is None:
         exclude_indices = set()
+    else:
+        exclude_indices = set(exclude_indices)
     row_count = 0
     for datafile in datafiles:
         with h5py.File(datafile, 'r') as f:
@@ -49,25 +51,25 @@ def extract_raw_dataset(datafiles: List[Path], trace_dest: Path, metadata_dest: 
     trace_idx = 0
     for datafile in datafiles:
         with h5py.File(datafile, mode='r') as datafile:
-            for datafile_idx in range(len(datafile['traces'])):
-                if trace_idx not in exclude_indices:
-                    trace = datafile['traces'][datafile_idx, :]
-                    dest_memmap[memmap_idx, :] = trace
-                    memmap_idx += 1
-                    key = datafile['metadata']['key'][datafile_idx, :]
-                    plaintext = datafile['metadata']['plaintext'][datafile_idx, :]
-                    mask = datafile['metadata']['masks'][datafile_idx, :]
-                    keys.append(key)
-                    plaintexts.append(plaintext)
-                    masks.append(mask)
-                trace_idx += 1
+            n_traces = len(datafile['traces'])
+            for chunk_start in range(0, n_traces, chunk_size):
+                chunk_end = min(chunk_start + chunk_size, n_traces)
+                chunk_global_indices = np.arange(trace_idx, trace_idx + (chunk_end - chunk_start))
+                keep_mask = np.array([idx not in exclude_indices for idx in chunk_global_indices])
+                n_keep = keep_mask.sum()
+                if n_keep > 0:
+                    trace_chunk = datafile['traces'][chunk_start:chunk_end][keep_mask]
+                    dest_memmap[memmap_idx:memmap_idx + n_keep, :] = trace_chunk
+                    keys.append(datafile['metadata']['key'][chunk_start:chunk_end][keep_mask])
+                    plaintexts.append(datafile['metadata']['plaintext'][chunk_start:chunk_end][keep_mask])
+                    masks.append(datafile['metadata']['masks'][chunk_start:chunk_end][keep_mask])
+                    memmap_idx += n_keep
+                trace_idx += chunk_end - chunk_start
                 if use_progress_bar:
-                    progress_bar.update(1)
-                if memmap_idx % 256 == 0:
-                    dest_memmap.flush()
-    dest_memmap.flush()
+                    progress_bar.update(n_keep)
+                dest_memmap.flush()
     assert memmap_idx == row_count
-    np.savez(metadata_dest, keys=np.array(keys), plaintexts=np.array(plaintexts), masks=np.array(masks))
+    np.savez(metadata_dest, keys=np.concatenate(keys), plaintexts=np.concatenate(plaintexts), masks=np.concatenate(masks))
 
 @dataclass
 class ASCADv2_Config:

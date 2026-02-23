@@ -293,7 +293,7 @@ class ASCADv1_NumpyDataset(Base_NumpyDataset):
         masks = self.masks[idx, :]
         intermediate_variables = self.compute_intermediate_variables(key, plaintext, masks)
         target = np.concatenate([
-            intermediate_variables[target_variable][..., 0, np.newaxis] if target_variable in ['r_in', 'r_out']
+            intermediate_variables[target_variable][..., 0, np.newaxis] if target_variable in {'r_in', 'r_out'}
             else intermediate_variables[target_variable][..., self.config.target_byte]
             for target_variable in self.config.target_variable
         ], axis=-1)

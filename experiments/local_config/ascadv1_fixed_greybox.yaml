@@ -51,14 +51,13 @@ model:
 search_space:
   data:
     random_roll:
-      type: int
-      low: 0
-      high: 10
+      type: categorical
+      choices: [0, 1, 2, 4, 8, 16, 32, 64]
   training:
     base_lr:
       type: float
       low: 1.e-5
-      high: 1.e-3
+      high: 1.e-2
       log: true
     lr_decay_multiplier:
       type: float
@@ -68,7 +67,7 @@ search_space:
   model:
     patch_size:
       type: categorical
-      choices: [250, 500, 1000, 2000, 5000]
+      choices: [500, 1000, 2000, 4000]
     embedding_dim:
       type: int
       low: 128

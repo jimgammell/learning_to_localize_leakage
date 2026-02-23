@@ -44,7 +44,7 @@ class AttentionPool(nn.Module):
         super().__init__()
         self.attn_input_norm = nn.LayerNorm(embedding_dim, eps=1e-5, elementwise_affine=True, bias=True)
         self.attn_context_norm = nn.LayerNorm(embedding_dim, eps=1e-5, elementwise_affine=True, bias=True)
-        self.cross_attn = CrossAttention(embedding_dim=embedding_dim, **kwargs)
+        self.cross_attn = CrossAttention(embedding_dim=embedding_dim, use_rope=False, **kwargs)
         self.pre_query = nn.Parameter(torch.empty((output_tokens, embedding_dim)))
         nn.init.trunc_normal_(self.pre_query, std=0.02)
     

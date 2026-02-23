@@ -242,8 +242,6 @@ class Model(nn.Module):
                 head_count=self.config.head_count,
                 dropout_rate=self.config.hidden_dropout_rate,
                 use_bias=self.config.use_bias,
-                expansion_factor=self.config.expansion_factor,
-                fnn_style=self.config.fnn_style
             )
         elif self.config.pooling == 'average':
             self.pool = AveragePool(

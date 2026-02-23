@@ -1,5 +1,5 @@
 data:
-  id: ascadv1-variable
+  id: ascadv1-fixed
   target_byte: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]
   target_variable: subbytes
   preprocessing: standardize
@@ -11,8 +11,8 @@ training:
   lr_warmup_epochs: 5
   lr_const_epochs: 0
   batch_size: 64
-  base_lr: 8.e-4
-  lr_decay_multiplier: 0.001
+  base_lr: 3.e-4
+  lr_decay_multiplier: 0.1
   weight_decay: 1.e-4
   label_smoothing: 0.
   grad_clip_val: 1.
@@ -25,25 +25,25 @@ mttd:
   attack_count: 1000
   traces_per_attack: 1000
 model:
-  grey_box_head: null
+  grey_box_head: ascadv1
   leakage_model: id
   trunk: transformer
   position_embedding: rope
-  pooling: token
+  pooling: attention
   head: tied
   fnn_style: mlp
   patch_size: 1000
   use_fourier_embed: false
   fourier_embed_num_bands: null
   fourier_embed_sigma: null
-  embedding_dim: 512
+  embedding_dim: 768
   expansion_factor: 4
-  trunk_blocks: 7
+  trunk_blocks: 6
   head_count: null
   register_tokens: 0
-  input_dropout_rate: 0.0
+  input_dropout_rate: 0.
   input_droppatch_rate: 0.
-  hidden_dropout_rate: 0.1
+  hidden_dropout_rate: 0.3
   use_bias: true
   perceiver_latent_dim: null
   perceiver_self_attn_per_cross_attn_blocks: null
@@ -57,7 +57,7 @@ search_space:
   training:
     base_lr:
       type: float
-      low: 1.e-4
+      low: 1.e-5
       high: 1.e-3
       log: true
     lr_decay_multiplier:
@@ -68,11 +68,11 @@ search_space:
   model:
     patch_size:
       type: categorical
-      choices: [500, 1000, 2000, 5000]
+      choices: [250, 500, 1000, 2000, 5000]
     embedding_dim:
       type: int
       low: 128
-      high: 640
+      high: 1024
       step: 128
     trunk_blocks:
       type: int

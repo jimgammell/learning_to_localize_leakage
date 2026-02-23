@@ -1,4 +1,4 @@
-from typing import Literal, Optional, List, get_args
+from typing import Literal, Optional, get_args
 from dataclasses import dataclass
 from math import sqrt
 
@@ -7,7 +7,7 @@ from torch import nn
 
 from .building_blocks.feature_preprocessing import Embed, FourierEmbed, Patchifier
 from .building_blocks.pooling import AttentionPool, AveragePool, TokenPool
-from .building_blocks.attention import SelfAttention, CrossAttention
+from .building_blocks.grey_box_heads import ASCADv1Head, ASCADv2Head
 from .trunks.transformer import TransformerTrunk
 from .trunks.perceiver import PerceiverTrunk
 
@@ -33,12 +33,17 @@ FNN_STYLE = Literal[
     'mlp',
     'gated'
 ]
+GREY_BOX_HEAD = Literal[
+    'ascadv1',
+    'ascadv2'
+]
 
 @dataclass
 class ModelConfig:
     input_length: int
     output_dim: int
     output_count: int
+    grey_box_head: Optional[GREY_BOX_HEAD]
     trunk: TRUNK
     position_embedding: POSITION_EMBEDDING
     pooling: POOLING
@@ -65,6 +70,16 @@ class ModelConfig:
         assert isinstance(self.input_length, int) and self.input_length > 0
         assert isinstance(self.output_dim, int) and self.output_dim > 0
         assert isinstance(self.output_count, int) and self.output_count > 0
+        if self.grey_box_head is not None:
+            assert self.grey_box_head in get_args(GREY_BOX_HEAD)
+        if self.grey_box_head == 'ascadv1':
+            assert self.output_dim == 256
+            assert self.output_count == 66
+        elif self.grey_box_head == 'ascadv2':
+            assert self.output_dim == 256
+            assert self.output_count == 18
+        else:
+            assert self.grey_box_head is None
         assert self.trunk in get_args(TRUNK)
         assert self.position_embedding in get_args(POSITION_EMBEDDING)
         assert self.pooling in get_args(POOLING)
@@ -112,6 +127,7 @@ class Model(nn.Module):
             input_length: int,
             output_dim: int,
             output_count: int,
+            grey_box_head: Optional[GREY_BOX_HEAD],
             trunk: TRUNK,
             position_embedding: POSITION_EMBEDDING,
             pooling: POOLING,
@@ -140,6 +156,7 @@ class Model(nn.Module):
             input_length=input_length,
             output_dim=output_dim,
             output_count=output_count,
+            grey_box_head=grey_box_head,
             trunk=trunk,
             position_embedding=position_embedding,
             pooling=pooling,
@@ -251,6 +268,13 @@ class Model(nn.Module):
         else:
             assert False
         
+        if self.config.grey_box_head == 'ascadv1':
+            self.grey_box_head = ASCADv1Head()
+        elif self.config.grey_box_head == 'ascadv2':
+            self.grey_box_head = ASCADv2Head()
+        else:
+            self.grey_box_head = None
+        
         for mod in self.modules():
             if isinstance(mod, nn.Linear):
                 nn.init.xavier_uniform_(mod.weight)
@@ -298,9 +322,11 @@ class Model(nn.Module):
         if self.config.head == 'tied':
             x = self.heads(x)
         elif self.config.head == 'untied':
-            x = torch.cat([
+            x = torch.stack([
                 head(xp) for head, xp in zip(self.heads, x.unbind(dim=1))
             ], dim=1)
         else:
             assert False
+        if self.grey_box_head is not None:
+            x = self.grey_box_head(x)
         return x

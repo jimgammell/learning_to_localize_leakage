@@ -126,7 +126,12 @@ def construct_training_module(
         model_constructor=Model,
         model_kwargs={
             'input_length': train_set.dataset.timestep_count,
-            'output_count': train_set.dataset.config.num_labels,
+            'output_count': (
+                66 if config['model']['grey_box_head'] == 'ascadv1'
+                else 18 if config['model']['grey_box_head'] == 'ascadv2'
+                else train_set.dataset.config.num_labels
+            ),
+            'grey_box_head': config['model']['grey_box_head'],
             'trunk': config['model']['trunk'],
             'position_embedding': config['model']['position_embedding'],
             'pooling': config['model']['pooling'],
@@ -254,13 +259,14 @@ def _optuna_objective(
 def run(
         dest: Path,
         config: Dict[str, Any],
-        optuna_study_path: Optional[Path]
+        optuna_study_path: Optional[Path],
+        optuna_run_count: int
 ):
     if optuna_study_path is not None:
         optuna_study_path.parent.mkdir(exist_ok=True, parents=True)
         optuna_study = get_study(optuna_study_path, config)
         optuna_objective = partial(_optuna_objective, dest=dest, config=config)
-        optuna_study.optimize(optuna_objective, n_trials=1) # will use slurm to handle multiple runs
+        optuna_study.optimize(optuna_objective, n_trials=optuna_run_count) # will use slurm to handle multiple runs
     else:
         train_model(dest, config)
 

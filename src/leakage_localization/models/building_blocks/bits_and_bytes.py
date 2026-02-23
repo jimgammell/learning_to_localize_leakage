@@ -106,3 +106,23 @@ class SoftGF256Mult(nn.Module):
         logpz_zero = torch.logsumexp(torch.stack([logpz[..., 0:1], logpx[..., 0:1]]), dim=0)
         logpz = torch.cat([logpz_zero, logpz[..., 1:]], dim=-1)
         return logpz
+
+class SoftSbox(nn.Module):
+    inv_sbox: torch.Tensor
+
+    def __init__(self):
+        super().__init__()
+        self.register_buffer('inv_sbox', torch.from_numpy(aes.INVERSE_SBOX).long(), persistent=False)
+    
+    def forward(self, logits: torch.Tensor) -> torch.Tensor:
+        return logits[..., self.inv_sbox]
+
+class SoftGF256Inv(nn.Module):
+    gf256inv_lut: torch.Tensor
+
+    def __init__(self):
+        super().__init__()
+        self.register_buffer('gf256inv_lut', torch.from_numpy(aes.GF256_INV).long(), persistent=False)
+    
+    def forward(self, logits: torch.Tensor) -> torch.Tensor:
+        return logits[..., self.gf256inv_lut]

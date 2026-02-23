@@ -25,11 +25,11 @@ mttd:
   attack_count: 1000
   traces_per_attack: 1000
 model:
-  grey_box_head: null
+  grey_box_head: ascadv1
   leakage_model: id
   trunk: transformer
   position_embedding: rope
-  pooling: token
+  pooling: attention
   head: tied
   fnn_style: mlp
   patch_size: 1000

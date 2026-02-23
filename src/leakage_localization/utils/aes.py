@@ -62,9 +62,14 @@ ALOG_TABLE = np.array([
     0x39, 0x4B, 0xDD, 0x7C, 0x84, 0x97, 0xA2, 0xFD, 0x1C, 0x24, 0x6C, 0xB4, 0xC7, 0x52, 0xF6, 0x01,
 ], dtype=np.uint16)
 
+GF256_INV = np.zeros(256, dtype=np.uint8)
+for z in range(1, 256):
+    GF256_INV[z] = ALOG_TABLE[(255 - LOG_TABLE[z]) % 255]
+GF256_INV[0] = 0
+
 def mult_gf256(a: NDArray[np.integer], b: NDArray[np.integer]) -> NDArray[np.integer]:
     rv = ALOG_TABLE[(LOG_TABLE[a] + LOG_TABLE[b]) % 255]
     rv = np.where(np.logical_or(a == 0, b == 0), 0, rv)
     return rv
 
-__all__ = ['SBOX', 'INVERSE_SBOX', 'LOG_TABLE', 'ALOG_TABLE', 'mult_gf256']
+__all__ = ['SBOX', 'INVERSE_SBOX', 'LOG_TABLE', 'ALOG_TABLE', 'GF256_INV', 'mult_gf256']

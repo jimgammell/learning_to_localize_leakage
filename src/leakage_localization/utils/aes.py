@@ -67,4 +67,4 @@ def mult_gf256(a: NDArray[np.integer], b: NDArray[np.integer]) -> NDArray[np.int
     rv = np.where(np.logical_or(a == 0, b == 0), 0, rv)
     return rv
 
-__all__ = ['SBOX', 'INVERSE_SBOX', 'mult_gf256']
+__all__ = ['SBOX', 'INVERSE_SBOX', 'LOG_TABLE', 'ALOG_TABLE', 'mult_gf256']

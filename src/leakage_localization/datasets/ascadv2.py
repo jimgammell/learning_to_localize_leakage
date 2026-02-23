@@ -63,7 +63,7 @@ def extract_raw_dataset(datafiles: List[Path], trace_dest: Path, metadata_dest: 
                 trace_idx += 1
                 if use_progress_bar:
                     progress_bar.update(1)
-                if memmap_idx % 25_000 == 0:
+                if memmap_idx % 256 == 0:
                     dest_memmap.flush()
     dest_memmap.flush()
     assert memmap_idx == row_count

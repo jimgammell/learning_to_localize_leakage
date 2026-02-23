@@ -124,7 +124,7 @@ class DPAv4d2_NumpyDataset(Base_NumpyDataset):
             self.trace_count = 5_000
         else:
             assert False
-        self.timestep_count = 1_704_046
+        self.timestep_count = 1_700_000 # actually 1_704_046, but I'm going to crop it down so it's divisible by more patch sizes
         
         self.binary_trace_path = self.config.root / f'traces.{self.config.partition}.dat'
         self.metadata_path = self.config.root / f'metadata.{self.config.partition}.npz'
@@ -139,7 +139,7 @@ class DPAv4d2_NumpyDataset(Base_NumpyDataset):
     
     def init_data(self):
         if self.traces is None:
-            self.traces = np.memmap(self.binary_trace_path, dtype=np.int8, mode='r', shape=(self.trace_count, self.timestep_count), order='C')
+            self.traces = np.memmap(self.binary_trace_path, dtype=np.int8, mode='r', shape=(self.trace_count, 1_704_046), order='C')
         if self.keys is None or self.plaintexts is None or self.ciphertexts is None:
             metadata = np.load(self.metadata_path, allow_pickle=True)
             self.keys = metadata['keys']
@@ -194,7 +194,7 @@ class DPAv4d2_NumpyDataset(Base_NumpyDataset):
             _idx = _idx[0]
         self.init_data()
         idx = self.trace_indices[_idx]
-        trace = self.traces[idx, :]
+        trace = self.traces[idx, 2023:-2023]
         key = self.keys[idx, :]
         plaintext = self.plaintexts[idx, :]
         ciphertext = self.ciphertexts[idx, :]

@@ -1,5 +1,5 @@
 data:
-  id: ascadv1-fixed
+  id: dpav4.2
   target_byte: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]
   target_variable: subbytes
   preprocessing: standardize
@@ -7,12 +7,12 @@ data:
   random_roll: 4
   val_prop: 0.2
 training:
-  total_epochs: 200
+  total_epochs: 100
   lr_warmup_epochs: 5
   lr_const_epochs: 0
-  batch_size: 64
-  base_lr: 3.e-4
-  lr_decay_multiplier: 0.1
+  batch_size: 256
+  base_lr: 8.e-4
+  lr_decay_multiplier: 0.001
   weight_decay: 1.e-4
   label_smoothing: 0.
   grad_clip_val: 1.
@@ -25,7 +25,7 @@ mttd:
   attack_count: 1000
   traces_per_attack: 1000
 model:
-  leakage_model: id
+  leakage_model: bit
   trunk: transformer
   position_embedding: rope
   pooling: token
@@ -35,14 +35,14 @@ model:
   use_fourier_embed: false
   fourier_embed_num_bands: null
   fourier_embed_sigma: null
-  embedding_dim: 768
+  embedding_dim: 1024
   expansion_factor: 4
-  trunk_blocks: 6
+  trunk_blocks: 8
   head_count: null
   register_tokens: 0
-  input_dropout_rate: 0.
+  input_dropout_rate: 0.0
   input_droppatch_rate: 0.
-  hidden_dropout_rate: 0.3
+  hidden_dropout_rate: 0.1
   use_bias: true
   perceiver_latent_dim: null
   perceiver_self_attn_per_cross_attn_blocks: null
@@ -50,9 +50,8 @@ model:
 search_space:
   data:
     random_roll:
-      type: int
-      low: 0
-      high: 10
+      type: categorical
+      choices: [0, 1, 2, 4, 8, 16, 32, 64]
   training:
     base_lr:
       type: float
@@ -65,13 +64,16 @@ search_space:
       high: 1.0
       log: true
   model:
+    leakage_model:
+      type: categorical
+      choices: [bit]
     patch_size:
       type: categorical
-      choices: [250, 500, 1000, 2000, 5000]
+      choices: [10000, 25000, 50000, 100000]
     embedding_dim:
       type: int
       low: 128
-      high: 1024
+      high: 768
       step: 128
     trunk_blocks:
       type: int

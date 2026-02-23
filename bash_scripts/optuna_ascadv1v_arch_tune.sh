@@ -14,5 +14,5 @@ source ~/.bashrc
 micromamba activate leakage-localization
 python -m experiments.train.supervised \
     --dest ./outputs/ascadv1_variable/optuna_arch_search \
-    --config-file ascadv1_variable_transformer \
+    --config-file ascadv1_variable \
     --optuna-study-path ./outputs/ascadv1_variable/optuna_arch_search/optuna_study.log

@@ -14,5 +14,5 @@ source ~/.bashrc
 micromamba activate leakage-localization
 python -m experiments.train.supervised \
     --dest ./outputs/ches_ctf_2018/optuna_arch_search \
-    --config-file ches_ctf_2018_transformer \
+    --config-file ches_ctf_2018 \
     --optuna-study-path ./outputs/ches_ctf_2018/optuna_arch_search/optuna_study.log

@@ -164,7 +164,13 @@ class ASCADv2_NumpyDataset(Base_NumpyDataset):
             plaintext: NDArray[np.uint8],
             masks: NDArray[np.uint8]
     ) -> Dict[str, NDArray[np.uint8]]:
-        perm_indices = apply_perm_indices(np.arange(16, dtype=np.uint8)[np.newaxis, :], masks[:, 0], masks[:, 1], masks[:, 2], masks[:, 3])
+        perm_indices = apply_perm_indices(
+            np.arange(16, dtype=np.uint8)[np.newaxis, :],
+            masks[..., 0, np.newaxis],
+            masks[..., 1, np.newaxis],
+            masks[..., 2, np.newaxis],
+            masks[..., 3, np.newaxis]
+        )
         alpha = masks[..., 18, np.newaxis]
         beta = masks[..., 17, np.newaxis]
         subbytes_perm = aes.SBOX[key ^ plaintext]
@@ -217,7 +223,7 @@ class ASCADv2_NumpyDataset(Base_NumpyDataset):
             f'target_variable={self.config.target_variable}'
         )) + ')'
 
-class ASCADv1_TorchDataset(Base_TorchDataset, ASCADv2_NumpyDataset):
+class ASCADv2_TorchDataset(Base_TorchDataset, ASCADv2_NumpyDataset):
     def __init__(
             self,
             transform: Optional[Callable[[torch.Tensor], torch.Tensor]] = None,

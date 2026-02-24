@@ -41,7 +41,7 @@ def load_directory_config() -> Dict[str, Path]:
         return directories
 
 def init_directories(clargs: Optional[Dict[str, str]] = None, config: Optional[Dict[str, str]] = None):
-    global ASCADV1_FIXED_ROOT, ASCADV1_VARIABLE_ROOT, CHES_CTF_2018_ROOT, DPAV4d2_ROOT, DOWNLOADS_CACHE_ROOT, OUTPUTS_ROOT
+    global ASCADV1_FIXED_ROOT, ASCADV1_VARIABLE_ROOT, ASCADV2_ROOT, CHES_CTF_2018_ROOT, DPAV4d2_ROOT, DOWNLOADS_CACHE_ROOT, OUTPUTS_ROOT
     assert (clargs is not None) or (config is not None)
     if clargs is None:
         clargs = dict()

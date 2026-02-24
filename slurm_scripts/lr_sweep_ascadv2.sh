@@ -10,7 +10,7 @@
 #SBATCH --error=./outputs/ascadv2/lr_sweep/slurm_%A_%a.out
 #SBATCH --array=0-3
 
-LR_VALUES=(1e-5 3e-5 1e-4 3e-4)
+LR_VALUES=(1.e-5 3.e-5 1.e-4 3.e-4)
 LR=${LR_VALUES[$SLURM_ARRAY_TASK_ID]}
 
 source ~/.bashrc

@@ -135,7 +135,7 @@ class ASCADv2_NumpyDataset(Base_NumpyDataset):
                 exclude_indices = {99_999, 199_999, 299_999}
             elif self.config.partition == 'attack':
                 datafiles = datafiles[4:]
-                exclude_indices = {399_999, 499_999}
+                exclude_indices = {99_999, 199_999}
             else:
                 assert False
             extract_raw_dataset(datafiles, self.binary_trace_path, self.metadata_path, use_progress_bar=True, exclude_indices=exclude_indices)

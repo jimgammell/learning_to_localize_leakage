@@ -249,7 +249,7 @@ class ASCADv2_TorchDataset(Base_TorchDataset, ASCADv2_NumpyDataset):
     
     def __getitem__(self, _idx: Union[int, slice, NDArray[np.integer], Sequence[int]]) -> Tuple[torch.Tensor, torch.Tensor, Dict[str, NDArray[np.integer]]]:
         trace, target, intermediate_variables = ASCADv2_NumpyDataset.__getitem__(self, _idx)
-        trace = torch.from_numpy(trace)
+        trace = torch.tensor(trace)
         target = torch.tensor(target, dtype=torch.long)
         intermediate_variables = {k: torch.tensor(v, dtype=torch.long) for k, v in intermediate_variables.items()}
         if self.transform is not None:

@@ -178,7 +178,7 @@ class ASCADv2_NumpyDataset(Base_NumpyDataset):
             masks: NDArray[np.uint8]
     ) -> Dict[str, NDArray[np.uint8]]:
         perm_indices = apply_perm_indices(
-            np.arange(16, dtype=np.uint8)[np.newaxis, :],
+            np.arange(16, dtype=np.uint8),
             masks[..., 0, np.newaxis],
             masks[..., 1, np.newaxis],
             masks[..., 2, np.newaxis],

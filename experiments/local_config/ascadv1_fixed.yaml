@@ -29,7 +29,7 @@ model:
   leakage_model: id
   trunk: transformer
   position_embedding: rope
-  pooling: token
+  pooling: attention
   head: tied
   fnn_style: mlp
   patch_size: 1000
@@ -44,31 +44,28 @@ model:
   input_dropout_rate: 0.
   input_droppatch_rate: 0.
   hidden_dropout_rate: 0.3
-  use_bias: true
+  use_bias: false
   perceiver_latent_dim: null
   perceiver_self_attn_per_cross_attn_blocks: null
   perceiver_cross_attn_head_count: null
 search_space:
   data:
     random_roll:
-      type: int
-      low: 0
-      high: 10
+      type: categorical
+      choices: [0, 1, 2, 4, 8, 16, 32, 64]
   training:
     base_lr:
       type: float
       low: 1.e-5
-      high: 1.e-3
+      high: 3.e-3
       log: true
     lr_decay_multiplier:
-      type: float
-      low: 1.e-3
-      high: 1.0
-      log: true
+      type: categorical
+      choices: [1., 0.1, 0.01, 0.001, 0.]
   model:
     patch_size:
       type: categorical
-      choices: [250, 500, 1000, 2000, 5000]
+      choices: [500, 1000, 2000, 4000]
     embedding_dim:
       type: int
       low: 128

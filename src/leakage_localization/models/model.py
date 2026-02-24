@@ -257,10 +257,10 @@ class Model(nn.Module):
             assert False
         
         if self.config.head == 'tied':
-            self.heads = nn.Linear(self.config.embedding_dim, self.config.output_dim)
+            self.heads = nn.Linear(self.config.embedding_dim, self.config.output_dim, bias=True)
         elif self.config.head == 'untied':
             self.heads = nn.ModuleList([
-                nn.Linear(self.config.embedding_dim, self.config.output_dim)
+                nn.Linear(self.config.embedding_dim, self.config.output_dim, bias=True)
                 for _ in range(self.config.output_count)
             ])
         else:

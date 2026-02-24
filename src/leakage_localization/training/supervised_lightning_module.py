@@ -1,6 +1,7 @@
 from typing import Optional, Callable, Dict, Any, Literal, Tuple, get_args
 from dataclasses import dataclass
 
+import numpy as np
 import torch
 from torch import nn, optim
 import lightning
@@ -26,6 +27,10 @@ PHASE = Literal[
     'val',
     'test'
 ]
+PREPROCESSING = Literal[
+    'standardize',
+    'normalize'
+]
 
 @dataclass
 class SupervisedModuleConfig:
@@ -41,6 +46,8 @@ class SupervisedModuleConfig:
     weight_decay: float
     label_smoothing: float
     mttd_kwargs: Dict[str, Any]
+    additive_gaussian_noise: float
+    preprocessing: PREPROCESSING
 
     def __post_init__(self):
         self.num_classes = 256
@@ -59,8 +66,15 @@ class SupervisedModuleConfig:
         assert isinstance(self.weight_decay, float) and self.weight_decay >= 0
         assert isinstance(self.label_smoothing, float) and 0 <= self.label_smoothing < 1
         assert isinstance(self.mttd_kwargs, dict) and all(isinstance(k, str) for k in self.mttd_kwargs)
+        assert isinstance(self.additive_gaussian_noise, float) and self.additive_gaussian_noise >= 0
+        assert self.preprocessing in get_args(PREPROCESSING)
 
 class SupervisedModule(lightning.LightningModule):
+    trace_mean: torch.Tensor
+    trace_std: torch.Tensor
+    trace_min: torch.Tensor
+    trace_rng: torch.Tensor
+
     def __init__(
             self,
             *,
@@ -76,9 +90,12 @@ class SupervisedModule(lightning.LightningModule):
             weight_decay: float,
             label_smoothing: float,
             mttd_kwargs: Dict[str, Any],
+            trace_statistics: Dict[str, np.ndarray],
+            additive_gaussian_noise: float,
+            preprocessing: PREPROCESSING
     ):
         super().__init__()
-        self.save_hyperparameters()
+        self.save_hyperparameters(ignore=['trace_statistics'])
         self.config = SupervisedModuleConfig(**self.hparams)
         self.model: nn.Module = self.config.model_constructor(output_dim=self.config.num_classes, **self.config.model_kwargs)
         assert isinstance(self.model, nn.Module)
@@ -86,6 +103,10 @@ class SupervisedModule(lightning.LightningModule):
             self.byte_logits_to_bit_logits = ByteLogitsToBitLogits()
         if 'hw' in self.config.leakage_models:
             self.byte_logits_to_hw_logits = ByteLogitsToHwLogits()
+        self.register_buffer('trace_mean', torch.from_numpy(trace_statistics['mean']).float(), persistent=False)
+        self.register_buffer('trace_std', torch.from_numpy(trace_statistics['var']).float().sqrt() + 1e-6, persistent=False)
+        self.register_buffer('trace_min', torch.from_numpy(trace_statistics['min']).float(), persistent=False)
+        self.register_buffer('trace_rng', torch.from_numpy(trace_statistics['max'] - trace_statistics['min']).float() + 1e-6, persistent=False)
 
         self.metrics = MetricCollection({
             **{
@@ -132,8 +153,22 @@ class SupervisedModule(lightning.LightningModule):
         )
         return {'optimizer': optimizer, 'lr_scheduler': {'scheduler': lr_scheduler, 'interval': 'step'}}
     
-    def _step(self, batch: Tuple[torch.Tensor, torch.Tensor, Dict[str, torch.Tensor]], phase: PHASE) -> torch.Tensor:
+    def prepare_batch(self, batch: Tuple[torch.Tensor, torch.Tensor, Dict[str, torch.Tensor]]) -> Tuple[torch.Tensor, torch.Tensor, Dict[str, torch.Tensor]]:
         trace, target, intermediate_variables = batch
+        trace = trace.float()
+        if self.config.preprocessing == 'standardize':
+            trace = (trace - self.trace_mean) / self.trace_std
+        elif self.config.preprocessing == 'normalize':
+            trace = (trace - self.trace_min) / self.trace_rng
+        else:
+            assert False
+        if self.training and self.config.additive_gaussian_noise > 0:
+            trace = trace + self.config.additive_gaussian_noise*torch.randn_like(trace)
+        trace = trace.to(self.dtype)
+        return trace, target, intermediate_variables
+
+    def _step(self, batch: Tuple[torch.Tensor, torch.Tensor, Dict[str, torch.Tensor]], phase: PHASE) -> torch.Tensor:
+        trace, target, intermediate_variables = self.prepare_batch(batch)
         batch_size, output_count = target.shape
         logits: torch.Tensor = self.model(trace)
         granular_loss = nn.functional.cross_entropy(

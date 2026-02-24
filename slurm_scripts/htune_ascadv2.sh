@@ -5,7 +5,7 @@
 #SBATCH --account=cocosys
 #SBATCH --gres=gpu:1
 #SBATCH --cpus-per-gpu=14
-#SBATCH --time=4:00:00
+#SBATCH --time=48:00:00
 #SBATCH --output=./outputs/ascadv2/htune/slurm_%A_%a.out
 #SBATCH --error=./outputs/ascadv2/htune/slurm_%A_%a.out
 #SBATCH --array=0-999%4

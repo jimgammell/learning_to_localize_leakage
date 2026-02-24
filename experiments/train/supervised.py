@@ -16,14 +16,14 @@ from leakage_localization.datasets.ascadv1 import ASCADv1_TorchDataset
 from leakage_localization.datasets.ches_ctf_2018 import CHESCTF2018_TorchDataset
 from leakage_localization.datasets.dpav4_2 import DPAv4d2_TorchDataset
 from leakage_localization.datasets.ascadv2 import ASCADv2_TorchDataset
-from leakage_localization.datasets.transforms import Compose, Standardize, Normalize, RandomRoll, AdditiveGaussianNoise
+from leakage_localization.datasets.transforms import Compose, RandomRoll
 from leakage_localization.training.train_supervised_model import train_supervised_model
 from leakage_localization.training.supervised_lightning_module import SupervisedModule
 from leakage_localization.models.model import Model
 
 def construct_datasets(
         config: Dict[str, Any]
-) -> Tuple[Dataset, Dataset, Dataset]:
+) -> Tuple[Dataset, Dataset, Dataset, Dict[str, np.ndarray]]:
     if config['data']['id'] == 'ascadv1-fixed':
         profiling_set = ASCADv1_TorchDataset(
             root=ASCADV1_FIXED_ROOT,
@@ -106,16 +106,6 @@ def construct_datasets(
     
     train_transforms, eval_transforms = [], []
     trace_statistics = profiling_set.get_trace_statistics(use_progress_bar=True)
-    if config['data']['preprocessing'] == 'standardize':
-        preprocessing_transform = Standardize(mean=trace_statistics['mean'], scale=np.sqrt(trace_statistics['var']))
-    elif config['data']['preprocessing'] == 'normalize':
-        preprocessing_transform = Normalize(min=trace_statistics['min'], max=trace_statistics['max'])
-    else:
-        assert False
-    train_transforms.append(preprocessing_transform)
-    eval_transforms.append(preprocessing_transform)
-    if config['data']['additive_gaussian_noise'] > 0:
-        train_transforms.append(AdditiveGaussianNoise(scale=config['data']['additive_gaussian_noise']))
     if config['data']['random_roll'] > 0:
         train_transforms.append(RandomRoll(max_shift=config['data']['random_roll']))
     train_transform = Compose(train_transforms)
@@ -130,11 +120,10 @@ def construct_datasets(
     val_set = Subset(val_set, indices=indices[-val_len:])
     test_set = attack_set
     test_set.transform = eval_transform
-    return train_set, val_set, test_set
+    return train_set, val_set, test_set, trace_statistics
 
 def construct_training_module(
-        train_set: Subset, val_set: Subset, test_set: Dataset,
-        config: Dict[str, Any]
+        train_set: Subset, trace_statistics: Dict[str, np.ndarray], config: Dict[str, Any]
 ) -> SupervisedModule:
     module = SupervisedModule(
         model_constructor=Model,
@@ -182,7 +171,10 @@ def construct_training_module(
             'int_var_keys': train_set.dataset.int_var_keys,
             'attack_count': config['mttd']['attack_count'],
             'traces_per_attack': config['mttd']['traces_per_attack']
-        }
+        },
+        trace_statistics=trace_statistics,
+        additive_gaussian_noise=config['data']['additive_gaussian_noise'],
+        preprocessing=config['data']['preprocessing']
     )
     return module
 
@@ -209,13 +201,13 @@ def train_model(
     dest.mkdir(exist_ok=True, parents=True)
     if 'seed' in config['training']:
         lightning.seed_everything(config['training']['seed'])
-    train_set, val_set, test_set = construct_datasets(config)
+    train_set, val_set, test_set, trace_statistics = construct_datasets(config)
     steps_per_epoch = ceil(len(train_set)/config['training']['batch_size'])
     config['training']['total_steps'] = steps_per_epoch*config['training']['total_epochs']
     config['training']['lr_warmup_steps'] = steps_per_epoch*config['training']['lr_warmup_epochs']
     config['training']['lr_const_steps'] = steps_per_epoch*config['training']['lr_const_epochs']
     train_loader, val_loader, test_loader = construct_loaders(train_set, val_set, test_set, config)
-    training_module = construct_training_module(train_set, val_set, test_set, config)
+    training_module = construct_training_module(train_set, trace_statistics, config)
     if config['training']['compile']:
         training_module.model.compile()
     print(training_module.model)

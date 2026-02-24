@@ -226,7 +226,7 @@ class DPAv4d2_TorchDataset(Base_TorchDataset, DPAv4d2_NumpyDataset):
     
     def __getitem__(self, _idx: Union[int, slice, NDArray[np.integer], Sequence[int]]) -> Tuple[torch.Tensor, torch.Tensor, Dict[str, NDArray[np.integer]]]:
         trace, target, intermediate_variables = DPAv4d2_NumpyDataset.__getitem__(self, _idx)
-        trace = torch.tensor(trace, dtype=torch.float32)
+        trace = torch.from_numpy(trace)
         target = torch.tensor(target, dtype=torch.long)
         intermediate_variables = {k: torch.tensor(v, dtype=torch.long) for k, v in intermediate_variables.items()}
         if self.transform is not None:

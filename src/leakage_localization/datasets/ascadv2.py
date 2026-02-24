@@ -151,6 +151,7 @@ class ASCADv2_NumpyDataset(Base_NumpyDataset):
             self.plaintexts = metadata['plaintexts']
             self.masks = metadata['masks']
     
+    # TODO: make sure this works when we simulate no permutation
     @staticmethod
     def target_preds_to_key_preds(
             target_preds: NDArray[np.floating],
@@ -248,7 +249,7 @@ class ASCADv2_TorchDataset(Base_TorchDataset, ASCADv2_NumpyDataset):
     
     def __getitem__(self, _idx: Union[int, slice, NDArray[np.integer], Sequence[int]]) -> Tuple[torch.Tensor, torch.Tensor, Dict[str, NDArray[np.integer]]]:
         trace, target, intermediate_variables = ASCADv2_NumpyDataset.__getitem__(self, _idx)
-        trace = torch.tensor(trace, dtype=torch.float32)
+        trace = torch.from_numpy(trace)
         target = torch.tensor(target, dtype=torch.long)
         intermediate_variables = {k: torch.tensor(v, dtype=torch.long) for k, v in intermediate_variables.items()}
         if self.transform is not None:

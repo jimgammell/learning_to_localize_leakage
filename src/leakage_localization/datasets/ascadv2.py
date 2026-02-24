@@ -151,6 +151,17 @@ class ASCADv2_NumpyDataset(Base_NumpyDataset):
             self.plaintexts = metadata['plaintexts']
             self.masks = metadata['masks']
     
+    @staticmethod
+    def target_preds_to_key_preds(
+            target_preds: NDArray[np.floating],
+            intermediate_variables: Dict[str, NDArray[np.uint8]]
+    ) -> NDArray[np.floating]:
+        plaintext = intermediate_variables['plaintext']
+        key_candidates = np.arange(256, dtype=np.uint8)
+        target_indices = aes.SBOX[key_candidates ^ plaintext[..., np.newaxis]]
+        key_preds = np.take_along_axis(target_preds, target_indices.astype(np.intp), axis=-1)
+        return key_preds
+
     def get_trace_statistics(self, use_progress_bar: bool = False) -> Dict[str, NDArray[np.floating]]:
         assert self.config.partition == 'profile'
         cache_path = self.config.root / 'ascadv2.stats-cache.npz'

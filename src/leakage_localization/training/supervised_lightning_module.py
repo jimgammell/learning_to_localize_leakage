@@ -165,7 +165,6 @@ class SupervisedModule(lightning.LightningModule):
         if self.training and self.config.additive_gaussian_noise > 0:
             trace = trace + self.config.additive_gaussian_noise*torch.randn_like(trace)
         trace = trace.to(self.dtype)
-        trace = trace.unsqueeze(1)
         return trace, target, intermediate_variables
 
     def _step(self, batch: Tuple[torch.Tensor, torch.Tensor, Dict[str, torch.Tensor]], phase: PHASE) -> torch.Tensor:

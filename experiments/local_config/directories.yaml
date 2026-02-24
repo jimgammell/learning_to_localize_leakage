@@ -1,5 +1,6 @@
 ascadv1-fixed-root: ./datasets/ascadv1_fixed/
 ascadv1-variable-root: ./datasets/ascadv1_variable/
+ascadv2-root: ./datasets/ascadv2/
 ches-ctf-2018-root: ./datasets/ches_ctf_2018/
 dpav4_2-root: ./datasets/dpav4_2/
 downloads-cache-root: ./downloads_cache/

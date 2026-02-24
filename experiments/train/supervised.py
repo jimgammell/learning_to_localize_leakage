@@ -15,6 +15,7 @@ from .hyperparameter_tuning import get_study, sample_hparams
 from leakage_localization.datasets.ascadv1 import ASCADv1_TorchDataset
 from leakage_localization.datasets.ches_ctf_2018 import CHESCTF2018_TorchDataset
 from leakage_localization.datasets.dpav4_2 import DPAv4d2_TorchDataset
+from leakage_localization.datasets.ascadv2 import ASCADv2_TorchDataset
 from leakage_localization.datasets.transforms import Compose, Standardize, Normalize, RandomRoll, AdditiveGaussianNoise
 from leakage_localization.training.train_supervised_model import train_supervised_model
 from leakage_localization.training.supervised_lightning_module import SupervisedModule
@@ -60,6 +61,19 @@ def construct_datasets(
             variable_key=True,
             cropped_traces=False,
             binary_trace_file=True
+        )
+    elif config['data']['id'] == 'ascadv2':
+        profiling_set = ASCADv2_TorchDataset(
+            root=ASCADV2_ROOT,
+            partition='profile',
+            target_byte=config['data']['target_byte'],
+            target_variable=config['data']['target_variable']
+        )
+        attack_set = ASCADv2_TorchDataset(
+            root=ASCADV2_ROOT,
+            partition='attack',
+            target_byte=config['data']['target_byte'],
+            target_variable=config['data']['target_variable']
         )
     elif config['data']['id'] == 'ches-ctf-2018':
         profiling_set = CHESCTF2018_TorchDataset(

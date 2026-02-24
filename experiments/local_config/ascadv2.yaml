@@ -4,15 +4,15 @@ data:
   target_variable: subbytes
   preprocessing: standardize
   additive_gaussian_noise: 0.
-  random_roll: 4
+  random_roll: 0
   val_prop: 0.2
 training:
-  total_epochs: 250
+  total_epochs: 50
   lr_warmup_epochs: 5
   lr_const_epochs: 0
   batch_size: 256
   base_lr: 8.e-4
-  lr_decay_multiplier: 0.001
+  lr_decay_multiplier: 1.
   weight_decay: 1.e-4
   label_smoothing: 0.
   grad_clip_val: 1.
@@ -30,22 +30,22 @@ model:
   leakage_model: id
   trunk: transformer
   position_embedding: rope
-  pooling: token
+  pooling: attention
   head: tied
   fnn_style: mlp
-  patch_size: 1000
+  patch_size: 10000
   use_fourier_embed: false
   fourier_embed_num_bands: null
   fourier_embed_sigma: null
-  embedding_dim: 512
+  embedding_dim: 768
   expansion_factor: 4
-  trunk_blocks: 7
+  trunk_blocks: 8
   head_count: null
   register_tokens: 0
-  input_dropout_rate: 0.0
+  input_dropout_rate: 0.1
   input_droppatch_rate: 0.
   hidden_dropout_rate: 0.1
-  use_bias: true
+  use_bias: false
   perceiver_latent_dim: null
   perceiver_self_attn_per_cross_attn_blocks: null
   perceiver_cross_attn_head_count: null

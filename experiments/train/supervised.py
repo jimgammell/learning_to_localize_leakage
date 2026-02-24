@@ -189,14 +189,15 @@ def construct_training_module(
 def construct_loaders(
         train_set: Dataset, val_set: Dataset, test_set: Dataset, config: Dict[str, Any]
 ) -> Tuple[DataLoader, ...]:
+    num_workers = config['training'].get('num_workers', 4)
     train_loader = DataLoader(
-        train_set, batch_size=config['training']['batch_size'], shuffle=True, num_workers=4, pin_memory=True
+        train_set, batch_size=config['training']['batch_size'], shuffle=True, num_workers=num_workers, pin_memory=True, persistent_workers=num_workers > 0
     )
     val_loader = DataLoader(
-        val_set, batch_size=config['training']['batch_size'], shuffle=False, num_workers=4, pin_memory=True
+        val_set, batch_size=config['training']['batch_size'], shuffle=False, num_workers=num_workers, pin_memory=True, persistent_workers=num_workers > 0
     )
     test_loader = DataLoader(
-        test_set, batch_size=config['training']['batch_size'], shuffle=False, num_workers=4, pin_memory=True
+        test_set, batch_size=config['training']['batch_size'], shuffle=False, num_workers=num_workers, pin_memory=True, persistent_workers=num_workers > 0
     )
     return train_loader, val_loader, test_loader
 

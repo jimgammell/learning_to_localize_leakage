@@ -10,7 +10,7 @@ training:
   total_epochs: 100
   lr_warmup_epochs: 5
   lr_const_epochs: 0
-  batch_size: 64
+  batch_size: 256
   base_lr: 3.e-4
   lr_decay_multiplier: 0.1
   weight_decay: 1.e-4
@@ -57,7 +57,7 @@ search_space:
     base_lr:
       type: float
       low: 1.e-5
-      high: 1.e-2
+      high: 3.e-3
       log: true
     lr_decay_multiplier:
       type: float

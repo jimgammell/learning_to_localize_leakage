@@ -52,8 +52,8 @@ def get_study(
         seed=SEED + int(os.environ.get('SLURM_ARRAY_TASK_ID', 0))
     )
     pruner = optuna.pruners.HyperbandPruner(
-        min_resource=100,
-        reduction_factor=3
+        min_resource=50,
+        reduction_factor=2
     )
     study = optuna.create_study(
         storage=storage,

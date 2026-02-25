@@ -103,7 +103,7 @@ class SoftGF256Mult(nn.Module):
         gathered_logpy = logpy[..., self.invgf256mult_lut]
         log_joint = logpx_nonzero.unsqueeze(-1) + gathered_logpy
         logpz = torch.logsumexp(log_joint, dim=-2)
-        logpz_zero = torch.logsumexp(torch.stack([logpz[..., 0:1], logpx[..., 0:1]]), dim=0)
+        logpz_zero = torch.logaddexp(logpz[..., 0:1], logpx[..., 0:1])
         logpz = torch.cat([logpz_zero, logpz[..., 1:]], dim=-1)
         return logpz
 

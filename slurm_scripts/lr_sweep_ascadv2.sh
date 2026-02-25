@@ -25,10 +25,36 @@ else
     DEST=./outputs/ascadv2/lr_sweep_v2/ascadv2_head_lr_${LR}
 fi
 
+# Copy dataset to node-local storage to avoid I/O contention
+SRC_DATA=/scratch/gautschi/jgammell/learning_to_localize_leakage/datasets/ascadv2
+LOCAL_DATA=/tmp/ascadv2
+LOCK=/tmp/ascadv2_copy.lock
+DONE=/tmp/ascadv2_copy.done
+
+if [ ! -f "$DONE" ]; then
+    (
+        flock -x 200
+        if [ ! -f "$DONE" ]; then
+            echo "Copying dataset to local storage..."
+            mkdir -p "$LOCAL_DATA"
+            cp "$SRC_DATA"/ascadv2.profile.dat "$LOCAL_DATA/"
+            cp "$SRC_DATA"/ascadv2.profile.metadata.npz "$LOCAL_DATA/"
+            cp "$SRC_DATA"/ascadv2.attack.dat "$LOCAL_DATA/"
+            cp "$SRC_DATA"/ascadv2.attack.metadata.npz "$LOCAL_DATA/"
+            cp "$SRC_DATA"/ascadv2.stats-cache.npz "$LOCAL_DATA/"
+            touch "$DONE"
+            echo "Dataset copy complete."
+        fi
+    ) 200>"$LOCK"
+fi
+
+echo "Using local dataset at $LOCAL_DATA"
+
 source ~/.bashrc
 micromamba activate leakage-localization
 python -m experiments.train.supervised \
     --dest ${DEST} \
     --config-file ascadv2 \
+    --ascadv2-root ${LOCAL_DATA} \
     --training.base_lr ${LR} \
     --model.grey_box_head ${HEAD}

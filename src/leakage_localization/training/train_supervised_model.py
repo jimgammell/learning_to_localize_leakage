@@ -1,6 +1,10 @@
 from typing import Optional, Literal, List
 from pathlib import Path
 
+import numpy._core.multiarray
+import torch.serialization
+torch.serialization.add_safe_globals([numpy._core.multiarray.scalar])
+
 from torch.utils.data import DataLoader
 import lightning
 from lightning import Trainer, LightningModule

@@ -4,15 +4,15 @@ data:
   target_variable: subbytes
   preprocessing: standardize
   additive_gaussian_noise: 0.
-  random_roll: 0
+  random_roll: 4
   val_prop: 0.2
 training:
-  total_epochs: 50
+  total_epochs: 500
   lr_warmup_epochs: 5
   lr_const_epochs: 0
   batch_size: 256
   base_lr: 8.e-4
-  lr_decay_multiplier: 1.
+  lr_decay_multiplier: 0.001
   weight_decay: 1.e-4
   label_smoothing: 0.
   grad_clip_val: 1.
@@ -26,11 +26,11 @@ mttd:
   attack_count: 1000
   traces_per_attack: 1000
 model:
-  grey_box_head: null
+  grey_box_head: ascadv2
   leakage_model: id
   trunk: transformer
   position_embedding: rope
-  pooling: attention
+  pooling: token
   head: tied
   fnn_style: mlp
   patch_size: 10000

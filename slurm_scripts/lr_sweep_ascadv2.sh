@@ -30,6 +30,5 @@ micromamba activate leakage-localization
 python -m experiments.train.supervised \
     --dest ${DEST} \
     --config-file ascadv2 \
-    --ascadv2-root ${LOCAL_DATA} \
     --training.base_lr ${LR} \
     --model.grey_box_head ${HEAD}

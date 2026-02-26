@@ -3,6 +3,7 @@ from pathlib import Path
 from typing import Optional, Dict, Any
 
 import yaml
+from numpy.typing import NDArray
 from lightning import Trainer
 from matplotlib import pyplot as plt
 import pandas
@@ -13,8 +14,9 @@ from leakage_localization.training.supervised_lightning_module import Supervised
 
 def load_training_module(
         ckpt_path: Path,
+        trace_statistics: Dict[str, NDArray[np.floating]]
 ) -> SupervisedModule:
-    module = SupervisedModule.load_from_checkpoint(ckpt_path, map_location='cpu', weights_only=False)
+    module = SupervisedModule.load_from_checkpoint(ckpt_path, map_location='cpu', weights_only=False, trace_statistics=trace_statistics)
     return module
 
 def plot_training_curves(
@@ -68,9 +70,9 @@ def main():
     with open(config_path, 'r') as f:
         config = yaml.safe_load(f)
     
-    module = load_training_module(ckpt_path)
-    train_set, val_set, test_set = construct_datasets(config)
+    train_set, val_set, test_set, trace_statistics = construct_datasets(config)
     train_loader, val_loader, test_loader = construct_loaders(train_set, val_set, test_set, config)
+    module = load_training_module(ckpt_path, trace_statistics=trace_statistics)
     trainer = Trainer(
         accelerator='gpu',
         precision='bf16-mixed',

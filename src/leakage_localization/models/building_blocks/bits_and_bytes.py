@@ -67,6 +67,35 @@ class ByteLogitsToHwLogits(nn.Module):
         log_hw_probs = log_hw_probs.reshape(*batch_dims, 9)
         return log_hw_probs
 
+class HwLogitsToByteLogits(nn.Module):
+    hw_mask: torch.Tensor
+    hw_counts: torch.Tensor
+
+    def __init__(self):
+        super().__init__()
+        byte_values = torch.arange(256)
+        bits = ((byte_values.unsqueeze(1) >> torch.arange(8)) & 1)
+        hw = bits.sum(dim=1)
+        hw_mask = torch.stack([(hw == i) for i in range(9)], dim=0)  # (9, 256)
+        hw_counts = hw_mask.sum(dim=1).float()  # (9,)
+        self.register_buffer('hw_mask', hw_mask, persistent=False)
+        self.register_buffer('hw_counts', hw_counts, persistent=False)
+
+    def forward(self, hw_logits: torch.Tensor) -> torch.Tensor:
+        *batch_dims, hw_count = hw_logits.shape
+        assert hw_count == 9
+        hw_logits = hw_logits.reshape(-1, hw_count)
+        log_hw_probs = torch.log_softmax(hw_logits, dim=-1)  # (batch, 9)
+        # Distribute each HW class uniformly over its byte values: log p(byte) = log p(hw) - log C(8, hw)
+        log_byte_probs = torch.where(
+            self.hw_mask.unsqueeze(0),  # (1, 9, 256)
+            (log_hw_probs.unsqueeze(2) - self.hw_counts.log().unsqueeze(0).unsqueeze(2)),  # (batch, 9, 1)
+            float('-inf')
+        )
+        log_byte_probs = torch.logsumexp(log_byte_probs, dim=1)  # (batch, 256)
+        log_byte_probs = log_byte_probs.reshape(*batch_dims, 256)
+        return log_byte_probs
+
 class SoftXOR(nn.Module):
     xor_lut: torch.Tensor
 

@@ -11,16 +11,12 @@ from torchmetrics.classification import MulticlassAccuracy
 from .cosine_decay_lr_scheduler import CosineDecayLRSched
 from ..evaluation.mttd import MinimumTracesToDisclosure
 from ..evaluation.rank import Rank
-from ..models.building_blocks.bits_and_bytes import ByteLogitsToBitLogits, ByteLogitsToHwLogits
+from ..models.building_blocks.bits_and_bytes import BitLogitsToByteLogits, HwLogitsToByteLogits
 
 LEAKAGE_MODEL = Literal[
     'bit',
     'id',
-    'hw',
-    'bit+id',
-    'bit+hw',
-    'id+hw',
-    'bit+id+hw'
+    'hw'
 ]
 PHASE = Literal[
     'train',
@@ -50,9 +46,8 @@ class SupervisedModuleConfig:
     preprocessing: PREPROCESSING
 
     def __post_init__(self):
-        self.num_classes = 256
         assert self.leakage_model in get_args(LEAKAGE_MODEL)
-        self.leakage_models = self.leakage_model.split('+')
+        self.num_classes = {'id': 256, 'hw': 9, 'bit': 8}[self.leakage_model]
         assert isinstance(self.num_labels, int) and self.num_labels > 0
         assert isinstance(self.num_classes, int) and self.num_classes > 0
         assert isinstance(self.total_steps, int) and self.total_steps > 0
@@ -99,10 +94,14 @@ class SupervisedModule(lightning.LightningModule):
         self.config = SupervisedModuleConfig(**self.hparams)
         self.model: nn.Module = self.config.model_constructor(output_dim=self.config.num_classes, **self.config.model_kwargs)
         assert isinstance(self.model, nn.Module)
-        if 'bit' in self.config.leakage_models:
-            self.byte_logits_to_bit_logits = ByteLogitsToBitLogits()
-        if 'hw' in self.config.leakage_models:
-            self.byte_logits_to_hw_logits = ByteLogitsToHwLogits()
+        if self.config.leakage_model == 'bit':
+            self.logits_to_byte_logits = BitLogitsToByteLogits()
+        elif self.config.leakage_model == 'hw':
+            self.logits_to_byte_logits = HwLogitsToByteLogits()
+        elif self.config.leakage_model == 'id':
+            self.logits_to_byte_logits = nn.Identity()
+        else:
+            assert False
         self.register_buffer('trace_mean', torch.from_numpy(trace_statistics['mean']).float(), persistent=False)
         self.register_buffer('trace_std', torch.from_numpy(trace_statistics['var']).float().sqrt() + 1e-6, persistent=False)
         self.register_buffer('trace_min', torch.from_numpy(trace_statistics['min']).float(), persistent=False)
@@ -171,52 +170,47 @@ class SupervisedModule(lightning.LightningModule):
         trace, target, intermediate_variables = self.prepare_batch(batch)
         batch_size, output_count = target.shape
         logits: torch.Tensor = self.model(trace)
-        granular_loss = nn.functional.cross_entropy(
-            logits.reshape(batch_size*output_count, -1),
-            target.reshape(batch_size*output_count),
-            reduction='none'
-        ).reshape(batch_size, output_count)
-        per_output_loss = granular_loss.mean(dim=0)
-        loss = per_output_loss.mean()
-        
-        losses = []
-        if 'id' in self.config.leakage_models:
-            id_loss = nn.functional.cross_entropy(
-                logits.reshape(batch_size*output_count, -1),
-                target.reshape(batch_size*output_count),
-                label_smoothing=self.config.label_smoothing if self.training else 0.
-            )
-            losses.append(id_loss)
-        if 'bit' in self.config.leakage_models:
-            bit_logits = self.byte_logits_to_bit_logits(logits)
-            target_bitstring = (target.unsqueeze(-1) >> torch.arange(8, device=target.device, dtype=torch.long)) & 1
-            target_bitstring = target_bitstring.to(logits.dtype)
+
+        # Compute loss in the native leakage-model space
+        if self.config.leakage_model == 'bit':
+            native_target = (target.unsqueeze(-1) >> torch.arange(8, device=target.device, dtype=torch.long)) & 1
+            native_target = native_target.to(logits.dtype)
             if self.training and self.config.label_smoothing > 0:
-                target_bitstring = (1 - self.config.label_smoothing)*target_bitstring + self.config.label_smoothing*0.5
-            bit_loss = nn.functional.binary_cross_entropy_with_logits(bit_logits, target_bitstring)
-            losses.append(bit_loss)
-        if 'hw' in self.config.leakage_models:
-            hw_logits = self.byte_logits_to_hw_logits(logits)
-            target_bitstring = (target.unsqueeze(-1) >> torch.arange(8, device=target.device, dtype=torch.long)) & 1
-            target_hw = target_bitstring.sum(dim=-1)
-            hw_loss = nn.functional.cross_entropy(
-                hw_logits.reshape(batch_size*output_count, -1),
-                target_hw.reshape(batch_size*output_count),
-                label_smoothing=self.config.label_smoothing if self.training else 0.
-            )
-            losses.append(hw_loss)
-        assert 0 < len(losses) <= 3
-        training_loss = sum(losses) / len(losses)
+                native_target = (1 - self.config.label_smoothing) * native_target + self.config.label_smoothing * 0.5
+            per_output_loss = nn.functional.binary_cross_entropy_with_logits(
+                logits, native_target, reduction='none'
+            ).mean(dim=-1).mean(dim=0)  # mean over bits, then over batch
+        elif self.config.leakage_model == 'hw':
+            native_target = ((target.unsqueeze(-1) >> torch.arange(8, device=target.device, dtype=torch.long)) & 1).sum(dim=-1)
+            per_output_loss = nn.functional.cross_entropy(
+                logits.reshape(batch_size * output_count, -1),
+                native_target.reshape(batch_size * output_count),
+                label_smoothing=self.config.label_smoothing if self.training else 0.,
+                reduction='none'
+            ).reshape(batch_size, output_count).mean(dim=0)
+        elif self.config.leakage_model == 'id':
+            per_output_loss = nn.functional.cross_entropy(
+                logits.reshape(batch_size * output_count, -1),
+                target.reshape(batch_size * output_count),
+                label_smoothing=self.config.label_smoothing if self.training else 0.,
+                reduction='none'
+            ).reshape(batch_size, output_count).mean(dim=0)
+        else:
+            assert False
+        training_loss = per_output_loss.mean()
 
-        self.metrics[f'{phase}/acc'].update(logits.reshape(batch_size*output_count, -1), target.reshape(batch_size*output_count))
-        self.metrics[f'{phase}/rank'].update(logits, target)
+        # Convert to 256-dim byte logits for metrics
+        byte_logits = self.logits_to_byte_logits(logits)
+
+        self.metrics[f'{phase}/acc'].update(byte_logits.reshape(batch_size * output_count, -1), target.reshape(batch_size * output_count))
+        self.metrics[f'{phase}/rank'].update(byte_logits, target)
         for idx in range(self.config.num_labels):
-            self.metrics[f'{phase}/acc/{idx}'].update(logits[:, idx, :], target[:, idx])
-            self.metrics[f'{phase}/rank/{idx}'].update(logits[:, idx, :], target[:, idx])
+            self.metrics[f'{phase}/acc/{idx}'].update(byte_logits[:, idx, :], target[:, idx])
+            self.metrics[f'{phase}/rank/{idx}'].update(byte_logits[:, idx, :], target[:, idx])
         if phase == 'test':
-            self.metrics[f'{phase}/mttd'].update(logits, intermediate_variables)
+            self.metrics[f'{phase}/mttd'].update(byte_logits, intermediate_variables)
 
-        self.log(f'{phase}/loss', loss, on_epoch=True, on_step=False, prog_bar=False)
+        self.log(f'{phase}/loss', training_loss, on_epoch=True, on_step=False, prog_bar=False)
         self.log(f'{phase}/acc', self.metrics[f'{phase}/acc'], on_epoch=True, on_step=False, prog_bar=False)
         self.log(f'{phase}/rank', self.metrics[f'{phase}/rank'], on_epoch=True, on_step=False, prog_bar=False)
         for idx in range(self.config.num_labels):

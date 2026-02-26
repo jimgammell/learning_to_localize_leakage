@@ -30,7 +30,7 @@ model:
   leakage_model: id
   trunk: transformer
   position_embedding: rope
-  pooling: attention
+  pooling: token
   head: tied
   fnn_style: mlp
   patch_size: 1000

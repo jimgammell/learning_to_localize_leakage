@@ -1,5 +1,6 @@
 from typing import Optional
 
+import torch
 import numpy as np
 from torch.optim.optimizer import Optimizer
 from torch.optim.lr_scheduler import LambdaLR
@@ -27,11 +28,11 @@ class CosineDecayLRSched(LambdaLR):
         assert isinstance(lr_decay_multiplier, float) and 0 <= lr_decay_multiplier <= 1
         
         self.total_steps = total_steps
-        self.schedule = np.concatenate([
+        self.schedule = torch.from_numpy(np.concatenate([
             np.linspace(0, 1, lr_warmup_steps),
             np.ones(lr_const_steps),
             (1 - lr_decay_multiplier)*(0.5*np.cos(np.linspace(0, np.pi, lr_decay_steps)) + 0.5) + lr_decay_multiplier
-        ])
+        ]))
         super().__init__(optimizer, self.lr_lambda)
     
     def lr_lambda(self, current_step: int) -> float:
@@ -39,4 +40,4 @@ class CosineDecayLRSched(LambdaLR):
         if current_step >= self.total_steps:
             return 0.
         else:
-            return self.schedule[current_step]
+            return self.schedule[current_step].item()

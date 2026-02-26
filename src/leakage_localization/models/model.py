@@ -5,7 +5,7 @@ from math import sqrt
 import torch
 from torch import nn
 
-from .building_blocks.feature_preprocessing import Embed, FourierEmbed, Patchifier
+from .building_blocks.feature_preprocessing import FourierEmbed, Patchifier
 from .building_blocks.pooling import AttentionPool, AveragePool, TokenPool
 from .building_blocks.grey_box_heads import ASCADv1Head, ASCADv2Head
 from .trunks.transformer import TransformerTrunk
@@ -189,38 +189,17 @@ class Model(nn.Module):
             in_dims = 2*self.config.fourier_embed_num_bands
         else:
             in_dims = 1
-        if self.config.use_patchifier:
-            self.patchifier = Patchifier(
-                in_dims=in_dims,
-                in_seq_len=self.config.input_length,
-                patch_size=self.config.patch_size
-            )
-            in_dims = in_dims*self.config.patch_size
-            in_seq_len = self.config.input_length // self.config.patch_size
-        else:
-            in_seq_len = self.config.input_length
-        self.embedding = Embed(
-            in_dims=in_dims,
-            in_seq_len=in_seq_len,
+        assert self.config.use_patchifier
+        self.patchifier = Patchifier(
             embedding_dim=self.config.embedding_dim,
+            in_channels=in_dims,
+            in_seq_len=self.config.input_length,
+            patch_size=self.config.patch_size,
             position_embedding=self.config.position_embedding if self.config.position_embedding != 'rope' else 'none'
         )
 
         if self.config.trunk == 'perceiver':
-            cross_attn_head_count = self.config.perceiver_cross_attn_head_count if self.config.perceiver_cross_attn_head_count is not None else self.config.head_count
-            self.trunk = PerceiverTrunk(
-                latent_dim=self.config.perceiver_latent_dim,
-                perceiver_blocks=self.config.trunk_blocks,
-                self_attn_per_cross_attn_blocks=self.config.perceiver_self_attn_per_cross_attn_blocks,
-                embedding_dim=self.config.embedding_dim,
-                cross_attn_head_count=cross_attn_head_count,
-                self_attn_head_count=self.config.head_count,
-                dropout_rate=self.config.hidden_dropout_rate,
-                use_bias=self.config.use_bias,
-                use_rope=self.config.position_embedding == 'rope',
-                expansion_factor=self.config.expansion_factor,
-                fnn_style=self.config.fnn_style
-            )
+            assert False
         elif self.config.trunk == 'transformer':
             self.trunk = TransformerTrunk(
                 transformer_blocks=self.config.trunk_blocks,
@@ -295,7 +274,6 @@ class Model(nn.Module):
             x = self.fourier_embedding(x)
         if self.config.use_patchifier:
             x = self.patchifier(x)
-        x = self.embedding(x)
         _, seq_len, _ = x.shape
         if self.config.input_droppatch_rate > 0 and self.training:
             droppatch_mask = torch.rand((batch_size, seq_len), device=device) >= self.config.input_droppatch_rate

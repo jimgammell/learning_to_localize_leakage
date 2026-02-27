@@ -71,85 +71,75 @@ def compute_snr(
     Compute Signal-to-Noise Ratio (SNR) for side-channel analysis.
 
     Uses Numba JIT compilation for fast iteration over samples.
+    Processes each intermediate variable independently to limit peak memory usage.
     """
     row_count = dataset.trace_count
     col_count = dataset.timestep_count
 
+    # Probe the first chunk to discover intermediate variable keys and their byte counts
+    probe_traces, _, probe_intermediate_values = dataset[0:min(chunk_size, row_count)]
+    int_val_keys = list(probe_intermediate_values.keys())
+    int_val_byte_counts = {key: val.shape[1] for key, val in probe_intermediate_values.items()}
+    del probe_traces, probe_intermediate_values
+
+    total_work = 2 * row_count * len(int_val_keys)
     if use_progress_bar:
-        progress_bar = tqdm(total=2 * row_count, desc="Computing SNR")
+        progress_bar = tqdm(total=total_work, desc="Computing SNR")
 
-    # Pass 1: Accumulate per-target sums and counts
-    per_target_sums = dict()
-    per_target_counts = dict()
+    snr_vals = dict()
 
-    for chunk_start in range(0, row_count, chunk_size):
-        chunk_end = min(chunk_start + chunk_size, row_count)
-        traces, _, intermediate_values = dataset[chunk_start:chunk_end]
-        batch_size = traces.shape[0]
-        traces_float = np.ascontiguousarray(traces.astype(dtype))
+    # Process each intermediate variable independently to avoid holding all accumulators in memory
+    for int_val_key in int_val_keys:
+        byte_count = int_val_byte_counts[int_val_key]
 
-        for int_val_key, int_val in intermediate_values.items():
-            int_val_u8 = np.ascontiguousarray(int_val.astype(np.uint8))
-            byte_count = int_val_u8.shape[1]
+        # Pass 1: Accumulate per-target sums and counts
+        per_target_sums = np.zeros((byte_count, 256, col_count), dtype=dtype)
+        per_target_counts = np.zeros((byte_count, 256), dtype=np.int64)
 
-            if int_val_key not in per_target_sums:
-                per_target_sums[int_val_key] = np.zeros((byte_count, 256, col_count), dtype=dtype)
-                per_target_counts[int_val_key] = np.zeros((byte_count, 256), dtype=np.int64)
+        for chunk_start in range(0, row_count, chunk_size):
+            chunk_end = min(chunk_start + chunk_size, row_count)
+            traces, _, intermediate_values = dataset[chunk_start:chunk_end]
+            batch_size = traces.shape[0]
+            traces_float = np.ascontiguousarray(traces.astype(dtype))
+            int_val_u8 = np.ascontiguousarray(intermediate_values[int_val_key].astype(np.uint8))
+            del traces, intermediate_values
 
-            _accumulate_pass1(
-                traces_float,
-                int_val_u8,
-                per_target_sums[int_val_key],
-                per_target_counts[int_val_key]
-            )
+            _accumulate_pass1(traces_float, int_val_u8, per_target_sums, per_target_counts)
+            del traces_float, int_val_u8
 
-        if use_progress_bar:
-            progress_bar.update(batch_size)
+            if use_progress_bar:
+                progress_bar.update(batch_size)
 
-    # Compute per-target means
-    per_target_means = dict()
-    for int_val_key in per_target_sums:
-        counts = per_target_counts[int_val_key]
-        counts_safe = np.where(counts > 0, counts, 1)
-        per_target_means[int_val_key] = per_target_sums[int_val_key] / counts_safe[..., np.newaxis]
+        # Compute per-target means
+        counts_safe = np.where(per_target_counts > 0, per_target_counts, 1)
+        per_target_means = per_target_sums / counts_safe[..., np.newaxis]
+        del per_target_sums, per_target_counts
 
-    del per_target_sums
+        # Pass 2: Accumulate squared deviations for noise variance
+        noise_sum_sq = np.zeros((byte_count, col_count), dtype=dtype)
 
-    # Pass 2: Accumulate squared deviations for noise variance
-    noise_sum_sq = dict()
+        for chunk_start in range(0, row_count, chunk_size):
+            chunk_end = min(chunk_start + chunk_size, row_count)
+            traces, _, intermediate_values = dataset[chunk_start:chunk_end]
+            batch_size = traces.shape[0]
+            traces_float = np.ascontiguousarray(traces.astype(dtype))
+            int_val_u8 = np.ascontiguousarray(intermediate_values[int_val_key].astype(np.uint8))
+            del traces, intermediate_values
 
-    for chunk_start in range(0, row_count, chunk_size):
-        chunk_end = min(chunk_start + chunk_size, row_count)
-        traces, _, intermediate_values = dataset[chunk_start:chunk_end]
-        batch_size = traces.shape[0]
-        traces_float = np.ascontiguousarray(traces.astype(dtype))
+            _accumulate_pass2(traces_float, int_val_u8, per_target_means, noise_sum_sq)
+            del traces_float, int_val_u8
 
-        for int_val_key, int_val in intermediate_values.items():
-            int_val_u8 = np.ascontiguousarray(int_val.astype(np.uint8))
-            byte_count = int_val_u8.shape[1]
+            if use_progress_bar:
+                progress_bar.update(batch_size)
 
-            if int_val_key not in noise_sum_sq:
-                noise_sum_sq[int_val_key] = np.zeros((byte_count, col_count), dtype=dtype)
-
-            _accumulate_pass2(
-                traces_float,
-                int_val_u8,
-                per_target_means[int_val_key],
-                noise_sum_sq[int_val_key]
-            )
-
-        if use_progress_bar:
-            progress_bar.update(batch_size)
+        # Compute SNR for this intermediate variable
+        signal_var = np.var(per_target_means, axis=1)
+        noise_var = noise_sum_sq / row_count
+        snr_vals[int_val_key] = signal_var / noise_var
+        del per_target_means, noise_sum_sq
 
     if use_progress_bar:
         progress_bar.close()
-
-    # Compute noise variance and SNR
-    snr_vals = dict()
-    for int_val_key, means in per_target_means.items():
-        signal_var = np.var(means, axis=1)
-        noise_var = noise_sum_sq[int_val_key] / row_count
-        snr_vals[int_val_key] = signal_var / noise_var
 
     assert all(np.isfinite(snr_val).all() for snr_val in snr_vals.values())
     return snr_vals

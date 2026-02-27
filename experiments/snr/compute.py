@@ -52,7 +52,7 @@ def compute_snr_for_dataset(
         )
     else:
         assert False
-    snr_vals = compute_snr(dataset, chunk_size=4096, use_progress_bar=True, dtype=np.float32)
+    snr_vals = compute_snr(dataset, chunk_size=1024, use_progress_bar=True, dtype=np.float32)
     for int_var_key, int_var_snr in snr_vals.items():
         dest_file = dest / f'{int_var_key}.{partition_id}.npy'
         np.save(dest_file, int_var_snr)

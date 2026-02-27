@@ -63,6 +63,9 @@ search_space:
     lr_decay_multiplier:
       type: categorical
       choices: [1., 0.1, 0.01, 0.001, 0.]
+    batch_size:
+      type: categorical
+      choices: [32, 64, 128, 256]
   model:
     leakage_model:
       type: categorical

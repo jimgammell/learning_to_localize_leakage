@@ -19,9 +19,37 @@ TARGET_BYTE = Literal[
     0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15
 ]
 TARGET_VARIABLE = Literal[
-    'subbytes'
+    'key',
+    'plaintext',
+    'alpha',
+    'beta',
+    'subbytes',
+    'masked_subbytes'
 ]
 G = np.array([0x0C, 0x05, 0x06, 0x0b, 0x09, 0x00, 0x0a, 0x0d, 0x03, 0x0e, 0x0f, 0x08, 0x04, 0x07, 0x01, 0x02], dtype=np.uint8)
+
+def repr_target(variable: TARGET_VARIABLE, byte: Optional[TARGET_BYTE] = None) -> str:
+    assert variable in get_args(TARGET_VARIABLE)
+    if byte is not None:
+        assert byte in get_args(TARGET_BYTE)
+    sbox_repr = r'\operatorname{Sbox}'
+    k_repr = f'k_{byte}' if byte is not None else 'k'
+    w_repr = f'w_{byte}' if byte is not None else 'w'
+    if variable == 'subbytes':
+        rv = f'${sbox_repr}({w_repr} \\oplus {k_repr})'
+    elif variable == 'masked_subbytes':
+        rv = f'\\alpha \times ${sbox_repr}({w_repr} \\oplus {k_repr}) \\oplus \\beta'
+    elif variable == 'beta':
+        rv = r'\beta'
+    elif variable == 'alpha':
+        rv = r'\alpha'
+    elif variable == 'key':
+        rv = k_repr
+    elif variable == 'plaintext':
+        rv = w_repr
+    else:
+        assert False
+    return rv
 
 def apply_perm_indices(i: NDArray[np.integer], m0: NDArray[np.integer], m1: NDArray[np.integer], m2: NDArray[np.integer], m3: NDArray[np.integer]) -> NDArray[np.integer]:
     x0 = m0 & 0x0F

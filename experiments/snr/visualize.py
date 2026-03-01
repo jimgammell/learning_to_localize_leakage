@@ -53,6 +53,8 @@ def visualize_snr_for_ascadv2(
         target_var, partition, _ = file.name.split('.')
         if partition != partition_id:
             continue
+        if not target_var in get_args(TARGET_VARIABLE):
+            continue
         snr_vals = np.load(file)
         byte_count, timestep_count = snr_vals.shape
         fig, axes = plt.subplots(4, 4, figsize=(2*WIDTH, 2*WIDTH), sharex=True, sharey=True)

@@ -10,7 +10,7 @@ training:
   total_epochs: 500
   lr_warmup_epochs: 5
   lr_const_epochs: 0
-  batch_size: 256
+  batch_size: 64
   base_lr: 8.e-4
   lr_decay_multiplier: 0.001
   weight_decay: 1.e-4

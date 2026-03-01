@@ -10,7 +10,7 @@ training:
   total_epochs: 200
   lr_warmup_epochs: 5
   lr_const_epochs: 0
-  batch_size: 256
+  batch_size: 64
   base_lr: 3.e-4
   lr_decay_multiplier: 0.1
   weight_decay: 1.e-4
@@ -63,9 +63,6 @@ search_space:
     lr_decay_multiplier:
       type: categorical
       choices: [1., 0.1, 0.01, 0.001, 0.]
-    batch_size:
-      type: categorical
-      choices: [32, 64, 128, 256]
   model:
     patch_size:
       type: categorical

@@ -22,7 +22,6 @@ TARGET_VARIABLE = Literal[
     'subbytes',
     'plaintext',
     'ciphertext',
-    'mask',
     'key',
 ]
 MASK = np.array([

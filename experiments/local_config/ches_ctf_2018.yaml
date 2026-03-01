@@ -7,10 +7,10 @@ data:
   random_roll: 4
   val_prop: 0.2
 training:
-  total_epochs: 200
+  total_epochs: 100
   lr_warmup_epochs: 5
   lr_const_epochs: 0
-  batch_size: 256
+  batch_size: 64
   base_lr: 8.e-4
   lr_decay_multiplier: 0.001
   weight_decay: 1.e-4
@@ -58,18 +58,15 @@ search_space:
     base_lr:
       type: float
       low: 1.e-5
-      high: 3.e-3
+      high: 5.e-3
       log: true
     lr_decay_multiplier:
       type: categorical
       choices: [1., 0.1, 0.01, 0.001, 0.]
-    batch_size:
-      type: categorical
-      choices: [32, 64, 128, 256]
   model:
     leakage_model:
       type: categorical
-      choices: [bit, id, hw]
+      choices: [bit]
     patch_size:
       type: categorical
       choices: [5000, 10000, 25000, 50000]
@@ -85,10 +82,10 @@ search_space:
     input_dropout_rate:
       type: float
       low: 0.0
-      high: 0.5
+      high: 0.9
       step: 0.1
     hidden_dropout_rate:
       type: float
       low: 0.0
-      high: 0.5
+      high: 0.9
       step: 0.1

@@ -10,7 +10,7 @@ training:
   total_epochs: 100
   lr_warmup_epochs: 5
   lr_const_epochs: 0
-  batch_size: 256
+  batch_size: 64
   base_lr: 8.e-4
   lr_decay_multiplier: 0.001
   weight_decay: 1.e-4
@@ -68,7 +68,7 @@ search_space:
   model:
     leakage_model:
       type: categorical
-      choices: [bit]
+      choices: [bit, id, hw]
     patch_size:
       type: categorical
       choices: [10000, 25000, 50000, 100000]

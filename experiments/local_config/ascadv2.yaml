@@ -64,6 +64,9 @@ search_space:
       type: categorical
       choices: [1., 0.1, 0.01, 0.001, 0.]
   model:
+    grey_box_head:
+      type: categorical
+      choices: [ascadv2, null]
     patch_size:
       type: categorical
       choices: [5000, 10000, 20000, 40000]

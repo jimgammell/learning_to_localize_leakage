@@ -64,6 +64,9 @@ search_space:
       type: categorical
       choices: [1., 0.1, 0.01, 0.001, 0.]
   model:
+    leakage_model:
+      type: categorical
+      choices: [bit, id, hw]
     grey_box_head:
       type: categorical
       choices: [ascadv2, null]

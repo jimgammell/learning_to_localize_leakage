@@ -36,7 +36,7 @@ def repr_target(variable: TARGET_VARIABLE, byte: Optional[TARGET_BYTE] = None) -
     k_repr = f'k_{byte}' if byte is not None else 'k'
     w_repr = f'w_{byte}' if byte is not None else 'w'
     if variable == 'subbytes':
-        rv = f'${sbox_repr}({w_repr} \\oplus {k_repr})'
+        rv = f'{sbox_repr}({w_repr} \\oplus {k_repr})'
     elif variable == 'masked_subbytes':
         rv = f'\\alpha \times ${sbox_repr}({w_repr} \\oplus {k_repr}) \\oplus \\beta'
     elif variable == 'beta':
@@ -49,6 +49,7 @@ def repr_target(variable: TARGET_VARIABLE, byte: Optional[TARGET_BYTE] = None) -
         rv = w_repr
     else:
         assert False
+    rv = f'${rv}$'
     return rv
 
 def apply_perm_indices(i: NDArray[np.integer], m0: NDArray[np.integer], m1: NDArray[np.integer], m2: NDArray[np.integer], m3: NDArray[np.integer]) -> NDArray[np.integer]:

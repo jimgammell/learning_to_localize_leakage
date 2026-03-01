@@ -38,7 +38,7 @@ def repr_target(variable: TARGET_VARIABLE, byte: Optional[TARGET_BYTE] = None) -
     if variable == 'subbytes':
         rv = f'{sbox_repr}({w_repr} \\oplus {k_repr})'
     elif variable == 'masked_subbytes':
-        rv = f'\\alpha \times ${sbox_repr}({w_repr} \\oplus {k_repr}) \\oplus \\beta'
+        rv = f'\\alpha \times {sbox_repr}({w_repr} \\oplus {k_repr}) \\oplus \\beta'
     elif variable == 'beta':
         rv = r'\beta'
     elif variable == 'alpha':

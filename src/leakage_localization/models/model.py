@@ -253,7 +253,7 @@ class Model(nn.Module):
             self.grey_box_head = None
         
         for mod in self.modules():
-            if isinstance(mod, nn.Linear):
+            if isinstance(mod, (nn.Linear, nn.Conv1d)):
                 nn.init.xavier_uniform_(mod.weight)
                 if mod.bias is not None:
                     nn.init.zeros_(mod.bias)

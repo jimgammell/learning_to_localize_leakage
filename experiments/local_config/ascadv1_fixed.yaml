@@ -7,10 +7,10 @@ data:
   random_roll: 4
   val_prop: 0.2
 training:
-  total_epochs: 200
+  total_epochs: 100
   lr_warmup_epochs: 5
   lr_const_epochs: 0
-  batch_size: 64
+  batch_size: 1024
   base_lr: 3.e-4
   lr_decay_multiplier: 0.1
   weight_decay: 1.e-4
@@ -59,6 +59,9 @@ search_space:
     lr_decay_multiplier:
       type: categorical
       choices: [1., 0.1, 0.01, 0.001, 0.]
+    weight_decay:
+      type: categorical
+      choices: [1.e-4, 1.e-3, 1.e-2, 1.e-1]
   model:
     leakage_model:
       type: categorical

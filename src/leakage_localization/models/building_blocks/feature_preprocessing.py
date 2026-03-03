@@ -77,5 +77,5 @@ class Patchifier(nn.Module):
         x = self.proj(x.transpose(1, 2)).transpose(1, 2)
         if self.position_embedding in ('learned', 'sinusoidal'):
             x = x + self.pos_emb.unsqueeze(0)
-        x = self.norm(x)
+        #x = self.norm(x)
         return x

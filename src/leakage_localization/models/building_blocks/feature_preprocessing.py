@@ -54,13 +54,13 @@ class Patchifier(nn.Module):
 
         self.proj = nn.Conv1d(
             self.in_channels, self.embedding_dim,
-            kernel_size=2*self.patch_size,
+            kernel_size=self.patch_size, #2*self.patch_size,
             stride=self.patch_size,
             bias=False,
             padding=self.patch_size//2,
             padding_mode='circular'
         )
-        self.norm = nn.LayerNorm(self.embedding_dim)
+        #self.norm = nn.LayerNorm(self.embedding_dim)
         if self.position_embedding == 'learned':
             self.pos_emb = nn.Parameter(torch.empty(self.in_seq_len//self.patch_size, self.embedding_dim))
             nn.init.trunc_normal_(self.pos_emb, std=0.02)

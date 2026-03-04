@@ -38,7 +38,8 @@ def sample_hparams(
 
 def get_study(
         study_path: Path,
-        config: Dict[str, Any]
+        config: Dict[str, Any],
+        enable_pruning: bool = False
 ) -> optuna.Study:
     storage = optuna.storages.JournalStorage(
         optuna.storages.journal.JournalFileBackend(str(study_path))
@@ -51,15 +52,17 @@ def get_study(
         constant_liar=True,
         seed=SEED + int(os.environ.get('SLURM_ARRAY_TASK_ID', 0))
     )
-    # I don't think pruning makes sense on a lot of these datasets since it takes so long to break random performance
-    #pruner = optuna.pruners.HyperbandPruner(
-    #    min_resource=50,
-    #    reduction_factor=2
-    #)
+    if enable_pruning:
+        pruner = optuna.pruners.HyperbandPruner(
+            min_resource=50,
+            reduction_factor=2
+        )
+    else:
+        pruner = optuna.pruners.NopPruner()
     study = optuna.create_study(
         storage=storage,
         sampler=sampler,
-        #pruner=pruner,
+        pruner=pruner,
         study_name=study_path.stem,
         direction={'min': 'minimize', 'max': 'maximize'}[config['training']['early_stop_mode']],
         load_if_exists=True

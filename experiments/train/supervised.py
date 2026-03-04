@@ -245,13 +245,16 @@ class PruningCallback(lightning.Callback):
 def _optuna_objective(
         trial: optuna.Trial,
         dest: Path,
-        config: Dict[str, Any]
+        config: Dict[str, Any],
+        enable_pruning: bool = False
 ) -> float:
     trial_dest = dest / f'trial_{trial.number}'
     config['training']['seed'] = trial.number
     config = sample_hparams(trial, config)
-    pruning_callback = PruningCallback(trial, config)
-    train_model(trial_dest, config, aux_callbacks=[pruning_callback])
+    aux_callbacks = []
+    if enable_pruning:
+        aux_callbacks.append(PruningCallback(trial, config))
+    train_model(trial_dest, config, aux_callbacks=aux_callbacks if aux_callbacks else None)
     metrics = pandas.read_csv(trial_dest / 'metrics.csv')
     tracked_metric_key = config['training']['early_stop_metric']
     tracked_metric = metrics[tracked_metric_key]
@@ -267,13 +270,14 @@ def run(
         dest: Path,
         config: Dict[str, Any],
         optuna_study_path: Optional[Path],
-        optuna_run_count: int
+        optuna_run_count: int,
+        enable_pruning: bool = False
 ):
     if optuna_study_path is not None:
         optuna_study_path.parent.mkdir(exist_ok=True, parents=True)
-        optuna_study = get_study(optuna_study_path, config)
-        optuna_objective = partial(_optuna_objective, dest=dest, config=config)
-        optuna_study.optimize(optuna_objective, n_trials=optuna_run_count) # will use slurm to handle multiple runs
+        optuna_study = get_study(optuna_study_path, config, enable_pruning=enable_pruning)
+        optuna_objective = partial(_optuna_objective, dest=dest, config=config, enable_pruning=enable_pruning)
+        optuna_study.optimize(optuna_objective, n_trials=optuna_run_count)
     else:
         train_model(dest, config)
 

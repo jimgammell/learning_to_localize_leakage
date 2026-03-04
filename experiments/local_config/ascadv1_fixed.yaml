@@ -61,7 +61,7 @@ search_space:
       choices: [1., 0.1, 0.01, 0.001, 0.]
     weight_decay:
       type: categorical
-      choices: [1.e-4, 1.e-3, 1.e-2, 1.e-1, 1.e0]
+      choices: [1.e-4, 1.e-3, 1.e-2, 1.e-1, 1.0]
     batch_size:
       type: categorical
       choices: [1024, 512, 256, 128, 64]

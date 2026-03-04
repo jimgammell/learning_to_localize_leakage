@@ -8,7 +8,7 @@
 #SBATCH --time=4:00:00
 #SBATCH --output=./outputs/ascadv1_fixed/htune/slurm_%A_%a.out
 #SBATCH --error=./outputs/ascadv1_fixed/htune/slurm_%A_%a.out
-#SBATCH --array=1000%8
+#SBATCH --array=0-999%8
 #SBATCH --exclude i000,i001
 #SBATCH --reservation cocosys_test
 

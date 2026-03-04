@@ -1,6 +1,6 @@
 #!/bin/bash
 
-#SBATCH --job-name=cocosys-test
+#SBATCH --job-name=htune-ascadv1f
 #SBATCH --partition=cocosys
 #SBATCH --account=cocosys
 #SBATCH --gres=gpu:1
@@ -8,9 +8,7 @@
 #SBATCH --time=4:00:00
 #SBATCH --output=./outputs/ascadv1_fixed/htune/slurm_%A_%a.out
 #SBATCH --error=./outputs/ascadv1_fixed/htune/slurm_%A_%a.out
-#SBATCH --array=0-999%8
-#SBATCH --exclude i000,i001
-#SBATCH --reservation cocosys_test
+#SBATCH --array=0-999%2
 
 source ~/.bashrc
 micromamba activate leakage-localization

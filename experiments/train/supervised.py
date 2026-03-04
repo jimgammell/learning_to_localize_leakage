@@ -203,9 +203,18 @@ def train_model(
         lightning.seed_everything(config['training']['seed'])
     train_set, val_set, test_set, trace_statistics = construct_datasets(config)
     steps_per_epoch = ceil(len(train_set)/config['training']['batch_size'])
-    config['training']['total_steps'] = steps_per_epoch*config['training']['total_epochs']
-    config['training']['lr_warmup_steps'] = steps_per_epoch*config['training']['lr_warmup_epochs']
-    config['training']['lr_const_steps'] = steps_per_epoch*config['training']['lr_const_epochs']
+    if 'total_steps' not in config['training']:
+        config['training']['total_steps'] = steps_per_epoch*config['training']['total_epochs']
+    else:
+        config['training']['total_steps'] = ceil(config['training']['total_steps']/steps_per_epoch)*steps_per_epoch
+    if 'lr_warmup_steps' not in config['training']:
+        config['training']['lr_warmup_steps'] = steps_per_epoch*config['training']['lr_warmup_epochs']
+    if 'lr_const_steps' not in config['training']:
+        config['training']['lr_const_steps'] = steps_per_epoch*config['training']['lr_const_epochs']
+    if 'lr_warmup_frac' in config['training']:
+        config['training']['lr_warmup_steps'] = round(config['training']['lr_warmup_frac']*config['training']['total_steps'])
+    if 'lr_const_frac' in config['training']:
+        config['training']['lr_const_steps'] = round(config['training']['lr_const_frac']*config['training']['total_steps'])
     train_loader, val_loader, test_loader = construct_loaders(train_set, val_set, test_set, config)
     training_module = construct_training_module(train_set, trace_statistics, config)
     if config['training']['compile']:

@@ -9,6 +9,7 @@ from matplotlib import pyplot as plt
 import pandas
 
 from experiments.initialization import *
+from experiments.initialization.directories import safe_load_yaml
 from .supervised import construct_datasets, construct_loaders
 from leakage_localization.training.supervised_lightning_module import SupervisedModule
 
@@ -68,7 +69,7 @@ def main():
     assert config_path.exists()
 
     with open(config_path, 'r') as f:
-        config = yaml.safe_load(f)
+        config = safe_load_yaml(f)
     
     train_set, val_set, test_set, trace_statistics = construct_datasets(config)
     train_loader, val_loader, test_loader = construct_loaders(train_set, val_set, test_set, config)

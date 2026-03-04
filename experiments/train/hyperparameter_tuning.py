@@ -51,14 +51,15 @@ def get_study(
         constant_liar=True,
         seed=SEED + int(os.environ.get('SLURM_ARRAY_TASK_ID', 0))
     )
-    pruner = optuna.pruners.HyperbandPruner(
-        min_resource=50,
-        reduction_factor=2
-    )
+    # I don't think pruning makes sense on a lot of these datasets since it takes so long to break random performance
+    #pruner = optuna.pruners.HyperbandPruner(
+    #    min_resource=50,
+    #    reduction_factor=2
+    #)
     study = optuna.create_study(
         storage=storage,
         sampler=sampler,
-        pruner=pruner,
+        #pruner=pruner,
         study_name=study_path.stem,
         direction={'min': 'minimize', 'max': 'maximize'}[config['training']['early_stop_mode']],
         load_if_exists=True

@@ -4,6 +4,33 @@ from typing import Optional, Dict
 
 import yaml
 
+class _DuplicateKeyError(yaml.YAMLError):
+    pass
+
+class _UniqueKeyLoader(yaml.SafeLoader):
+    pass
+
+def _check_duplicate_keys(loader, node):
+    mapping = {}
+    for key_node, value_node in node.value:
+        key = loader.construct_object(key_node)
+        if key in mapping:
+            raise _DuplicateKeyError(
+                f'Duplicate key {key!r} found in YAML mapping '
+                f'(line {key_node.start_mark.line + 1})'
+            )
+        mapping[key] = loader.construct_object(value_node)
+    return mapping
+
+_UniqueKeyLoader.add_constructor(
+    yaml.resolver.BaseResolver.DEFAULT_MAPPING_TAG,
+    _check_duplicate_keys,
+)
+
+def safe_load_yaml(stream):
+    """Load YAML, raising an error on duplicate keys."""
+    return yaml.load(stream, Loader=_UniqueKeyLoader)
+
 PROJ_ROOT = Path(__file__).resolve().parent.parent
 LOCAL_CONFIG_ROOT = PROJ_ROOT / 'local_config'
 LOCAL_DIRECTORY_CONFIG = LOCAL_CONFIG_ROOT / 'directories.yaml'
@@ -37,7 +64,7 @@ def load_directory_config() -> Dict[str, Path]:
     if not LOCAL_DIRECTORY_CONFIG.exists():
         return dict()
     with open(LOCAL_DIRECTORY_CONFIG) as config_file:
-        directories = yaml.safe_load(config_file)
+        directories = safe_load_yaml(config_file)
         return directories
 
 def init_directories(clargs: Optional[Dict[str, str]] = None, config: Optional[Dict[str, str]] = None):
@@ -95,5 +122,5 @@ def init_directories(clargs: Optional[Dict[str, str]] = None, config: Optional[D
 
 __all__ = [
     'ASCADV1_FIXED_ROOT', 'ASCADV1_VARIABLE_ROOT', 'ASCADV2_ROOT', 'CHES_CTF_2018_ROOT', 'DPAV4d2_ROOT',
-    'DOWNLOADS_CACHE_ROOT', 'OUTPUTS_ROOT', 'append_directory_clargs', 'LOCAL_CONFIG_ROOT',
+    'DOWNLOADS_CACHE_ROOT', 'OUTPUTS_ROOT', 'append_directory_clargs', 'LOCAL_CONFIG_ROOT', 'safe_load_yaml',
 ]

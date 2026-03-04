@@ -5,6 +5,7 @@ from typing import Callable, Dict, Any, Optional
 import yaml
 
 from experiments.initialization import *
+from experiments.initialization.directories import safe_load_yaml
 
 def _apply_overrides(config: Dict[str, Any], overrides: list) -> None:
     i = 0
@@ -50,7 +51,7 @@ def main(
     assert config_path.exists()
 
     with open(config_path, 'r') as f:
-        config = yaml.safe_load(f)
+        config = safe_load_yaml(f)
 
     _apply_overrides(config, overrides)
 

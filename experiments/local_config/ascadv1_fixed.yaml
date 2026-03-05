@@ -7,13 +7,13 @@ data:
   random_roll: 4
   val_prop: 0.2
 training:
-  total_steps: 32000
+  total_steps: 30000
   lr_warmup_frac: 0.05
   lr_const_frac: 0.
   batch_size: 1024
-  base_lr: 3.e-4
-  lr_decay_multiplier: 0.1
-  weight_decay: 1.e-4
+  base_lr: 1.e-3
+  lr_decay_multiplier: 0.01
+  weight_decay: 1.0
   label_smoothing: 0.
   grad_clip_val: 1.
   accumulate_grad_batches: 1

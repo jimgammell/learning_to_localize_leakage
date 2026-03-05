@@ -280,11 +280,12 @@ def run(
         config: Dict[str, Any],
         optuna_study_path: Optional[Path],
         optuna_run_count: int,
-        enable_pruning: bool = False
+        enable_pruning: bool = False,
+        sampler_type: str = 'tpe'
 ):
     if optuna_study_path is not None:
         optuna_study_path.parent.mkdir(exist_ok=True, parents=True)
-        optuna_study = get_study(optuna_study_path, config, enable_pruning=enable_pruning)
+        optuna_study = get_study(optuna_study_path, config, enable_pruning=enable_pruning, sampler_type=sampler_type)
         optuna_objective = partial(_optuna_objective, dest=dest, config=config, enable_pruning=enable_pruning)
         optuna_study.optimize(optuna_objective, n_trials=optuna_run_count)
     else:

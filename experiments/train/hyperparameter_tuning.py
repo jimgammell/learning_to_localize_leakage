@@ -39,19 +39,28 @@ def sample_hparams(
 def get_study(
         study_path: Path,
         config: Dict[str, Any],
-        enable_pruning: bool = False
+        enable_pruning: bool = False,
+        sampler_type: str = 'tpe'
 ) -> optuna.Study:
     storage = optuna.storages.JournalStorage(
         optuna.storages.journal.JournalFileBackend(str(study_path))
     )
-    sampler = optuna.samplers.TPESampler(
-        n_startup_trials=48,
-        n_ei_candidates=24,
-        multivariate=True,
-        group=True,
-        constant_liar=True,
-        seed=SEED + int(os.environ.get('SLURM_ARRAY_TASK_ID', 0))
-    )
+    seed = SEED + int(os.environ.get('SLURM_ARRAY_TASK_ID', 0))
+    if sampler_type == 'tpe':
+        sampler = optuna.samplers.TPESampler(
+            n_startup_trials=48,
+            n_ei_candidates=24,
+            multivariate=True,
+            group=True,
+            constant_liar=True,
+            seed=seed
+        )
+    elif sampler_type == 'qmc':
+        sampler = optuna.samplers.QMCSampler(seed=seed)
+    elif sampler_type == 'random':
+        sampler = optuna.samplers.RandomSampler(seed=seed)
+    else:
+        raise ValueError(f'Unknown sampler type: {sampler_type}')
     if enable_pruning:
         pruner = optuna.pruners.HyperbandPruner(
             min_resource=50,

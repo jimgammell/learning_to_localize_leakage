@@ -39,7 +39,7 @@ model:
   fourier_embed_sigma: null
   embedding_dim: 512
   expansion_factor: 4
-  trunk_blocks: 7
+  trunk_blocks: 8
   head_count: null
   register_tokens: 0
   input_dropout_rate: 0.1
@@ -61,10 +61,21 @@ search_space:
       choices: [1., 0.1, 0.01, 0.001, 0.]
     weight_decay:
       type: categorical
-      choices: [1.e-4, 1.e-3, 1.e-2, 1.e-1, 1.0]
+      choices: [1.e-4, 1.e-3, 1.e-2, 1.e-1, 1.0, 1e1, 1e2]
     total_steps:
       type: categorical
-      choices: [6000, 12000, 18000, 24000, 30000, 36000]
+      choices: [6000, 12000, 18000, 24000, 30000]
     batch_size:
       type: categorical
       choices: [1024, 512, 256, 128, 64]
+  model:
+    input_dropout_rate:
+      type: categorical
+      choices: [0., 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]
+    hidden_dropout_rate:
+      type: categorical
+      choices: [0., 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]
+  data:
+    random_roll:
+      type: categorical
+      choices: [0, 1, 2, 4, 8, 16, 32, 64]

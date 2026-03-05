@@ -37,6 +37,7 @@ def main(
     parser.add_argument('--optuna-study-path', type=Path, default=None)
     parser.add_argument('--optuna-run-count', type=int, default=1)
     parser.add_argument('--enable-pruning', action='store_true', default=False)
+    parser.add_argument('--sampler', type=str, default='tpe', choices=['tpe', 'qmc', 'random'])
     parser.add_argument('--config-file', required=True, type=str)
     parser.add_argument('--config-root', type=Path, default=LOCAL_CONFIG_ROOT)
     append_directory_clargs(parser)
@@ -47,6 +48,7 @@ def main(
     optuna_study_path: Optional[Path] = args.optuna_study_path
     optuna_run_count: int = args.optuna_run_count
     enable_pruning: bool = args.enable_pruning
+    sampler_type: str = args.sampler
     assert optuna_run_count > 0
     config_root: Path = args.config_root
     config_path = config_root / f'{args.config_file}.yaml'
@@ -65,5 +67,6 @@ def main(
         config=config,
         optuna_study_path=optuna_study_path,
         optuna_run_count=optuna_run_count,
-        enable_pruning=enable_pruning
+        enable_pruning=enable_pruning,
+        sampler_type=sampler_type
     )

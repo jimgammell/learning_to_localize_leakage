@@ -62,6 +62,7 @@ class RandomLPF(nn.Module):
         smooth_radius = int(abs((self.smooth_scale*np.random.standard_normal())))
         if smooth_radius != 0:
             orig_shape = x.shape
+            x = x.to(torch.float16)
             x = nn.functional.pad(x, (smooth_radius, smooth_radius), mode='reflect')
             x = nn.functional.avg_pool1d(x.view(1, 1, -1), kernel_size=2*smooth_radius + 1, stride=1).view(*orig_shape)
         return x

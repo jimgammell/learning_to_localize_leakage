@@ -227,16 +227,15 @@ class SupervisedModule(lightning.LightningModule):
 
         if self.training and self.config.mixup_alpha > 0:
             lam = np.random.beta(self.config.mixup_alpha, self.config.mixup_alpha, size=(batch_size, 1, 1))
+            lam = np.maximum(lam, 1 - lam)
             lam = torch.from_numpy(lam).to(trace)
             perm = torch.randperm(batch_size, device=self.device)
-            mixed_trace = lam*trace + (1-lam)*trace[perm]
-            training_logits: torch.Tensor = self.model(mixed_trace)
+            trace = lam*trace + (1-lam)*trace[perm]
+            logits: torch.Tensor = self.model(trace)
+            per_output_loss = self.compute_loss(logits, target).mean(dim=0)
             training_loss = (
-                lam*self.compute_loss(training_logits, target) + (1 - lam)*self.compute_loss(training_logits, target[perm])
+                lam.squeeze(-1)*self.compute_loss(logits, target) + (1 - lam.squeeze(-1))*self.compute_loss(logits, target[perm])
             ).mean()
-            with torch.no_grad():
-                logits: torch.Tensor = self.model(trace)
-                per_output_loss = self.compute_loss(logits, target).mean(dim=0)
         else:
             logits: torch.Tensor = self.model(trace)
             per_output_loss = self.compute_loss(logits, target).mean(dim=0)

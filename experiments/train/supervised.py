@@ -16,7 +16,7 @@ from leakage_localization.datasets.ascadv1 import ASCADv1_TorchDataset
 from leakage_localization.datasets.ches_ctf_2018 import CHESCTF2018_TorchDataset
 from leakage_localization.datasets.dpav4_2 import DPAv4d2_TorchDataset
 from leakage_localization.datasets.ascadv2 import ASCADv2_TorchDataset
-from leakage_localization.datasets.transforms import Compose, RandomRoll
+from leakage_localization.datasets.transforms import Compose, RandomRoll, RandomLPF
 from leakage_localization.training.train_supervised_model import train_supervised_model
 from leakage_localization.training.supervised_lightning_module import SupervisedModule
 from leakage_localization.models.model import Model
@@ -106,8 +106,10 @@ def construct_datasets(
     
     train_transforms, eval_transforms = [], []
     trace_statistics = profiling_set.get_trace_statistics(use_progress_bar=True)
-    if config['data']['random_roll'] > 0:
-        train_transforms.append(RandomRoll(max_shift=config['data']['random_roll']))
+    if config['data']['random_roll_scale'] > 0:
+        train_transforms.append(RandomRoll(shift_scale=float(config['data']['random_roll_scale'])))
+    if config['data']['random_lpf_scale'] > 0:
+        train_transforms.append(RandomLPF(smooth_scale=float(config['data']['random_lpf_scale'])))
     train_transform = Compose(train_transforms)
     eval_transform = Compose(eval_transforms)
     train_set = copy(profiling_set)
@@ -173,7 +175,8 @@ def construct_training_module(
             'traces_per_attack': config['mttd']['traces_per_attack']
         },
         trace_statistics=trace_statistics,
-        additive_gaussian_noise=config['data']['additive_gaussian_noise'],
+        additive_gaussian_noise=config['training']['additive_gaussian_noise'],
+        mixup_alpha=config['training']['mixup_alpha'],
         preprocessing=config['data']['preprocessing']
     )
     return module

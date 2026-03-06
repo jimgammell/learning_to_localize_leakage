@@ -54,13 +54,12 @@ class Patchifier(nn.Module):
 
         self.proj = nn.Conv1d(
             self.in_channels, self.embedding_dim,
-            kernel_size=self.patch_size, #2*self.patch_size,
+            kernel_size=2*self.patch_size,
             stride=self.patch_size,
-            bias=False,
+            bias=True,
             padding=self.patch_size//2,
-            padding_mode='circular'
+            padding_mode='reflect'
         )
-        #self.norm = nn.LayerNorm(self.embedding_dim)
         if self.position_embedding == 'learned':
             self.pos_emb = nn.Parameter(torch.empty(self.in_seq_len//self.patch_size, self.embedding_dim))
             nn.init.trunc_normal_(self.pos_emb, std=0.02)
@@ -77,5 +76,4 @@ class Patchifier(nn.Module):
         x = self.proj(x.transpose(1, 2)).transpose(1, 2)
         if self.position_embedding in ('learned', 'sinusoidal'):
             x = x + self.pos_emb.unsqueeze(0)
-        #x = self.norm(x)
         return x

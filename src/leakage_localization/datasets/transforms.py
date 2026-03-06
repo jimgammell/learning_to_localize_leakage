@@ -1,6 +1,7 @@
-from random import randint
 from typing import List
+from random import randint
 
+import numpy as np
 import torch
 from torch import nn
 
@@ -35,15 +36,34 @@ class Normalize(nn.Module):
         return x
 
 class RandomRoll(nn.Module):
-    def __init__(self, max_shift: int):
+    def __init__(self, shift_scale: float):
         super().__init__()
-        assert isinstance(max_shift, int) and max_shift > 0
-        self.max_shift = max_shift
+        assert isinstance(shift_scale, float) and shift_scale > 0
+        self.shift_scale = shift_scale
     
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        roll_amount = randint(0, self.max_shift)
-        if roll_amount > 0:
-            x = x.roll(roll_amount, 1)
+        shift_sgn = 2*randint(0, 1) - 1
+        shift_amt = int(abs(self.shift_scale*np.random.standard_normal()))
+        if shift_amt != 0:
+            x = nn.functional.pad(x, (shift_amt, shift_amt), mode='reflect')
+            if shift_sgn > 0:
+                x = x[..., :-2*shift_amt]
+            else:
+                x = x[..., 2*shift_amt:]
+        return x
+
+class RandomLPF(nn.Module):
+    def __init__(self, smooth_scale: float):
+        super().__init__()
+        assert isinstance(smooth_scale, float) and smooth_scale > 0
+        self.smooth_scale = smooth_scale
+    
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        smooth_radius = int(abs((self.smooth_scale*np.random.standard_normal())))
+        if smooth_radius != 0:
+            orig_shape = x.shape
+            x = nn.functional.pad(x, (smooth_radius, smooth_radius), mode='reflect')
+            x = nn.functional.avg_pool1d(x.view(1, 1, -1), kernel_size=2*smooth_radius + 1, stride=1).view(*orig_shape)
         return x
 
 class AdditiveGaussianNoise(nn.Module):

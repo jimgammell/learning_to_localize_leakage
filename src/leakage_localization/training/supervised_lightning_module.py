@@ -43,6 +43,7 @@ class SupervisedModuleConfig:
     label_smoothing: float
     mttd_kwargs: Dict[str, Any]
     additive_gaussian_noise: float
+    mixup_alpha: float
     preprocessing: PREPROCESSING
 
     def __post_init__(self):
@@ -62,6 +63,7 @@ class SupervisedModuleConfig:
         assert isinstance(self.label_smoothing, float) and 0 <= self.label_smoothing < 1
         assert isinstance(self.mttd_kwargs, dict) and all(isinstance(k, str) for k in self.mttd_kwargs)
         assert isinstance(self.additive_gaussian_noise, float) and self.additive_gaussian_noise >= 0
+        assert isinstance(self.mixup_alpha, float) and self.mixup_alpha >= 0
         assert self.preprocessing in get_args(PREPROCESSING)
 
 class SupervisedModule(lightning.LightningModule):
@@ -87,6 +89,7 @@ class SupervisedModule(lightning.LightningModule):
             mttd_kwargs: Dict[str, Any],
             trace_statistics: Dict[str, np.ndarray],
             additive_gaussian_noise: float,
+            mixup_alpha: float,
             preprocessing: PREPROCESSING
     ):
         super().__init__()
@@ -154,6 +157,8 @@ class SupervisedModule(lightning.LightningModule):
     
     def prepare_batch(self, batch: Tuple[torch.Tensor, torch.Tensor, Dict[str, torch.Tensor]]) -> Tuple[torch.Tensor, torch.Tensor, Dict[str, torch.Tensor]]:
         trace, target, intermediate_variables = batch
+        trace = trace.to(self.device)
+        target = target.to(self.device)
         trace = trace.float()
         if self.config.preprocessing == 'standardize':
             trace = (trace - self.trace_mean) / self.trace_std
@@ -165,41 +170,57 @@ class SupervisedModule(lightning.LightningModule):
             trace = trace + self.config.additive_gaussian_noise*torch.randn_like(trace)
         trace = trace.to(self.dtype)
         return trace, target, intermediate_variables
+    
+    def compute_loss(self, logits: torch.Tensor, _target: torch.Tensor) -> torch.Tensor:
+        batch_size, output_count = _target.shape
+        if self.config.leakage_model == 'bit':
+            target = (_target.unsqueeze(-1) >> torch.arange(8, device=_target.device, dtype=torch.long)) & 1
+            target = target.to(logits.dtype)
+            if self.training and self.config.label_smoothing > 0:
+                target = (1 - self.config.label_smoothing)*target + self.config.label_smoothing*0.5
+            per_output_loss = nn.functional.binary_cross_entropy_with_logits(
+                logits, target, reduction='none'
+            ).mean(dim=-1)
+        elif self.config.leakage_model == 'hw':
+            target = ((_target.unsqueeze(-1) >> torch.arange(8, device=_target.device, dtype=torch.long)) & 1).sum(dim=-1)
+            per_output_loss = nn.functional.cross_entropy(
+                logits.reshape(batch_size*output_count, -1),
+                target.reshape(batch_size*output_count),
+                label_smoothing=self.config.label_smoothing if self.training else 0.,
+                reduction='none'
+            ).reshape(batch_size, output_count)
+        elif self.config.leakage_model == 'id':
+            target = _target
+            per_output_loss = nn.functional.cross_entropy(
+                logits.reshape(batch_size*output_count, -1),
+                target.reshape(batch_size*output_count),
+                label_smoothing=self.config.label_smoothing if self.training else 0.,
+                reduction='none'
+            ).reshape(batch_size, output_count)
+        else:
+            assert False
+        return per_output_loss
 
     def _step(self, batch: Tuple[torch.Tensor, torch.Tensor, Dict[str, torch.Tensor]], phase: PHASE) -> torch.Tensor:
         trace, target, intermediate_variables = self.prepare_batch(batch)
         batch_size, output_count = target.shape
-        logits: torch.Tensor = self.model(trace)
 
-        # Compute loss in the native leakage-model space
-        if self.config.leakage_model == 'bit':
-            native_target = (target.unsqueeze(-1) >> torch.arange(8, device=target.device, dtype=torch.long)) & 1
-            native_target = native_target.to(logits.dtype)
-            if self.training and self.config.label_smoothing > 0:
-                native_target = (1 - self.config.label_smoothing) * native_target + self.config.label_smoothing * 0.5
-            per_output_loss = nn.functional.binary_cross_entropy_with_logits(
-                logits, native_target, reduction='none'
-            ).mean(dim=-1).mean(dim=0)  # mean over bits, then over batch
-        elif self.config.leakage_model == 'hw':
-            native_target = ((target.unsqueeze(-1) >> torch.arange(8, device=target.device, dtype=torch.long)) & 1).sum(dim=-1)
-            per_output_loss = nn.functional.cross_entropy(
-                logits.reshape(batch_size * output_count, -1),
-                native_target.reshape(batch_size * output_count),
-                label_smoothing=self.config.label_smoothing if self.training else 0.,
-                reduction='none'
-            ).reshape(batch_size, output_count).mean(dim=0)
-        elif self.config.leakage_model == 'id':
-            per_output_loss = nn.functional.cross_entropy(
-                logits.reshape(batch_size * output_count, -1),
-                target.reshape(batch_size * output_count),
-                label_smoothing=self.config.label_smoothing if self.training else 0.,
-                reduction='none'
-            ).reshape(batch_size, output_count).mean(dim=0)
+        if self.training and self.config.mixup_alpha > 0:
+            lam = np.random.beta(self.config.mixup_alpha, self.config.mixup_alpha, size=(batch_size, 1))
+            lam = torch.from_numpy(lam).to(trace)
+            perm = torch.randperm(batch_size, device=self.device)
+            mixed_trace = lam*trace + (1-lam)*trace[perm]
+            training_logits: torch.Tensor = self.model(mixed_trace)
+            training_loss = (
+                lam*self.compute_loss(training_logits, target) + (1 - lam)*self.compute_loss(training_logits, target[perm])
+            ).mean()
+            with torch.no_grad():
+                logits: torch.Tensor = self.model(trace)
+                per_output_loss = self.compute_loss(logits, target).mean(dim=0)
         else:
-            assert False
-        training_loss = per_output_loss.mean()
-
-        # Convert to 256-dim byte logits for metrics
+            logits: torch.Tensor = self.model(trace)
+            per_output_loss = self.compute_loss(logits, target).mean(dim=0)
+            training_loss = per_output_loss.mean()
         byte_logits = self.logits_to_byte_logits(logits)
 
         self.metrics[f'{phase}/acc'].update(byte_logits.reshape(batch_size * output_count, -1), target.reshape(batch_size * output_count))

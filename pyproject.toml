@@ -21,6 +21,7 @@ dependencies = [
     "optuna",
     "pandas",
     "trsfile==0.3.2",
+    "captum",
 ]
 requires-python = "==3.11.*"
 authors = [

@@ -8,11 +8,14 @@
 #SBATCH --time=12:00:00
 #SBATCH --output=./outputs/ches_ctf_2018/htune/slurm_%A_%a.out
 #SBATCH --error=./outputs/ches_ctf_2018/htune/slurm_%A_%a.out
-#SBATCH --array=0-999%4
+#SBATCH --array=0-999%8
+#SBATCH --exclude i000,i001
+#SBATCH --reservation cocosys_test
 
 source ~/.bashrc
 micromamba activate leakage-localization
 python -m experiments.train.supervised \
     --dest ./outputs/ches_ctf_2018/htune \
     --config-file ches_ctf_2018 \
-    --optuna-study-path ./outputs/ches_ctf_2018/htune/optuna_study.log
+    --optuna-study-path ./outputs/ches_ctf_2018/htune/optuna_study.log \
+    --sampler qmc

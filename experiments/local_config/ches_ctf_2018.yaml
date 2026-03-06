@@ -59,7 +59,7 @@ search_space:
     lr_decay_multiplier:
       type: float
       low: 1.e-3
-      high: 1.e0
+      high: 1.0
       log: true
     weight_decay:
       type: float

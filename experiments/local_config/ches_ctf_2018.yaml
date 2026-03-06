@@ -10,7 +10,7 @@ training:
   total_steps: 50000
   lr_warmup_frac: 0.05
   lr_const_frac: 0.
-  batch_size: 1024
+  batch_size: 256
   base_lr: 8.e-4
   lr_decay_multiplier: 0.001
   weight_decay: 1.e-4

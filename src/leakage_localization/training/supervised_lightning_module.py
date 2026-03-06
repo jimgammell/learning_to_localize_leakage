@@ -45,6 +45,8 @@ class SupervisedModuleConfig:
     additive_gaussian_noise: float
     mixup_alpha: float
     preprocessing: PREPROCESSING
+    random_roll_scale: float
+    random_lpf_scale: float
 
     def __post_init__(self):
         assert self.leakage_model in get_args(LEAKAGE_MODEL)
@@ -65,6 +67,8 @@ class SupervisedModuleConfig:
         assert isinstance(self.additive_gaussian_noise, float) and self.additive_gaussian_noise >= 0
         assert isinstance(self.mixup_alpha, float) and self.mixup_alpha >= 0
         assert self.preprocessing in get_args(PREPROCESSING)
+        assert isinstance(self.random_roll_scale, float) and self.random_roll_scale >= 0
+        assert isinstance(self.random_lpf_scale, float) and self.random_lpf_scale >= 0
 
 class SupervisedModule(lightning.LightningModule):
     trace_mean: torch.Tensor
@@ -90,7 +94,9 @@ class SupervisedModule(lightning.LightningModule):
             trace_statistics: Dict[str, np.ndarray],
             additive_gaussian_noise: float,
             mixup_alpha: float,
-            preprocessing: PREPROCESSING
+            preprocessing: PREPROCESSING,
+            random_roll_scale: float,
+            random_lpf_scale: float
     ):
         super().__init__()
         self.save_hyperparameters(ignore=['trace_statistics'])
@@ -166,6 +172,20 @@ class SupervisedModule(lightning.LightningModule):
             trace = (trace - self.trace_min) / self.trace_rng
         else:
             assert False
+        if self.training and self.config.random_roll_scale > 0:
+            shift_sgn = 1 if np.random.randint(2) else -1
+            shift_amt = int(abs(self.config.random_roll_scale * np.random.standard_normal()))
+            if shift_amt > 0:
+                trace = nn.functional.pad(trace, (shift_amt, shift_amt), mode='reflect')
+                if shift_sgn > 0:
+                    trace = trace[..., :-2*shift_amt]
+                else:
+                    trace = trace[..., 2*shift_amt:]
+        if self.training and self.config.random_lpf_scale > 0:
+            smooth_radius = int(abs(self.config.random_lpf_scale * np.random.standard_normal()))
+            if smooth_radius > 0:
+                trace = nn.functional.pad(trace, (smooth_radius, smooth_radius), mode='reflect')
+                trace = nn.functional.avg_pool1d(trace, kernel_size=2*smooth_radius + 1, stride=1)
         if self.training and self.config.additive_gaussian_noise > 0:
             trace = trace + self.config.additive_gaussian_noise*torch.randn_like(trace)
         trace = trace.to(self.dtype)

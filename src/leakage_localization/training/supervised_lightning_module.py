@@ -206,7 +206,7 @@ class SupervisedModule(lightning.LightningModule):
         batch_size, output_count = target.shape
 
         if self.training and self.config.mixup_alpha > 0:
-            lam = np.random.beta(self.config.mixup_alpha, self.config.mixup_alpha, size=(batch_size, 1))
+            lam = np.random.beta(self.config.mixup_alpha, self.config.mixup_alpha, size=batch_size)
             lam = torch.from_numpy(lam).to(trace)
             perm = torch.randperm(batch_size, device=self.device)
             mixed_trace = lam*trace + (1-lam)*trace[perm]

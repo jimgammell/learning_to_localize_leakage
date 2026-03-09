@@ -61,7 +61,7 @@ search_space:
     weight_decay:
       type: float
       low: 1.e-4
-      high: 100.
+      high: 5.0
       log: true
     mixup_alpha:
       type: categorical

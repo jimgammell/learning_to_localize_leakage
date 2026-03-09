@@ -29,7 +29,7 @@ mttd:
   traces_per_attack: 1000
 model:
   grey_box_head: null
-  leakage_model: bit
+  leakage_model: id
   trunk: transformer
   position_embedding: rope
   pooling: token
@@ -52,44 +52,60 @@ model:
   perceiver_self_attn_per_cross_attn_blocks: null
   perceiver_cross_attn_head_count: null
 search_space:
-  data:
-    random_roll_scale:
-      type: categorical
-      choices: [0., 1., 2., 4., 8., 16., 32., 64.]
   training:
     base_lr:
       type: float
-      low: 1.e-5
-      high: 1.e-3
+      low: 5.e-4
+      high: 5.e-3
       log: true
-    lr_decay_multiplier:
+    weight_decay:
       type: float
-      low: 1.e-3
-      high: 1.0
+      low: 1.e-4
+      high: 5.0
       log: true
+    mixup_alpha:
+      type: categorical
+      choices: [0.0, 0.1, 0.2, 0.5, 1.0]
+    additive_gaussian_noise:
+      type: float
+      low: 0.01
+      high: 0.5
+      log: true
+    label_smoothing:
+      type: float
+      low: 0.
+      high: 0.1
+    total_steps:
+      type: int
+      low: 25000
+      high: 100000
+      step: 25000
+  data:
+    random_roll_scale:
+      type: categorical
+      choices: [0., 1., 2., 4., 8., 16.]
+    random_lpf_scale:
+      type: categorical
+      choices: [0., 1., 2., 4., 8., 16.]
   model:
-    leakage_model:
-      type: categorical
-      choices: [id]
-    patch_size:
-      type: categorical
-      choices: [10000, 25000, 50000, 100000]
     embedding_dim:
       type: int
       low: 128
-      high: 768
+      high: 512
       step: 128
     trunk_blocks:
       type: int
-      low: 1
+      low: 2
       high: 8
+      step: 2
+    patch_size:
+      type: categorical
+      choices: [5000, 10000, 25000, 50000]
     input_dropout_rate:
       type: float
       low: 0.0
-      high: 0.5
-      step: 0.1
+      high: 0.8
     hidden_dropout_rate:
       type: float
       low: 0.0
-      high: 0.5
-      step: 0.1
+      high: 0.3

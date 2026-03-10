@@ -10,7 +10,7 @@ training:
   total_epochs: 250
   lr_warmup_epochs: 5
   lr_const_epochs: 0
-  batch_size: 64
+  batch_size: 256
   base_lr: 8.e-4
   lr_decay_multiplier: 0.001
   weight_decay: 1.e-4
@@ -47,7 +47,7 @@ model:
   input_dropout_rate: 0.0
   input_droppatch_rate: 0.
   hidden_dropout_rate: 0.1
-  use_bias: true
+  use_bias: false
   perceiver_latent_dim: null
   perceiver_self_attn_per_cross_attn_blocks: null
   perceiver_cross_attn_head_count: null
@@ -56,12 +56,12 @@ search_space:
     base_lr:
       type: float
       low: 5.e-4
-      high: 5.e-3
+      high: 3.e-3
       log: true
     weight_decay:
       type: float
       low: 1.e-4
-      high: 5.0
+      high: 1.0
       log: true
     mixup_alpha:
       type: categorical
@@ -77,16 +77,16 @@ search_space:
       high: 0.1
     total_steps:
       type: int
-      low: 25000
-      high: 100000
-      step: 25000
+      low: 50000
+      high: 200000
+      step: 50000
   data:
     random_roll_scale:
       type: categorical
-      choices: [0., 1., 2., 4., 8., 16.]
+      choices: [0., 1., 2., 4.]
     random_lpf_scale:
       type: categorical
-      choices: [0., 1., 2., 4., 8., 16.]
+      choices: [0., 1., 2., 4.]
   model:
     embedding_dim:
       type: int
@@ -100,7 +100,7 @@ search_space:
       step: 2
     patch_size:
       type: categorical
-      choices: [5000, 10000, 25000, 50000]
+      choices: [10000, 25000, 50000]
     input_dropout_rate:
       type: float
       low: 0.0

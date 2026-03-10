@@ -2,6 +2,7 @@ import random
 from typing import Optional, Dict, Any
 import shutil
 import logging
+from binascii import crc32
 
 import numpy as np
 from matplotlib import pyplot as plt
@@ -20,6 +21,9 @@ def set_seed(seed: Optional[int] = None):
     random.seed(SEED)
     np.random.seed(SEED)
     torch.manual_seed(SEED)
+
+def str_to_seed(s: str) -> int:
+    return (SEED + crc32(s.encode())) & 0xFFFFFFFF
 
 def init(clargs: Optional[Dict[str, Any]] = None):
     latex_available = shutil.which('latex') is not None

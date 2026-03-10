@@ -35,7 +35,8 @@ def train_supervised_model(
     final_checkpoint_callback = ModelCheckpoint(
         dirpath=dest,
         filename='latest',
-        enable_version_counter=False
+        enable_version_counter=False,
+        every_n_epochs=1
     )
     callbacks.append(final_checkpoint_callback)
     if aux_callbacks is not None:
@@ -55,7 +56,10 @@ def train_supervised_model(
         gradient_clip_val=grad_clip_val,
         default_root_dir=dest,
     )
-    trainer.fit(training_module, train_dataloaders=train_loader, val_dataloaders=val_loader)
+    latest_ckpt_path = dest / 'latest.ckpt'
+    if not latest_ckpt_path.exists():
+        latest_ckpt_path = None
+    trainer.fit(training_module, train_dataloaders=train_loader, val_dataloaders=val_loader, ckpt_path=latest_ckpt_path)
     try:
         trainer.test(training_module, dataloaders=test_loader, ckpt_path='best', weights_only=False)
     except Exception as e:

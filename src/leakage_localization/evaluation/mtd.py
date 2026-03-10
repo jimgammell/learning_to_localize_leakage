@@ -1,4 +1,4 @@
-from typing import Dict, Callable, List, Optional
+from typing import Dict, Callable, List, Optional, Literal, get_args
 
 from numba import jit, prange
 import numpy as np
@@ -8,6 +8,8 @@ from torchmetrics import Metric
 from torchmetrics.utilities import dim_zero_cat
 
 from .rank import _get_rank
+
+REDUCTION = Literal['max', 'mean']
 
 @jit(nopython=True, parallel=True)
 def _accumulate_ranks(
@@ -61,6 +63,7 @@ class MinimumTracesToDisclosure(Metric):
             int_var_keys: List[str],
             attack_count: int = 1000,
             traces_per_attack: Optional[int] = None,
+            reduction: REDUCTION = 'min',
             **kwargs
     ):
         super().__init__(**kwargs)
@@ -69,6 +72,7 @@ class MinimumTracesToDisclosure(Metric):
         self.int_var_keys = int_var_keys
         self.attack_count = attack_count
         self.traces_per_attack = traces_per_attack
+        self.reduction = reduction
 
         self.add_state('preds', default=[], dist_reduce_fx='cat')
         for key in int_var_keys:
@@ -99,6 +103,11 @@ class MinimumTracesToDisclosure(Metric):
         incorrect = rank_over_time > 1
         first_correct = incorrect.shape[1] - np.argmax(incorrect[:, ::-1, :], axis=1) + 1
         first_correct[~incorrect.any(axis=1)] = 1
-        per_byte_mttd = (first_correct).astype(np.float32).mean(axis=0)
-        mttd = per_byte_mttd.max() # time until disclosure of full key
-        return torch.tensor(mttd, dtype=torch.float32)
+        per_byte_mtd = (first_correct).astype(np.float32).mean(axis=0)
+        if self.reduction == 'max':
+            mtd = per_byte_mtd.max()
+        elif self.reduction == 'mean':
+            mtd = per_byte_mtd.mean()
+        else:
+            assert False
+        return torch.tensor(mtd, dtype=torch.float32)

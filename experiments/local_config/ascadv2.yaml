@@ -24,7 +24,7 @@ training:
   seed: 0
   compile: true
   num_workers: 8
-mttd:
+mtd:
   attack_count: 1000
   traces_per_attack: 1000
 model:

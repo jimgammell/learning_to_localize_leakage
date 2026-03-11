@@ -45,17 +45,12 @@ class Attributor:
         *_, head_count = target.shape
         grads = torch.zeros((batch_size, head_count, feature_count), dtype=_trace.dtype, device=_trace.device)
         for _ in range(smoothing_count):
-            trace = _trace.clone().detach().requires_grad_(True)
-            trace = trace + smoothing_std*torch.randn_like(trace)
-            loss = self._get_loss(trace, target)
-            batch_size, head_count = loss.shape
-            *_, feature_count = trace.shape
             for head_idx in range(head_count):
-                grad = torch.autograd.grad(
-                    outputs=loss[:, head_idx].sum(),
-                    inputs=trace,
-                    retain_graph=(head_idx < head_count - 1)
-                )[0]
+                trace = _trace.clone().detach().requires_grad_(True)
+                if smoothing_std > 0:
+                    trace = trace + smoothing_std*torch.randn_like(trace)
+                loss = self._get_loss(trace, target, head_idx=head_idx)
+                grad = torch.autograd.grad(outputs=loss.sum(), inputs=trace)[0]
                 grads[:, head_idx, :] += grad.detach().view(batch_size, feature_count)
         attribution = grads.abs() / smoothing_count
         return attribution
@@ -87,14 +82,13 @@ class Attributor:
     ) -> torch.Tensor:
         if show_progress_bar:
             progress_bar = tqdm(total=len(dataloader.dataset))
-        eg_batch = next(iter(dataloader))
-        eg_trace, eg_target, eg_intermediate_values = self.module.prepare_batch(eg_batch)
-        batch_size, *_, feature_count = eg_trace.shape
-        *_, head_count = eg_target.shape
-        attrs = torch.zeros((head_count, feature_count), dtype=self.module.dtype, device=self.module.device)
+        attrs = None
         old_count = 0
         for batch in dataloader:
             attr = attr_fn(batch)
+            if attrs is None:
+                *_, head_count, feature_count = attr.shape
+                attrs = torch.zeros((head_count, feature_count), dtype=self.module.dtype, device=self.module.device)
             new_count = old_count + len(attr)
             attrs = (old_count/new_count)*attrs + (len(attr)/new_count)*attr.mean(dim=0)
             old_count = new_count

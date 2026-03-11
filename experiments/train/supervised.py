@@ -197,19 +197,21 @@ def construct_training_module(
     return module
 
 def construct_loaders(
-        train_set: Dataset, val_set: Dataset, test_set: Dataset, config: Dict[str, Any]
+        train_sets: List[Dataset], eval_sets: List[Dataset], config: Dict[str, Any]
 ) -> Tuple[DataLoader, ...]:
     num_workers = config['training'].get('num_workers', 4)
-    train_loader = DataLoader(
-        train_set, batch_size=config['training']['batch_size'], shuffle=True, num_workers=num_workers, pin_memory=True, persistent_workers=num_workers > 0
-    )
-    val_loader = DataLoader(
-        val_set, batch_size=config['training']['batch_size'], shuffle=False, num_workers=num_workers, pin_memory=True, persistent_workers=num_workers > 0
-    )
-    test_loader = DataLoader(
-        test_set, batch_size=config['training']['batch_size'], shuffle=False, num_workers=num_workers, pin_memory=True, persistent_workers=num_workers > 0
-    )
-    return train_loader, val_loader, test_loader
+    loaders = []
+    for train_set in train_sets:
+        loader = DataLoader(
+            train_set, batch_size=config['training']['batch_size'], shuffle=True, num_workers=num_workers, pin_memory=True, persistent_workers=num_workers > 0
+        )
+        loaders.append(loader)
+    for eval_set in eval_sets:
+        loader = DataLoader(
+            eval_set, batch_size=config['training']['batch_size'], shuffle=False, num_workers=num_workers, pin_memory=True, persistent_workers=num_workers > 0
+        )
+        loaders.append(loader)
+    return tuple(loaders)
 
 def train_model(
         dest: Path,
@@ -247,7 +249,7 @@ def train_model(
     else:
         with open(config_path, 'w') as f:
             yaml.dump(config, f)
-    train_loader, val_loader, test_loader = construct_loaders(train_set, val_set, test_set, config)
+    train_loader, val_loader, test_loader = construct_loaders([train_set], [val_set, test_set], config)
     training_module = construct_training_module(profiling_set, trace_statistics, config)
     if config['training']['compile']:
         training_module.model.compile()

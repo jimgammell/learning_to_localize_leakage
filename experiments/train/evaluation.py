@@ -7,12 +7,13 @@ from numpy.typing import NDArray
 from lightning import Trainer
 from matplotlib import pyplot as plt
 import pandas
-from torch.utils.data import Dataset
+from torch.utils.data import Dataset, DataLoader
 
 from experiments.initialization import *
 from experiments.initialization.directories import safe_load_yaml
 from .supervised import construct_datasets, construct_loaders
 from leakage_localization.training.supervised_lightning_module import SupervisedModule
+from leakage_localization.deep_attribution.attributor import Attributor
 
 def load_training_module(
         ckpt_path: Path,
@@ -66,6 +67,15 @@ def plot_training_curves(
         fig.savefig(dest / f'{metric}_curves.pdf', dpi=300)
         plt.close(fig)
 
+def compute_feature_attribution(
+        module: SupervisedModule,
+        profiling_dataloader: DataLoader
+) -> Dict[str, np.ndarray]:
+    module.to('cuda')
+    attributor = Attributor(module)
+    gradvis_attribution = attributor('gradvis', profiling_dataloader, show_progress_bar=True)
+    return dict(gradvis=gradvis_attribution)
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--ckpt-path', required=True, type=Path)
@@ -86,7 +96,7 @@ def main():
         config = safe_load_yaml(f)
     
     profiling_set, attack_set, train_set, val_set, test_set, trace_statistics = construct_datasets(config, val_partition='profile')
-    train_loader, val_loader, test_loader = construct_loaders(train_set, val_set, test_set, config)
+    test_loader, profiling_loader = construct_loaders([], [test_set, profiling_set], config)
     module = load_training_module(ckpt_path, profiling_set=profiling_set, trace_statistics=trace_statistics, config=config)
     trainer = Trainer(
         accelerator='gpu',
@@ -95,6 +105,7 @@ def main():
         logger=False
     )
     trainer.test(module, dataloaders=test_loader)
+    compute_feature_attribution(module, profiling_dataloader=profiling_loader)
 
     metrics_path = ckpt_path.parent / 'metrics.csv'
     if metrics_path.exists():

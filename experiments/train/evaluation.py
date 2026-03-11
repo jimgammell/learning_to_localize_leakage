@@ -74,7 +74,7 @@ def compute_feature_attribution(
 ) -> Dict[str, np.ndarray]:
     module.to('cuda')
     attributor = Attributor(module)
-    gradvis_attribution = attributor('gradvis', profiling_dataloader, show_progress_bar=True)
+    gradvis_attribution = attributor('shapley', profiling_dataloader, show_progress_bar=True)
     return dict(gradvis=gradvis_attribution)
 
 def main():

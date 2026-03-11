@@ -40,9 +40,7 @@ class Attributor:
             smoothing_std: float = 0.0,
             smoothing_count: int = 1
     ) -> torch.Tensor:
-        print("[gradvis] prepare_batch...", flush=True)
         _trace, target, intermediate_values = self.module.prepare_batch(batch)
-        print(f"[gradvis] trace shape={_trace.shape}, dtype={_trace.dtype}, device={_trace.device}", flush=True)
         batch_size, *_, feature_count = _trace.shape
         *_, head_count = target.shape
         grads = torch.zeros((batch_size, head_count, feature_count), dtype=_trace.dtype, device=_trace.device)
@@ -51,13 +49,8 @@ class Attributor:
                 trace = _trace.clone().detach().requires_grad_(True)
                 if smoothing_std > 0:
                     trace = trace + smoothing_std*torch.randn_like(trace)
-                print(f"[gradvis] head {head_idx}: forward...", flush=True)
                 loss = self._get_loss(trace, target, head_idx=head_idx)
-                torch.cuda.synchronize()
-                print(f"[gradvis] head {head_idx}: forward done, loss={loss.sum().item():.4f}. backward...", flush=True)
                 grad = torch.autograd.grad(outputs=loss.sum(), inputs=trace)[0]
-                torch.cuda.synchronize()
-                print(f"[gradvis] head {head_idx}: backward done", flush=True)
                 grads[:, head_idx, :] += grad.detach().view(batch_size, feature_count)
         attribution = grads.abs() / smoothing_count
         return attribution

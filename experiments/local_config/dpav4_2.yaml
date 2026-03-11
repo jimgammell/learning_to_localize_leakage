@@ -19,7 +19,7 @@ training:
   additive_gaussian_noise: 0.
   grad_clip_val: 1.
   accumulate_grad_batches: 1
-  early_stop_metric: val/rank
+  early_stop_metric: val/mtd
   early_stop_mode: min
   seed: 0
   compile: true
@@ -88,6 +88,9 @@ search_space:
       type: categorical
       choices: [0., 1., 2., 4.]
   model:
+    leakage_model:
+      type: categorical
+      choices: [id, hw, bit]
     embedding_dim:
       type: int
       low: 128

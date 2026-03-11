@@ -48,6 +48,8 @@ def accumulate_ranks(
     log_key_probs = target_preds_to_key_preds(log_target_probs, int_vars)
     if traces_per_attack is None:
         traces_per_attack = logits.shape[0]
+    elif traces_per_attack > logits.shape[0]:
+        traces_per_attack = logits.shape[0]
     indices = np.stack([
         np.random.default_rng(seed=idx).choice(total_trace_count, size=traces_per_attack, replace=False)
         for idx in range(attack_count)
@@ -104,9 +106,9 @@ class MinimumTracesToDisclosure(Metric):
         first_correct = incorrect.shape[1] - np.argmax(incorrect[:, ::-1, :], axis=1) + 1
         first_correct[~incorrect.any(axis=1)] = 1
         per_byte_mtd = (first_correct).astype(np.float32).mean(axis=0)
-        if self.reduction == 'max':
+        if self.reduction == 'max': # minimum traces to disclose full 16-byte key
             mtd = per_byte_mtd.max()
-        elif self.reduction == 'mean':
+        elif self.reduction == 'mean': # minimum traces to disclose 1 byte of the key, averaged over bytes
             mtd = per_byte_mtd.mean()
         else:
             assert False

@@ -136,7 +136,7 @@ class SupervisedModule(lightning.LightningModule):
                 f'{phase}/mtd': MinimumTracesToDisclosure(reduction='max', **self.config.mtd_kwargs)
                 for phase in ['test']
             }, **{
-                f'{phase}/mtd': MinimumTracesToDisclosure(reduction='mean', **self.config.mtd_kwargs)
+                f'{phase}/mtd': MinimumTracesToDisclosure(reduction='mean', **(self.config.mtd_kwargs | dict(attack_count=10)))
                 for phase in (['val'] if self.config.compute_val_mtd else [])
             }
         })

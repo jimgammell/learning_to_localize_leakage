@@ -1,6 +1,8 @@
 from typing import Optional, Literal, List
 from pathlib import Path
+import shutil
 
+import pandas as pd
 from torch.utils.data import DataLoader
 import lightning
 from lightning import Trainer, LightningModule
@@ -41,6 +43,15 @@ def train_supervised_model(
     callbacks.append(final_checkpoint_callback)
     if aux_callbacks is not None:
         callbacks += aux_callbacks
+
+    # Back up existing metrics before CSVLogger overwrites them on resume
+    metrics_csv = dest / 'metrics.csv'
+    metrics_backup = dest / 'metrics.backup.csv'
+    latest_ckpt_path = dest / 'latest.ckpt'
+    is_resuming = latest_ckpt_path.exists()
+    if is_resuming and metrics_csv.exists():
+        shutil.copy2(metrics_csv, metrics_backup)
+
     logger = CSVLogger(
         save_dir=dest,
         name='',
@@ -56,10 +67,18 @@ def train_supervised_model(
         gradient_clip_val=grad_clip_val,
         default_root_dir=dest,
     )
-    latest_ckpt_path = dest / 'latest.ckpt'
-    if not latest_ckpt_path.exists():
+    if not is_resuming:
         latest_ckpt_path = None
     trainer.fit(training_module, train_dataloaders=train_loader, val_dataloaders=val_loader, ckpt_path=latest_ckpt_path)
+
+    # Merge old and new metrics after resume
+    if metrics_backup.exists():
+        old_df = pd.read_csv(metrics_backup)
+        new_df = pd.read_csv(metrics_csv)
+        merged = pd.concat([old_df, new_df], ignore_index=True)
+        merged.to_csv(metrics_csv, index=False)
+        metrics_backup.unlink()
+
     try:
         trainer.test(training_module, dataloaders=test_loader, ckpt_path='best', weights_only=False)
     except Exception as e:

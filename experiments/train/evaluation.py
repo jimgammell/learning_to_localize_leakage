@@ -26,17 +26,7 @@ def load_training_module(
         ckpt_path,
         map_location='cpu',
         weights_only=False,
-        trace_statistics=trace_statistics,
-        mtd_kwargs={
-            'target_preds_to_key_preds': profiling_set.target_preds_to_key_preds,
-            'int_var_keys': profiling_set.int_var_keys,
-            'attack_count': config['mtd']['attack_count'],
-            'traces_per_attack': config['mtd']['traces_per_attack']
-        },
-        mixup_alpha=config['training'].get('mixup_alpha', 0.0),
-        random_roll_scale=float(config['data'].get('random_roll_scale', 0.0)),
-        random_lpf_scale=float(config['data'].get('random_lpf_scale', 0.0)),
-        compute_val_mtd=config['training'].get('early_stop_metric', 'val/rank') == 'val/mtd',
+        trace_statistics=trace_statistics
     )
     return module
 
@@ -70,12 +60,19 @@ def plot_training_curves(
 
 def compute_feature_attribution(
         module: SupervisedModule,
-        profiling_dataloader: DataLoader
-) -> Dict[str, np.ndarray]:
+        profiling_dataloader: DataLoader,
+        dest_dir: Path
+):
     module.to('cuda')
     attributor = Attributor(module)
-    gradvis_attribution = attributor('shapley', profiling_dataloader, show_progress_bar=True)
-    return dict(gradvis=gradvis_attribution)
+    rv = dict()
+    for method in ['gradvis', 'shapley']:
+        dest = dest_dir / f'{method}.npy'
+        if dest.exists():
+            continue
+        with torch.autocast('cuda', dtype=torch.bfloat16):
+            attr = attributor(method, profiling_dataloader, show_progress_bar=True).float().cpu().numpy()
+        np.save(dest, attr)
 
 def main():
     parser = argparse.ArgumentParser()
@@ -95,6 +92,7 @@ def main():
 
     with open(config_path, 'r') as f:
         config = safe_load_yaml(f)
+    config['training']['batch_size'] = 128
     
     profiling_set, attack_set, train_set, val_set, test_set, trace_statistics = construct_datasets(config, val_partition='profile')
     test_loader, profiling_loader = construct_loaders([], [test_set, profiling_set], config)
@@ -106,7 +104,7 @@ def main():
         logger=False
     )
     trainer.test(module, dataloaders=test_loader)
-    compute_feature_attribution(module, profiling_dataloader=profiling_loader)
+    compute_feature_attribution(module, profiling_loader, dest)
 
     metrics_path = ckpt_path.parent / 'metrics.csv'
     if metrics_path.exists():

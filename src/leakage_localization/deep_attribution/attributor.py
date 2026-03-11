@@ -20,7 +20,7 @@ class Attributor:
     ):
         self.module = module
         self.module.eval()
-        self.module.requires_grad_(False)
+        #self.module.requires_grad_(False)
     
     def _get_loss(
             self,

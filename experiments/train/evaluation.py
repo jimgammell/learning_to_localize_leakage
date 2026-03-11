@@ -2,6 +2,7 @@ import argparse
 from pathlib import Path
 from typing import Optional, Dict, Any
 
+import torch
 import yaml
 from numpy.typing import NDArray
 from lightning import Trainer

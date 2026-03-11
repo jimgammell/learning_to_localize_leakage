@@ -70,8 +70,6 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--ckpt-path', required=True, type=Path)
     parser.add_argument('--dest', type=Path)
-    parser.add_argument('--config-file', required=True, type=str)
-    parser.add_argument('--config-root', type=Path, default=LOCAL_CONFIG_ROOT)
     append_directory_clargs(parser)
     args = parser.parse_args()
 
@@ -81,9 +79,7 @@ def main():
     if dest is None:
         dest = ckpt_path.parent
     dest.mkdir(exist_ok=True, parents=True)
-    config_file: str = args.config_file
-    config_root: Path = args.config_root
-    config_path = config_root / f'{config_file}.yaml'
+    config_path = ckpt_path.parent / 'config.yaml'
     assert config_path.exists()
 
     with open(config_path, 'r') as f:

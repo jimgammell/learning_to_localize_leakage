@@ -105,10 +105,10 @@ class MinimumTracesToDisclosure(Metric):
         incorrect = rank_over_time > 1
         first_correct = incorrect.shape[1] - np.argmax(incorrect[:, ::-1, :], axis=1) + 1
         first_correct[~incorrect.any(axis=1)] = 1
-        per_byte_mtd = (first_correct).astype(np.float32).mean(axis=0)
-        if self.reduction == 'max': # minimum traces to disclose full 16-byte key
-            mtd = per_byte_mtd.max()
-        elif self.reduction == 'mean': # minimum traces to disclose 1 byte of the key, averaged over bytes
+        per_byte_mtd = (first_correct).astype(np.float32)
+        if self.reduction == 'max':
+            mtd = per_byte_mtd.max(axis=1).mean()
+        elif self.reduction == 'mean':
             mtd = per_byte_mtd.mean()
         else:
             assert False

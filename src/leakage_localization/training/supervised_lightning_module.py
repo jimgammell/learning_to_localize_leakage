@@ -11,6 +11,7 @@ from torchmetrics.classification import MulticlassAccuracy
 from .cosine_decay_lr_scheduler import CosineDecayLRSched
 from ..evaluation.mtd import MinimumTracesToDisclosure
 from ..evaluation.rank import Rank
+from ..evaluation.acc import FullKeyAccuracy
 from ..models.building_blocks.bits_and_bytes import BitLogitsToByteLogits, HwLogitsToByteLogits
 
 LEAKAGE_MODEL = Literal[
@@ -121,7 +122,7 @@ class SupervisedModule(lightning.LightningModule):
 
         self.metrics = MetricCollection({
             **{
-                f'{phase}/acc': MulticlassAccuracy(num_classes=256)
+                f'{phase}/acc': FullKeyAccuracy()
                 for phase in get_args(PHASE)
             }, **{
                 f'{phase}/acc/{idx}': MulticlassAccuracy(num_classes=256)
@@ -248,7 +249,7 @@ class SupervisedModule(lightning.LightningModule):
             training_loss = per_output_loss.mean()
         byte_logits = self.logits_to_byte_logits(logits)
 
-        self.metrics[f'{phase}/acc'].update(byte_logits.reshape(batch_size * output_count, -1), target.reshape(batch_size * output_count))
+        self.metrics[f'{phase}/acc'].update(byte_logits, target)
         self.metrics[f'{phase}/rank'].update(byte_logits, target)
         for idx in range(self.config.num_labels):
             self.metrics[f'{phase}/acc/{idx}'].update(byte_logits[:, idx, :], target[:, idx])

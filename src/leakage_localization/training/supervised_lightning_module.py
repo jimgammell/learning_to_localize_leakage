@@ -278,6 +278,14 @@ class SupervisedModule(lightning.LightningModule):
         self.log(f'{phase}/rank_med', per_byte_ranks.median(), prog_bar=True)
         self.log(f'{phase}/rank_max', per_byte_ranks.max(), prog_bar=True)
 
+    def on_train_epoch_start(self):
+        dataloader = self.trainer.train_dataloader
+        if isinstance(dataloader, (list, tuple)):
+            dataloader = dataloader[0]
+        sampler = getattr(dataloader, 'sampler', None)
+        if hasattr(sampler, 'set_epoch'):
+            sampler.set_epoch(self.current_epoch)
+
     def on_train_epoch_end(self):
         self._log_rank_stats('train')
 

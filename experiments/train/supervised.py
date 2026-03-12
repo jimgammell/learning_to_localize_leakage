@@ -21,6 +21,7 @@ from leakage_localization.datasets.ches_ctf_2018 import CHESCTF2018_TorchDataset
 from leakage_localization.datasets.dpav4_2 import DPAv4d2_TorchDataset
 from leakage_localization.datasets.ascadv2 import ASCADv2_TorchDataset
 from leakage_localization.datasets.transforms import Compose
+from leakage_localization.datasets.chunked_sampler import ChunkedSampler
 from leakage_localization.training.train_supervised_model import train_supervised_model
 from leakage_localization.training.supervised_lightning_module import SupervisedModule
 from leakage_localization.models.model import Model
@@ -127,7 +128,7 @@ def construct_datasets(
         test_set.transform = eval_transform
     elif val_partition == 'attack':
         train_set = profiling_set
-        indices = np.random.default_rng(seed=str_to_seed('data_partition')).permutation(len(attack_set))
+        indices = np.arange(len(attack_set))
         test_indices = indices[:len(indices)//2]
         val_indices = indices[len(indices)//2:]
         test_set = Subset(attack_set, indices=test_indices)
@@ -200,15 +201,40 @@ def construct_loaders(
         train_sets: List[Dataset], eval_sets: List[Dataset], config: Dict[str, Any]
 ) -> Tuple[DataLoader, ...]:
     num_workers = config['training'].get('num_workers', 4)
+    chunk_size = config['data'].get('shuffle_chunk_size', None)
     loaders = []
     for train_set in train_sets:
+        if chunk_size is not None:
+            shuffle_kwargs = dict(
+                shuffle=False,
+                sampler=ChunkedSampler(train_set, chunk_size=chunk_size, shuffle=True, seed=SEED)
+            )
+        else:
+            shuffle_kwargs = dict(shuffle=True)
         loader = DataLoader(
-            train_set, batch_size=config['training']['batch_size'], shuffle=True, num_workers=num_workers, pin_memory=True, persistent_workers=num_workers > 0
+            train_set,
+            batch_size=config['training']['batch_size'],
+            num_workers=num_workers,
+            pin_memory=True,
+            persistent_workers=num_workers > 0,
+            **shuffle_kwargs
         )
         loaders.append(loader)
     for eval_set in eval_sets:
+        if chunk_size is not None:
+            shuffle_kwargs = dict(
+                shuffle=False,
+                sampler=ChunkedSampler(eval_set, chunk_size=chunk_size, shuffle=False)
+            )
+        else:
+            shuffle_kwargs = dict(shuffle=False)
         loader = DataLoader(
-            eval_set, batch_size=config['training']['batch_size'], shuffle=False, num_workers=num_workers, pin_memory=True, persistent_workers=num_workers > 0
+            eval_set,
+            batch_size=config['training']['batch_size'],
+            num_workers=num_workers,
+            pin_memory=True,
+            persistent_workers=num_workers > 0,
+            **shuffle_kwargs
         )
         loaders.append(loader)
     return tuple(loaders)

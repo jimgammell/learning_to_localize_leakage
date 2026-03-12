@@ -102,14 +102,14 @@ class MinimumTracesToDisclosure(Metric):
         )
         assert np.isfinite(rank_over_time).all()
         assert (rank_over_time >= 1).all()
-        incorrect = rank_over_time > 1
-        first_correct = incorrect.shape[1] - np.argmax(incorrect[:, ::-1, :], axis=1) + 1
-        first_correct[~incorrect.any(axis=1)] = 1
-        per_byte_mtd = (first_correct).astype(np.float32)
         if self.reduction == 'max':
+            incorrect = rank_over_time > 1
+            first_correct = incorrect.shape[1] - np.argmax(incorrect[:, ::-1, :], axis=1) + 1
+            first_correct[~incorrect.any(axis=1)] = 1
+            per_byte_mtd = (first_correct).astype(np.float32)
             mtd = per_byte_mtd.max(axis=1).mean()
         elif self.reduction == 'mean':
-            mtd = per_byte_mtd.mean()
+            mtd = rank_over_time.mean() # not really MTD, but more granular and preferable for hyperparameter tuning when not all key bytes learn
         else:
             assert False
         return torch.tensor(mtd, dtype=torch.float32)

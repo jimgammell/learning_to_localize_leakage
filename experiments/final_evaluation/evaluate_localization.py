@@ -13,7 +13,7 @@ DATASET = Literal['ascadv1-fixed']
 
 def _annotate_spearman(ax, x, y):
     rho = spearmanr(x, y).correlation
-    ax.text(0.95, 0.95, f'ρ={rho:.3f}', transform=ax.transAxes, ha='right', va='top', fontsize=6)
+    ax.text(0.95, 0.95, f'{rho:.3f}', transform=ax.transAxes, ha='right', va='top', fontsize=6)
 
 def visualize_ascadv1_snr(base_dir: Path, partition: PARTITION = 'attack'):
     snr_dir = base_dir / 'snr'

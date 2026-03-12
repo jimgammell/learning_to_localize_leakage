@@ -46,7 +46,7 @@ def visualize_ascadv1_snr(base_dir: Path, partition: PARTITION = 'attack'):
         for byte_idx in range(16):
             subbytes_axes[byte_idx].plot(snr_vals['subbytes'][byte_idx, :], gradvis[byte_idx, :], **plot_kwargs)
             rin_axes[byte_idx].plot(
-                0.5*(snr_vals['r_in'] + snr_vals['p__xor__k__xor__r_in'][byte_idx, :]),
+                0.5*(snr_vals['r_in'][0, :] + snr_vals['p__xor__k__xor__r_in'][byte_idx, :]),
                 gradvis[byte_idx, :],
                 **plot_kwargs
             )
@@ -56,7 +56,7 @@ def visualize_ascadv1_snr(base_dir: Path, partition: PARTITION = 'attack'):
                 **plot_kwargs
             )
             rout_axes[byte_idx].plot(
-                0.5*(snr_vals['r_out'] + snr_vals['subbytes__xor__r_out'][byte_idx, :]),
+                0.5*(snr_vals['r_out'][0, :] + snr_vals['subbytes__xor__r_out'][byte_idx, :]),
                 gradvis[byte_idx, :],
                 **plot_kwargs
             )

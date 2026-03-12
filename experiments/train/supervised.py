@@ -30,7 +30,6 @@ def construct_datasets(
         config: Dict[str, Any],
         val_partition: PARTITION
 ) -> Tuple[Dataset, Dataset, Dataset, Dataset, Dataset, Dict[str, np.ndarray]]:
-    kwargs = config['data']['kwargs']
     if config['data']['id'] == 'ascadv1-fixed':
         profiling_set = ASCADv1_TorchDataset(
             root=ASCADV1_FIXED_ROOT,
@@ -39,8 +38,7 @@ def construct_datasets(
             target_variable=config['data']['target_variable'],
             variable_key=False,
             cropped_traces=False,
-            binary_trace_file=True,
-            **kwargs
+            binary_trace_file=True
         )
         attack_set = ASCADv1_TorchDataset(
             root=ASCADV1_FIXED_ROOT,
@@ -50,7 +48,6 @@ def construct_datasets(
             variable_key=False,
             cropped_traces=False,
             binary_trace_file=True,
-            **kwargs
         )
     elif config['data']['id'] == 'ascadv1-variable':
         profiling_set = ASCADv1_TorchDataset(
@@ -61,7 +58,6 @@ def construct_datasets(
             variable_key=True,
             cropped_traces=False,
             binary_trace_file=True,
-            **kwargs
         )
         attack_set = ASCADv1_TorchDataset(
             root=ASCADV1_VARIABLE_ROOT,
@@ -71,7 +67,6 @@ def construct_datasets(
             variable_key=True,
             cropped_traces=False,
             binary_trace_file=True,
-            **kwargs
         )
     elif config['data']['id'] == 'ascadv2':
         profiling_set = ASCADv2_TorchDataset(
@@ -79,14 +74,12 @@ def construct_datasets(
             partition='profile',
             target_byte=config['data']['target_byte'],
             target_variable=config['data']['target_variable'],
-            **kwargs
         )
         attack_set = ASCADv2_TorchDataset(
             root=ASCADV2_ROOT,
             partition='attack',
             target_byte=config['data']['target_byte'],
             target_variable=config['data']['target_variable'],
-            **kwargs
         )
     elif config['data']['id'] == 'ches-ctf-2018':
         profiling_set = CHESCTF2018_TorchDataset(
@@ -94,14 +87,12 @@ def construct_datasets(
             partition='profile',
             target_byte=config['data']['target_byte'],
             target_variable=config['data']['target_variable'],
-            **kwargs
         )
         attack_set = CHESCTF2018_TorchDataset(
             root=CHES_CTF_2018_ROOT,
             partition='attack',
             target_byte=config['data']['target_byte'],
             target_variable=config['data']['target_variable'],
-            **kwargs
         )
     elif config['data']['id'] == 'dpav4.2':
         profiling_set = DPAv4d2_TorchDataset(
@@ -109,14 +100,12 @@ def construct_datasets(
             partition='profile',
             target_byte=config['data']['target_byte'],
             target_variable=config['data']['target_variable'],
-            **kwargs
         )
         attack_set = DPAv4d2_TorchDataset(
             root=DPAV4d2_ROOT,
             partition='attack',
             target_byte=config['data']['target_byte'],
             target_variable=config['data']['target_variable'],
-            **kwargs
         )
     else:
         assert False

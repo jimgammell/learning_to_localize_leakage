@@ -6,11 +6,13 @@ data:
   random_roll_scale: 4.
   random_lpf_scale: 0.
   val_prop: 0.2
+  kwargs:
+    preload: true
 training:
   total_epochs: 250
   lr_warmup_epochs: 5
   lr_const_epochs: 0
-  batch_size: 256
+  batch_size: 64
   base_lr: 8.e-4
   lr_decay_multiplier: 0.001
   weight_decay: 1.e-4
@@ -23,7 +25,7 @@ training:
   early_stop_mode: min
   seed: 0
   compile: true
-  num_workers: 8
+  num_workers: 0
 mtd:
   attack_count: 1000
   traces_per_attack: 1000

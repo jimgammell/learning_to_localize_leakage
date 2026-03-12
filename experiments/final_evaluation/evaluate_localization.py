@@ -42,7 +42,7 @@ def visualize_ascadv1_snr(base_dir: Path, partition: PARTITION = 'attack'):
             marker='.',
             linestyle='none',
             markersize=2,
-            alpha=0.25
+            alpha=0.25,
             rasterized=True
         )
         for byte_idx in range(16):

@@ -11,14 +11,19 @@ from .base_dataset import Base_TorchDataset
 class ChunkedDataset(IterableDataset):
     """Wraps a TorchDataset to read traces in sequential bulk chunks.
 
-    Instead of 256 individual __getitem__ calls per batch, this reads
-    contiguous chunks via a single np_getitem(slice) call, converts to
-    tensors once, and yields individual samples. Chunk order and within-chunk
-    order are shuffled when shuffle=True.
+    Reads contiguous chunks via a single np_getitem(slice) call, converts
+    to tensors once, and yields pre-formed batches. Use with
+    DataLoader(batch_size=None) to skip auto-collation — batches come
+    out ready to use.
+
+    Chunk order is shuffled each epoch. Within each chunk, samples are
+    shuffled and then sliced into batches.
     """
-    def __init__(self, dataset: Base_TorchDataset, chunk_size: int = 512, shuffle: bool = True):
+    def __init__(self, dataset: Base_TorchDataset, chunk_size: int = 2048,
+                 batch_size: int = 256, shuffle: bool = True):
         self.dataset = dataset
         self.chunk_size = chunk_size
+        self.batch_size = batch_size
         self.shuffle = shuffle
         self._length = len(dataset)
 
@@ -38,7 +43,7 @@ class ChunkedDataset(IterableDataset):
             end = min(start + self.chunk_size, n)
             # Single bulk memmap read + single tensor conversion
             trace, target, intermediate_variables = self.dataset.np_getitem(slice(start, end))
-            trace = torch.as_tensor(trace).unsqueeze(1)  # (chunk, 1, timesteps)
+            trace = torch.as_tensor(trace.copy()).unsqueeze(1)  # (chunk, 1, timesteps)
             target = torch.as_tensor(target.copy(), dtype=torch.long)
             intermediate_variables = {
                 k: torch.as_tensor(v.copy(), dtype=torch.long)
@@ -49,9 +54,17 @@ class ChunkedDataset(IterableDataset):
             if self.dataset.target_transform is not None:
                 target = self.dataset.target_transform(target)
 
-            order = torch.randperm(end - start) if self.shuffle else range(end - start)
-            for i in order:
-                yield trace[i], target[i], {k: v[i] for k, v in intermediate_variables.items()}
+            chunk_len = end - start
+            order = torch.randperm(chunk_len) if self.shuffle else torch.arange(chunk_len)
+
+            # Yield pre-formed batches
+            for batch_start in range(0, chunk_len, self.batch_size):
+                batch_idx = order[batch_start:batch_start + self.batch_size]
+                yield (
+                    trace[batch_idx],
+                    target[batch_idx],
+                    {k: v[batch_idx] for k, v in intermediate_variables.items()}
+                )
 
     def __len__(self) -> int:
-        return self._length
+        return ceil(self._length / self.batch_size)

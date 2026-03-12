@@ -6,8 +6,6 @@ data:
   random_roll_scale: 4.
   random_lpf_scale: 0.
   val_prop: 0.2
-  kwargs:
-    preload: true
 training:
   total_epochs: 250
   lr_warmup_epochs: 5

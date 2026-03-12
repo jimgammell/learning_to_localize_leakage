@@ -5,7 +5,6 @@ from experiments.initialization import *
 
 DATASET = Literal['ascadv1-fixed']
 
-
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--dataset', action='store', choices=get_args(DATASET), required=True)

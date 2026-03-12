@@ -12,9 +12,9 @@ training:
   total_epochs: 250
   lr_warmup_epochs: 5
   lr_const_epochs: 0
-  batch_size: 64
+  batch_size: 256
   base_lr: 8.e-4
-  lr_decay_multiplier: 0.001
+  lr_decay_multiplier: 0.1
   weight_decay: 1.e-4
   label_smoothing: 0.
   mixup_alpha: 0.
@@ -25,7 +25,7 @@ training:
   early_stop_mode: min
   seed: 0
   compile: true
-  num_workers: 0
+  num_workers: 14
 mtd:
   attack_count: 1000
   traces_per_attack: 1000
@@ -80,8 +80,8 @@ search_space:
     total_steps:
       type: int
       low: 50000
-      high: 200000
-      step: 50000
+      high: 60000
+      step: 10000
   data:
     random_roll_scale:
       type: categorical
@@ -96,7 +96,7 @@ search_space:
     embedding_dim:
       type: int
       low: 128
-      high: 512
+      high: 1024
       step: 128
     trunk_blocks:
       type: int

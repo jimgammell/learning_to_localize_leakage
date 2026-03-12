@@ -2,6 +2,7 @@ import random
 from math import ceil
 from typing import Iterator, Tuple, Dict
 
+import numpy as np
 import torch
 from torch.utils.data import IterableDataset
 
@@ -41,12 +42,24 @@ class ChunkedDataset(IterableDataset):
 
         for start in chunk_starts:
             end = min(start + self.chunk_size, n)
-            # Single bulk memmap read + single tensor conversion
-            trace, target, intermediate_variables = self.dataset.np_getitem(slice(start, end))
-            trace = torch.as_tensor(trace.copy()).unsqueeze(1)  # (chunk, 1, timesteps)
-            target = torch.as_tensor(target.copy(), dtype=torch.long)
+            # Single copy: memmap -> torch tensor directly
+            trace = torch.from_numpy(
+                np.array(self.dataset.traces[start:end, 2023:-2023])
+            ).unsqueeze(1)  # (chunk, 1, timesteps)
+            # Metadata is tiny, no performance concern
+            idx = self.dataset.trace_indices[start:end]
+            intermediate_variables = self.dataset.compute_intermediate_variables(
+                self.dataset.keys[idx, :],
+                self.dataset.plaintexts[idx, :],
+                self.dataset.ciphertexts[idx, :]
+            )
+            target = np.concatenate([
+                intermediate_variables[tv][..., self.dataset.config.target_byte]
+                for tv in self.dataset.config.target_variable
+            ], axis=-1)
+            target = torch.as_tensor(target, dtype=torch.long)
             intermediate_variables = {
-                k: torch.as_tensor(v.copy(), dtype=torch.long)
+                k: torch.as_tensor(v, dtype=torch.long)
                 for k, v in intermediate_variables.items()
             }
             if self.dataset.transform is not None:

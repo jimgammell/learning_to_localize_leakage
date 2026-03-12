@@ -28,22 +28,34 @@ def visualize_ascadv1_snr(base_dir: Path, partition: PARTITION = 'attack'):
         gradvis_path = subdir / 'gradvis.npy'
         gradvis = np.load(gradvis_path)
 
-        fig, axes = plt.subplots(4, 16, figsize=(2*16, 2*3), sharex=True, sharey=True)
+        fig, axes = plt.subplots(5, 16, figsize=(2*16, 2*3), sharex=True, sharey=True)
         for ax in axes.flatten():
             ax.set_xscale('log')
             ax.set_yscale('log')
-        subbytes_axes = axes[0, :]
-        rin_axes = axes[1, :]
-        r_axes = axes[2, :]
-        rout_axes = axes[3, :]
+        full_axes = axes[0, :]
+        subbytes_axes = axes[1, :]
+        rin_axes = axes[2, :]
+        r_axes = axes[3, :]
+        rout_axes = axes[4, :]
         plot_kwargs = dict(
             color='blue',
             marker='.',
             linestyle='none',
             markersize=2,
+            alpha=0.25
             rasterized=True
         )
         for byte_idx in range(16):
+            full_axes[byte_idx].plot(
+                0.25*(
+                    snr_vals['subbytes'][byte_idx, :]
+                    + 0.5*(snr_vals['r_in'][0, :] + snr_vals['p__xor__k__xor__r_in'][byte_idx, :])
+                    + 0.5*(snr_vals['r'][byte_idx, :] + snr_vals['subbytes__xor__r'][byte_idx, :])
+                    + 0.5*(snr_vals['r_out'][0, :] + snr_vals['subbytes__xor__r_out'][byte_idx, :])
+                ),
+                gradvis[byte_idx, :],
+                **plot_kwargs
+            )
             subbytes_axes[byte_idx].plot(snr_vals['subbytes'][byte_idx, :], gradvis[byte_idx, :], **plot_kwargs)
             rin_axes[byte_idx].plot(
                 0.5*(snr_vals['r_in'][0, :] + snr_vals['p__xor__k__xor__r_in'][byte_idx, :]),

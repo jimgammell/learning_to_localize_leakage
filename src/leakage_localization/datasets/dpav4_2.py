@@ -130,7 +130,7 @@ class DPAv4d2_NumpyDataset(Base_NumpyDataset):
         
         self.binary_trace_path = self.config.root / f'traces.{self.config.partition}.dat'
         self.metadata_path = self.config.root / f'metadata.{self.config.partition}.npz'
-        if not self.binary_trace_path.exists() and self.metadata_path.exists():
+        if not(self.binary_trace_path.exists() and self.metadata_path.exists()):
             prepare_dataset(self.config.root, self.config.partition)
         
         self.traces = None

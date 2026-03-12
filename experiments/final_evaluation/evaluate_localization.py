@@ -75,7 +75,7 @@ def visualize_ascadv1_snr(base_dir: Path, partition: PARTITION = 'attack'):
             rout_axes[byte_idx].plot(rout_x, gradvis[byte_idx, :], **plot_kwargs)
             _annotate_spearman(rout_axes[byte_idx], rout_x, gradvis[byte_idx, :])
         fig.tight_layout()
-        fig.savefig(subdir / 'gradvis_vs_snr.pdf')
+        fig.savefig(subdir / f'gradvis_vs_snr.{partition}.pdf')
         plt.close(fig)
 
 def main():

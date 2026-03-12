@@ -43,9 +43,14 @@ class ChunkedDataset(IterableDataset):
         for start in chunk_starts:
             end = min(start + self.chunk_size, n)
             # Single copy: memmap -> torch tensor directly
-            trace = torch.from_numpy(
-                np.array(self.dataset.traces[start:end, 2023:-2023])
-            ).unsqueeze(1)  # (chunk, 1, timesteps)
+            if self.dataset._preloaded:
+                trace = torch.from_numpy(
+                    self.dataset.traces[start:end]
+                ).unsqueeze(1)  # (chunk, 1, timesteps) — no copy, already in RAM
+            else:
+                trace = torch.from_numpy(
+                    np.array(self.dataset.traces[start:end, 2023:-2023])
+                ).unsqueeze(1)  # (chunk, 1, timesteps)
             # Metadata is tiny, no performance concern
             idx = self.dataset.trace_indices[start:end]
             intermediate_variables = self.dataset.compute_intermediate_variables(

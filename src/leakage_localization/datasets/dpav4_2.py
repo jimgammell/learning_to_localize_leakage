@@ -112,7 +112,8 @@ class DPAv4d2_NumpyDataset(Base_NumpyDataset):
             root: Union[str, Path],
             partition: PARTITION,
             target_byte: Union[TARGET_BYTE, List[TARGET_BYTE]] = 0,
-            target_variable: Union[TARGET_VARIABLE, List[TARGET_VARIABLE]] = 'subbytes'
+            target_variable: Union[TARGET_VARIABLE, List[TARGET_VARIABLE]] = 'subbytes',
+            preload: bool = False
     ):
         self.config = DPAv4d2_Config(
             root=root,
@@ -127,12 +128,14 @@ class DPAv4d2_NumpyDataset(Base_NumpyDataset):
         else:
             assert False
         self.timestep_count = 1_700_000 # actually 1_704_046, but I'm going to crop it down so it's divisible by more patch sizes
-        
+
         self.binary_trace_path = self.config.root / f'traces.{self.config.partition}.dat'
         self.metadata_path = self.config.root / f'metadata.{self.config.partition}.npz'
         if not(self.binary_trace_path.exists() and self.metadata_path.exists()):
             prepare_dataset(self.config.root, self.config.partition)
-        
+
+        self.preload = preload
+        self._preloaded = False
         self.traces = None
         self.keys = None
         self.plaintexts = None
@@ -141,7 +144,14 @@ class DPAv4d2_NumpyDataset(Base_NumpyDataset):
     
     def init_data(self):
         if self.traces is None:
-            self.traces = np.memmap(self.binary_trace_path, dtype=np.int8, mode='r', shape=(self.trace_count, 1_704_046), order='C')
+            traces = np.memmap(self.binary_trace_path, dtype=np.int8, mode='r', shape=(self.trace_count, 1_704_046), order='C')
+            if self.preload:
+                self.traces = np.array(traces[:, 2023:-2023])
+                self._preloaded = True
+                del traces
+            else:
+                self.traces = traces
+                self._preloaded = False
         if self.keys is None or self.plaintexts is None or self.ciphertexts is None:
             metadata = np.load(self.metadata_path, allow_pickle=True)
             self.keys = metadata['keys']
@@ -196,7 +206,7 @@ class DPAv4d2_NumpyDataset(Base_NumpyDataset):
             _idx = _idx[0]
         self.init_data()
         idx = self.trace_indices[_idx]
-        trace = self.traces[idx, 2023:-2023]
+        trace = self.traces[idx] if self._preloaded else self.traces[idx, 2023:-2023]
         key = self.keys[idx, :]
         plaintext = self.plaintexts[idx, :]
         ciphertext = self.ciphertexts[idx, :]

@@ -1,6 +1,6 @@
 #!/bin/bash
 
-#SBATCH --job-name=ascadv1f-unreg-htune
+#SBATCH --job-name=ascadv1v-unreg-htune
 #SBATCH --partition=cocosys
 #SBATCH --account=cocosys
 #SBATCH --gres=gpu:1

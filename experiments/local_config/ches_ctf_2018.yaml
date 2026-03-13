@@ -65,9 +65,9 @@ search_space:
       log: true
     total_steps:
       type: int
-      low: 4650
-      high: 23250
-      step: 4650
+      low: 5850
+      high: 29250
+      step: 5850
     weight_decay:
       type: float
       low: 1.e-4

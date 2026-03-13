@@ -7,7 +7,7 @@ data:
   random_lpf_scale: 0.
   val_prop: 0.2
 training:
-  total_steps: 50000
+  total_steps: 25000
   lr_warmup_frac: 0.05
   lr_const_frac: 0.
   batch_size: 256
@@ -35,18 +35,18 @@ model:
   pooling: token
   head: tied
   fnn_style: mlp
-  patch_size: 5000
+  patch_size: 25000
   use_fourier_embed: false
   fourier_embed_num_bands: null
   fourier_embed_sigma: null
-  embedding_dim: 512
+  embedding_dim: 256
   expansion_factor: 4
   trunk_blocks: 4
   head_count: null
   register_tokens: 0
   input_dropout_rate: 0.0
   input_droppatch_rate: 0.
-  hidden_dropout_rate: 0.1
+  hidden_dropout_rate: 0.0
   use_bias: false
   perceiver_latent_dim: null
   perceiver_self_attn_per_cross_attn_blocks: null
@@ -58,53 +58,26 @@ search_space:
       low: 5.e-4
       high: 5.e-3
       log: true
+    lr_decay_multiplier:
+      type: float
+      low: 1.e-4
+      high: 1.0
+      log: true
+    total_steps:
+      type: int
+      low: 4650
+      high: 23250
+      step: 4650
     weight_decay:
       type: float
       low: 1.e-4
-      high: 5.0
+      high: 1.0
       log: true
-    mixup_alpha:
-      type: categorical
-      choices: [0.0, 0.1, 0.2, 0.5, 1.0]
-    additive_gaussian_noise:
-      type: float
-      low: 0.01
-      high: 0.5
-      log: true
-    label_smoothing:
-      type: float
-      low: 0.
-      high: 0.1
-    total_steps:
-      type: int
-      low: 25000
-      high: 100000
-      step: 25000
-  data:
-    random_roll_scale:
-      type: categorical
-      choices: [0., 1., 2., 4., 8., 16.]
-    random_lpf_scale:
-      type: categorical
-      choices: [0., 1., 2., 4., 8., 16.]
   model:
-    embedding_dim:
-      type: int
-      low: 128
-      high: 512
-      step: 128
-    trunk_blocks:
-      type: int
-      low: 2
-      high: 8
-      step: 2
-    patch_size:
-      type: categorical
-      choices: [5000, 10000, 25000, 50000]
     input_dropout_rate:
       type: float
       low: 0.0
-      high: 0.8
+      high: 0.5
     hidden_dropout_rate:
       type: float
       low: 0.0

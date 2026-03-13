@@ -8,7 +8,7 @@
 #SBATCH --time=12:00:00
 #SBATCH --output=./outputs/ches_ctf_2018/reg_htune/slurm_%A_%a.out
 #SBATCH --error=./outputs/ches_ctf_2018/reg_htune/slurm_%A_%a.out
-#SBATCH --array=0-999%2
+#SBATCH --array=0-100%2
 
 source ~/.bashrc
 micromamba activate leakage-localization

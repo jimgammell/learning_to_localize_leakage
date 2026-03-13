@@ -48,7 +48,7 @@ def get_study(
     seed = SEED + int(os.environ.get('SLURM_ARRAY_TASK_ID', 0))
     if sampler_type == 'tpe':
         sampler = optuna.samplers.TPESampler(
-            n_startup_trials=48,
+            n_startup_trials=20,
             n_ei_candidates=24,
             multivariate=True,
             group=True,

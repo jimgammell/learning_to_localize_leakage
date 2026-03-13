@@ -1,18 +1,19 @@
 #!/bin/bash
 
-#SBATCH --job-name=ascadv1v-htune
+#SBATCH --job-name=ascadv1f-unreg-htune
 #SBATCH --partition=cocosys
 #SBATCH --account=cocosys
 #SBATCH --gres=gpu:1
 #SBATCH --cpus-per-gpu=14
 #SBATCH --time=8:00:00
-#SBATCH --output=./outputs/ascadv1_variable/htune/slurm_%A_%a.out
-#SBATCH --error=./outputs/ascadv1_variable/htune/slurm_%A_%a.out
-#SBATCH --array=0-999%4
+#SBATCH --output=./outputs/ascadv1_variable/unreg_htune/slurm_%A_%a.out
+#SBATCH --error=./outputs/ascadv1_variable/unreg_htune/slurm_%A_%a.out
+#SBATCH --array=0-100%1
 
 source ~/.bashrc
 micromamba activate leakage-localization
 python -m experiments.train.supervised \
-    --dest ./outputs/ascadv1_variable/htune \
+    --dest ./outputs/ascadv1_variable/unreg_htune \
     --config-file ascadv1_variable \
-    --optuna-study-path ./outputs/ascadv1_variable/htune/optuna_study.log
+    --optuna-study-path ./outputs/ascadv1_variable/unreg_htune/optuna_study.log \
+    --sampler tpe

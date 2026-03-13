@@ -8,7 +8,7 @@
 #SBATCH --time=4:00:00
 #SBATCH --output=./outputs/ascadv1_fixed/unreg_htune/slurm_%A_%a.out
 #SBATCH --error=./outputs/ascadv1_fixed/unreg_htune/slurm_%A_%a.out
-#SBATCH --array=0-999%2
+#SBATCH --array=0-100%1
 
 source ~/.bashrc
 micromamba activate leakage-localization
@@ -16,4 +16,4 @@ python -m experiments.train.supervised \
     --dest ./outputs/ascadv1_fixed/unreg_htune \
     --config-file ascadv1_fixed \
     --optuna-study-path ./outputs/ascadv1_fixed/unreg_htune/optuna_study.log \
-    --sampler qmc
+    --sampler tpe

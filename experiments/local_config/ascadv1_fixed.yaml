@@ -19,7 +19,7 @@ training:
   additive_gaussian_noise: 0.
   grad_clip_val: 1.
   accumulate_grad_batches: 1
-  early_stop_metric: val/rank
+  early_stop_metric: val/mtd
   early_stop_mode: min
   seed: 0
   compile: true
@@ -65,8 +65,8 @@ search_space:
       log: true
     total_steps:
       type: int
-      low: 4650
-      high: 23250
+      low: 9750
+      high: 97500
       step: 9750
     weight_decay:
       type: float

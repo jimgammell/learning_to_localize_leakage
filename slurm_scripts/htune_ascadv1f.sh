@@ -8,7 +8,7 @@
 #SBATCH --time=4:00:00
 #SBATCH --output=./outputs/ascadv1_fixed/htune/slurm_%A_%a.out
 #SBATCH --error=./outputs/ascadv1_fixed/htune/slurm_%A_%a.out
-#SBATCH --array=0-999%4
+#SBATCH --array=0-999%2
 
 source ~/.bashrc
 micromamba activate leakage-localization

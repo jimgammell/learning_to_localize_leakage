@@ -7,13 +7,13 @@ data:
   random_lpf_scale: 0.
   val_prop: 0.2
 training:
-  total_steps: 25000
+  total_steps: 11800
   lr_warmup_frac: 0.05
   lr_const_frac: 0.
   batch_size: 256
-  base_lr: 8.e-4
-  lr_decay_multiplier: 0.001
-  weight_decay: 1.e-4
+  base_lr: 4.0e-3
+  lr_decay_multiplier: 5.0e-4
+  weight_decay: 0.5
   label_smoothing: 0.
   mixup_alpha: 0.
   additive_gaussian_noise: 0.

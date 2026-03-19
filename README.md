@@ -52,7 +52,7 @@ mkdir -p resources/otiait
 cd resources/otiait
 wget https://github.com/leoweissbart/MachineLearningBasedSideChannelAttackonEdDSA/raw/refs/heads/master/databaseEdDSA.h5
 ````
-- One Truth Prevails (1024-bit version) ([link](https://github.com/ECSIS-lab/one_truth_prevails/tree/main)): This dataset is distributed through Google Drive, and AFAIK there isn't an easy way to download it from the command line. Create the directory with the following commands, then navigate [here](https://drive.google.com/drive/folders/19ulxDZmvY5LMbwtzwp1jyGbrP3JHr4vr), download the files `a.npy`, `p_labels.txt`, `p.npy` and move them to this directory.
+- One Truth Prevails (1024-bit version) ([link](https://github.com/ECSIS-lab/one_truth_prevails/tree/main)): This dataset is distributed through Google Drive, and I'm not aware of an easy way to download it from the command line. Create the directory with the following commands, then navigate [here](https://drive.google.com/drive/folders/19ulxDZmvY5LMbwtzwp1jyGbrP3JHr4vr), download the files `a.npy`, `p_labels.txt`, `p.npy` and move them to this directory.
 ```bash
 mkdir -p resources/otp
 cd resources/otp

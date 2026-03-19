@@ -1,0 +1,55 @@
+cff-version: 1.2.0
+title: leakage-localization
+message: >-
+  If you use our work, please cite it using the metadata in
+  this file.
+type: software
+authors:
+  - given-names: Jimmy
+    family-names: Gammell
+    email: jgammell@purdue.edu
+    affiliation: >-
+      Elmore Family School of Electrical and Computer
+      Engineering, Purdue University
+  - given-names: Anand
+    family-names: Raghunathan
+    affiliation: >-
+      Elmore Family School of Electrical and Computer
+      Engineering, Purdue University
+    email: araghu@purdue.edu
+  - given-names: Abolfazl
+    family-names: Hashemi
+    affiliation: >-
+      Elmore Family School of Electrical and Computer
+      Engineering, Purdue University
+  - given-names: Kaushik
+    family-names: Roy
+    email: kaushik@purdue.edu
+    affiliation: >-
+      Elmore Family School of Electrical and Computer
+      Engineering, Purdue University
+repository-code: 'https://github.com/jimgammell/learning_to_localize_leakage'
+keywords:
+  - side-channel analysis
+  - deep learning
+  - leakage localization
+  - feature attribution
+  - hardware security
+license: MIT
+version: 1.0.0
+date-released: '2026-03-19'
+preferred-citation:
+  type: article
+  title: "Learning to Localize Leakage of Cryptographic Sensitive Variables"
+  authors:
+    - family-names: Gammell
+      given-names: Jimmy
+    - family-names: Raghunathan
+      given-names: Anand
+    - family-names: Hashemi
+      given-names: Abolfazl
+    - family-names: Roy
+      given-names: Kaushik
+  journal: "Transactions on Machine Learning Research"
+  year: 2026
+  url: https://openreview.net/forum?id=9qxCSU8nDO&

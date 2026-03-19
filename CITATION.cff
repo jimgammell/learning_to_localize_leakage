@@ -11,23 +11,6 @@ authors:
     affiliation: >-
       Elmore Family School of Electrical and Computer
       Engineering, Purdue University
-  - given-names: Anand
-    family-names: Raghunathan
-    affiliation: >-
-      Elmore Family School of Electrical and Computer
-      Engineering, Purdue University
-    email: araghu@purdue.edu
-  - given-names: Abolfazl
-    family-names: Hashemi
-    affiliation: >-
-      Elmore Family School of Electrical and Computer
-      Engineering, Purdue University
-  - given-names: Kaushik
-    family-names: Roy
-    email: kaushik@purdue.edu
-    affiliation: >-
-      Elmore Family School of Electrical and Computer
-      Engineering, Purdue University
 repository-code: 'https://github.com/jimgammell/learning_to_localize_leakage'
 keywords:
   - side-channel analysis

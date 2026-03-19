@@ -1,0 +1,25 @@
+[build-system]
+requires = ["setuptools>=64", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "leakage-localization"
+description = "Code accompanying our paper \"Learning to Localize Leakage of Cryptographic Sensitive Variables\"."
+authors = [
+    {name = "Jimmy Gammell"}
+]
+version = "2026.0"
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE", "CITATION.cff"]
+requires-python = ">=3.9"
+dependencies = [
+    "numpy",
+    "torch"
+]
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.package.find]
+where = ["src"]

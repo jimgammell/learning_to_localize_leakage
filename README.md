@@ -2,6 +2,10 @@
 
 This is the official implementation accompanying the paper "Learning to Localize Leakage of Cryptographic Sensitive Variables" (TMLR 2026) by Jimmy Gammell, Anand Raghunathan, Abolfazl Hashemi, and Kaushik Roy.
 
+## Note: this repository is in progress.
+
+I'm in the process of refactoring the code to make it easy to run the main experiments/analysis from the paper. At the moment there is quite a bit of old/redundant code, etc. I will delete this note and add usage instructions once refactoring is complete.
+
 ## Installation
 
 This code was tested using Python 3.9.19, and certain dependencies (e.g. Captum) seem to break with more-recent versions. Follow the instructions below to install the project and its dependencies:

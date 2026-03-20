@@ -70,3 +70,7 @@ If you use this code or our work, please consider citing it as follows:
     year = {2026}
 }
 ```
+
+### Contact
+
+For questions or to point out bugs, please open an issue or contact me at `jgammell@purdue.edu`.

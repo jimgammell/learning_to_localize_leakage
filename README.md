@@ -1,6 +1,6 @@
 # Learning to Localize Leakage of Cryptographic Sensitive Variables
-By Jimmy Gammell, Anand Raghunathan, Abolfazl Hashemi, and Kaushik Roy.
-Code was implemented by Jimmy Gammell.
+
+This is the official implementation accompanying the paper "Learning to Localize Leakage of Cryptographic Sensitive Variables" (TMLR 2026) by Jimmy Gammell, Anand Raghunathan, Abolfazl Hashemi, and Kaushik Roy.
 
 ## Installation
 
@@ -52,8 +52,21 @@ mkdir -p resources/otiait
 cd resources/otiait
 wget https://github.com/leoweissbart/MachineLearningBasedSideChannelAttackonEdDSA/raw/refs/heads/master/databaseEdDSA.h5
 ````
-- One Truth Prevails (1024-bit version) ([link](https://github.com/ECSIS-lab/one_truth_prevails/tree/main)): This dataset is distributed through Google Drive, and I'm not aware of an easy way to download it from the command line. Create the directory with the following commands, then navigate [here](https://drive.google.com/drive/folders/19ulxDZmvY5LMbwtzwp1jyGbrP3JHr4vr), download the files `a.npy`, `p_labels.txt`, `p.npy` and move them to this directory.
+- One Truth Prevails (1024-bit version) ([link](https://github.com/ECSIS-lab/one_truth_prevails/tree/main)): This dataset is distributed through Google Drive, and I'm not aware of an easy way to download it from the command line. Instead, just create the directory with the following commands, then navigate [here](https://drive.google.com/drive/folders/19ulxDZmvY5LMbwtzwp1jyGbrP3JHr4vr), download the files `a.npy`, `p_labels.txt`, `p.npy`, and move them to this directory.
 ```bash
 mkdir -p resources/otp
 cd resources/otp
 ````
+
+## Citation
+
+If you use this code or our work, please consider citing it as follows:
+```bibtex
+@article{Gammell_Learning_to_Localize_2026,
+    author = {Gammell, Jimmy and Raghunathan, Anand and Hashemi, Abolfazl and Roy, Kaushik},
+    journal = {Transactions on Machine Learning Research},
+    title = {{Learning to Localize Leakage of Cryptographic Sensitive Variables}},
+    url = {https://openreview.net/forum?id=9qxCSU8nDO&},
+    year = {2026}
+}
+```

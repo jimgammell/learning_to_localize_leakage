@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "leakage-localization"
-description = "Code accompanying our paper \"Learning to Localize Leakage of Cryptographic Sensitive Variables\"."
+description = "Code accompanying the paper \"Learning to Localize Leakage of Cryptographic Sensitive Variables\"."
 authors = [
     {name = "Jimmy Gammell"}
 ]

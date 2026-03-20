@@ -1,0 +1,32 @@
+[build-system]
+requires = ["setuptools>=64", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "leakage-localization"
+description = "Official implementation accompanying the paper \"Learning to Localize Leakage of Cryptographic Sensitive Variables\" (TMLR 2026) by Jimmy Gammell, Anand Raghunathan, Abolfazl Hashemi, and Kaushik Roy."
+authors = [
+    {name = "Jimmy Gammell", email = "jgammell@purdue.edu"}
+]
+version = "2026.0"
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE", "CITATION.cff"]
+requires-python = ">=3.9"
+dependencies = [
+    "numpy",
+    "torch",
+    "torchvision",
+    "lightning",
+    "pyyaml",
+    "matplotlib",
+    "numba",
+    "requests",
+    "h5py",
+    "gdown",
+    "scipy",
+    "captum",
+    "einops",
+    "tensorboard",
+    "imageio",
+]

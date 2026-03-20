@@ -12,7 +12,7 @@ from matplotlib import pyplot as plt
 import torch
 from torch import nn
 
-from common import *
+from leakage_localization.common import *
 
 DATASET_NAMES = {
     'ascadv1_fixed': 'ASCADv1 (fixed)',

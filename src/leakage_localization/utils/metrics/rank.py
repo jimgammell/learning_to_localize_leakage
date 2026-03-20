@@ -6,8 +6,8 @@ from torch import nn
 from torch.utils.data import Subset
 from torchmetrics import Metric
 
-from common import *
-from utils.aes import *
+from leakage_localization.common import *
+from leakage_localization.utils.aes import *
 
 @numba.jit(nopython=True)
 def _get_rank(logits: np.ndarray, targets: np.ndarray):

@@ -8,13 +8,13 @@ from lightning.pytorch.loggers.tensorboard import TensorBoardLogger
 from lightning.pytorch.callbacks import ModelCheckpoint, Callback
 from scipy.stats import spearmanr
 
-from common import *
-from trials.utils import *
-from datasets.data_module import DataModule
+from leakage_localization.common import *
+from leakage_localization.trials.utils import *
+from leakage_localization.datasets.data_module import DataModule
 from .module import Module
 from .plot_things import *
-from utils.baseline_assessments import NeuralNetAttribution
-from utils.baseline_assessments.occpoi import OccPOI
+from leakage_localization.utils.baseline_assessments import NeuralNetAttribution
+from leakage_localization.utils.baseline_assessments.occpoi import OccPOI
 
 OPTIMAL_WINDOW_SIZES = {
     'ascadv1-fixed': 3,

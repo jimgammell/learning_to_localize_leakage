@@ -12,8 +12,8 @@ import torch
 from torch import nn
 from torch.utils.data import DataLoader, Subset
 
-from utils.aes_multi_trace_eval import AESMultiTraceEvaluator
-from utils.metrics import get_rank
+from leakage_localization.utils.aes_multi_trace_eval import AESMultiTraceEvaluator
+from leakage_localization.utils.metrics import get_rank
 
 class OccludedModel(nn.Module):
     def __init__(self, model: nn.Module, points_to_occlude: Sequence[int]):

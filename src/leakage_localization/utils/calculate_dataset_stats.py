@@ -2,7 +2,7 @@ from copy import copy
 import numpy as np
 from torch.utils.data import Dataset, Subset, ConcatDataset
 
-from utils.chunk_iterator import chunk_iterator
+from .chunk_iterator import chunk_iterator
 
 def calculate_dataset_stats(dataset: Dataset, chunk_size: int = 1024, calc_var=True):
     base_dataset = dataset

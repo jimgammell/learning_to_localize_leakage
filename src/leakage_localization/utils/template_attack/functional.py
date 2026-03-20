@@ -6,7 +6,7 @@ from numba import jit, prange
 import torch
 from torch.utils.data import Subset, Dataset
 
-from utils.chunk_iterator import chunk_iterator
+from leakage_localization.utils.chunk_iterator import chunk_iterator
 
 @torch.no_grad()
 def extract_dataset(

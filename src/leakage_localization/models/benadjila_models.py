@@ -6,7 +6,7 @@ from collections import OrderedDict
 import torch
 from torch import nn
 
-from common import *
+from leakage_localization.common import *
 from .zaid_wouters_nets.keras_to_pytorch_utils import FlattenTranspose, keras_to_torch_mod, unpack_keras_params
 
 class MLPBest(nn.Module):

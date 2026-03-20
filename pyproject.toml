@@ -15,11 +15,18 @@ license-files = ["LICENSE", "CITATION.cff"]
 requires-python = ">=3.9"
 dependencies = [
     "numpy",
-    "torch"
+    "torch",
+    "torchvision",
+    "lightning",
+    "pyyaml",
+    "matplotlib",
+    "numba",
+    "requests",
+    "h5py",
+    "gdown",
+    "scipy",
+    "captum",
+    "einops",
+    "tensorboard",
+    "imageio",
 ]
-
-[tool.setuptools]
-package-dir = {"" = "src"}
-
-[tool.setuptools.package.find]
-where = ["src"]

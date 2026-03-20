@@ -2,7 +2,7 @@ import numpy as np
 from matplotlib import pyplot as plt
 from lightning import Callback
 
-from utils.metrics import accumulate_ranks
+from leakage_localization.utils.metrics import accumulate_ranks
 
 class MultiTraceRankTracker(Callback):
     def on_validation_epoch_end(self, trainer, module):

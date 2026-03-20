@@ -6,11 +6,11 @@ from matplotlib import pyplot as plt
 from matplotlib.lines import Line2D
 from matplotlib.patches import FancyArrow
 
-from common import *
-from trials.utils import *
-from utils.baseline_assessments import FirstOrderStatistics
-from datasets.synthetic_aes import SyntheticAES, SyntheticAESLike
-from training_modules.adversarial_leakage_localization import ALLTrainer
+from leakage_localization.common import *
+from leakage_localization.trials.utils import *
+from leakage_localization.utils.baseline_assessments import FirstOrderStatistics
+from leakage_localization.datasets.synthetic_aes import SyntheticAES, SyntheticAESLike
+from leakage_localization.training_modules.adversarial_leakage_localization import ALLTrainer
 
 GAMMA_BAR_VALS = np.array([0.5])
 

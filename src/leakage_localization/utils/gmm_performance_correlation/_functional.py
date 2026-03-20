@@ -6,7 +6,7 @@ from scipy.special import erf
 import torch
 from torch.utils.data import Dataset, Subset
 
-from utils.chunk_iterator import chunk_iterator
+from leakage_localization.utils.chunk_iterator import chunk_iterator
 
 @torch.no_grad()
 def extract_dataset(dataset: Dataset, partitions: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:

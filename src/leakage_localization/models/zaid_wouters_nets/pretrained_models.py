@@ -1,5 +1,5 @@
-from common import *
-from utils.download_unzip import download, unzip
+from leakage_localization.common import *
+from leakage_localization.utils.download_unzip import download, unzip
 from .base_model import GenericZaidNet, GenericWoutersNet
 from .keras_to_pytorch_utils import *
 

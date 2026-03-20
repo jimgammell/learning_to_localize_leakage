@@ -5,7 +5,7 @@ import h5py
 import torch
 from torch.utils.data import Dataset
 
-from utils.aes import *
+from leakage_localization.utils.aes import *
 
 # Note: labels are given by AES_INVERSE_SBOX[ciphertexts[:, 11]] ^ ciphertexts[:, 7] -- I think this is backwards from what a few papers state
 

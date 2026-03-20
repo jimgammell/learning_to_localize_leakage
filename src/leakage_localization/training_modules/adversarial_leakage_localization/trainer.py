@@ -9,12 +9,12 @@ from lightning import LightningModule, Trainer as LightningTrainer
 from lightning.pytorch.loggers.tensorboard import TensorBoardLogger
 from lightning.pytorch.callbacks import ModelCheckpoint
 
-from common import *
-from trials.utils import *
-from datasets.data_module import DataModule
+from leakage_localization.common import *
+from leakage_localization.trials.utils import *
+from leakage_localization.datasets.data_module import DataModule
 from .module import Module
 from .plot_things import *
-from utils.dnn_performance_auc import compute_dnn_performance_auc
+from leakage_localization.utils.dnn_performance_auc import compute_dnn_performance_auc
 
 class Trainer:
     def __init__(self,

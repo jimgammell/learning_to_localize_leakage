@@ -5,7 +5,7 @@ import torch
 from torch import nn
 from torch.utils.data import Dataset, DataLoader
 
-from utils.metrics import get_rank
+from .metrics import get_rank
 
 @torch.no_grad()
 def compute_dnn_performance_auc(

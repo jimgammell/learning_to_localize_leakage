@@ -11,8 +11,8 @@ import torch
 from torch import nn
 from torch.utils.data import Dataset
 
-from common import *
-from training_modules.adversarial_leakage_localization import ALLTrainer
+from leakage_localization.common import *
+from leakage_localization.training_modules.adversarial_leakage_localization import ALLTrainer
 from . import evaluation_methods
 
 def run_all_hparam_sweep(

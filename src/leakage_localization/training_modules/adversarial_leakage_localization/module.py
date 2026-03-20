@@ -8,8 +8,8 @@ import torch
 from torch import nn, optim
 import lightning
 
-import utils.lr_schedulers as lr_schedulers
-from utils.metrics import get_rank
+import leakage_localization.utils.lr_schedulers as lr_schedulers
+from leakage_localization.utils.metrics import get_rank
 from .modules import CondMutInfEstimator, SelectionMechanism
 
 @dataclass
@@ -26,7 +26,7 @@ class _Hparams:
     etat_lr: float = 1e-3
     gamma_bar: float = 0.5
     relaxation_temp: float = 1.0
-    gradient_estimator: Literal['gumbel', 'reinmax'] = 'gumbel'
+    gradient_estimator: Literal['gumbel'] = 'gumbel'
     adversarial_mode: bool = True
     train_theta: bool = True
     train_etat: bool = True
@@ -54,7 +54,7 @@ class Module(lightning.LightningModule):
         gamma_bar: float = 0.5,
         norm_penalty_coeff: float = 0.0,
         relaxation_temp: float = 1.0,
-        gradient_estimator: Literal['gumbel', 'reinmax'] = 'gumbel',
+        gradient_estimator: Literal['gumbel'] = 'gumbel',
         penalty_style: Literal['budget', 'l1', 'l2', 'l1_plus_l2'] = 'budget',
         l1_norm_penalty: Optional[float] = None,
         adversarial_mode: bool = True,
@@ -151,8 +151,8 @@ class Module(lightning.LightningModule):
         rv = {}
         if self.hparams.gradient_estimator == 'gumbel':
             mask = self.selection_mechanism.concrete_sample(batch_size)
-        elif self.hparams.gradient_estimator == 'reinmax':
-            mask = self.selection_mechanism.reinmax_sample(batch_size)
+        else:
+            assert False
         logits = self.cmi_estimator.get_logits(trace, mask)
         if len(logits.shape) > 2:
             batch_size, head_count, class_count = logits.shape

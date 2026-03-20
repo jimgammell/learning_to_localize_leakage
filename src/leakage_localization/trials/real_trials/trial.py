@@ -1,22 +1,20 @@
 from typing import Literal, Dict, Any, Optional
 import os
-import shutil
 from copy import copy
-import pickle
-import json
 from tqdm import tqdm
 
 import numpy as np
 from scipy.stats import spearmanr
-from torch.utils.data import Dataset, DataLoader
 
-from common import *
-from utils.baseline_assessments import FirstOrderStatistics, NeuralNetAttribution, OccPOI
-from utils import dnn_performance_auc
+from leakage_localization.common import *
+from leakage_localization.utils.baseline_assessments import FirstOrderStatistics
 from .plot_things import *
-from datasets.data_module import DataModule
-from training_modules.supervised_deep_sca import SupervisedTrainer, SupervisedModule
-from training_modules.adversarial_leakage_localization import ALLTrainer, ALLModule
+from leakage_localization.datasets.data_module import DataModule
+from leakage_localization.datasets.dpav4 import DPAv4
+from leakage_localization.datasets.ascadv1 import ASCADv1
+from leakage_localization.datasets.aes_hd import AES_HD
+from leakage_localization.datasets.ed25519_wolfssl import ED25519
+from leakage_localization.datasets.one_truth_prevails import OneTruthPrevails
 from . import supervised_experiment_methods
 from . import evaluation_methods
 from . import all_experiment_methods
@@ -89,27 +87,21 @@ class Trial:
     def construct_datasets(self):
         print('Constructing datasets.')
         if self.dataset_name == 'dpav4':
-            from datasets.dpav4 import DPAv4
             self.profiling_dataset = DPAv4(root=self.data_dir, train=True)
             self.attack_dataset = DPAv4(root=self.data_dir, train=False)
         elif self.dataset_name == 'ascadv1-fixed':
-            from datasets.ascadv1 import ASCADv1
             self.profiling_dataset = ASCADv1(root=self.data_dir, variable_keys=False, train=True)
             self.attack_dataset = ASCADv1(root=self.data_dir, variable_keys=False, train=False)
         elif self.dataset_name == 'ascadv1-variable':
-            from datasets.ascadv1 import ASCADv1
             self.profiling_dataset = ASCADv1(root=self.data_dir, variable_keys=True, train=True)
             self.attack_dataset = ASCADv1(root=self.data_dir, variable_keys=True, train=False)
         elif self.dataset_name == 'aes-hd':
-            from datasets.aes_hd import AES_HD
             self.profiling_dataset = AES_HD(root=self.data_dir, train=True)
             self.attack_dataset = AES_HD(root=self.data_dir, train=False)
         elif self.dataset_name == 'otiait':
-            from datasets.ed25519_wolfssl import ED25519
             self.profiling_dataset = ED25519(root=self.data_dir, train=True)
             self.attack_dataset = ED25519(root=self.data_dir, train=False)
         elif self.dataset_name == 'otp':
-            from datasets.one_truth_prevails import OneTruthPrevails
             self.profiling_dataset = OneTruthPrevails(root=self.data_dir, train=True)
             self.attack_dataset = OneTruthPrevails(root=self.data_dir, train=False)
         else:

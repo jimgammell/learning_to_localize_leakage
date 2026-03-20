@@ -1,6 +1,6 @@
 import os
 
-from common import *
+from leakage_localization.common import *
 from . import synthetic_aes, simple_gaussian, dpav4, aes_hd, ascadv1, ed25519_wolfssl, one_truth_prevails
 
 _DATASET_MODULES = {

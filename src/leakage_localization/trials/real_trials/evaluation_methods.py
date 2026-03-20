@@ -6,9 +6,9 @@ from scipy.stats import spearmanr
 import torch
 from torch.utils.data import TensorDataset, DataLoader
 
-from utils.metrics import get_rank
-from utils.aes_multi_trace_eval import AESMultiTraceEvaluator
-from utils.template_attack import TemplateAttack
+from leakage_localization.utils.metrics import get_rank
+from leakage_localization.utils.aes_multi_trace_eval import AESMultiTraceEvaluator
+from leakage_localization.utils.template_attack import TemplateAttack
 
 def get_oracle_agreement(leakage_assessment, oracle_assessment):
     assert leakage_assessment.shape[-1] == oracle_assessment.shape[-1]

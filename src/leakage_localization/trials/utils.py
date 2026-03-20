@@ -4,7 +4,7 @@ import numpy as np
 from matplotlib import pyplot as plt
 from tensorboard.backend.event_processing import event_accumulator
 
-from common import *
+from leakage_localization.common import *
 
 def extract_trace(trace):
     x = np.array([u.step for u in trace])

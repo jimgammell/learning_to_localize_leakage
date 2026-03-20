@@ -4,8 +4,8 @@ from matplotlib import pyplot as plt
 from matplotlib.collections import LineCollection
 import imageio
 
-from common import *
-from trials.utils import *
+from leakage_localization.common import *
+from leakage_localization.trials.utils import *
 
 def plot_leakage_assessment(oracle_assessment: np.ndarray, leakage_assessment: np.ndarray, dest: str):
     timestep_count = leakage_assessment.shape[-1]

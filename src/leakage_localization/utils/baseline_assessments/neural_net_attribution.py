@@ -9,8 +9,8 @@ from torch import nn
 from torch.utils.data import DataLoader
 from captum.attr import InputXGradient, FeatureAblation, Saliency, LRP, Occlusion
 
-from utils.chunk_iterator import chunk_iterator
-from models.zaid_wouters_nets import pretrained_models
+from leakage_localization.utils.chunk_iterator import chunk_iterator
+from leakage_localization.models.zaid_wouters_nets import pretrained_models
 from .second_order_occlusion import SecondOrderOcclusion
 
 class ReshapeOutput(nn.Module):

@@ -5,7 +5,7 @@ from numba import jit
 import torch
 from torch.utils.data import Dataset
 
-from utils.aes import *
+from leakage_localization.utils.aes import *
 
 BYTE_ORDER = np.array([15, 12, 13, 1, 8, 10, 0, 3, 7, 6, 9, 5, 11, 2, 4, 14])
 # The order in which the SBox operation is applied to the different key bytes.

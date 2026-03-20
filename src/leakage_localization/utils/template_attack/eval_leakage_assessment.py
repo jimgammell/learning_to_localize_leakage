@@ -3,9 +3,9 @@ from collections import defaultdict
 from torch.utils.data import Dataset
 
 from .interface import TemplateAttack
-from models.soft_xor_layer import soft_xor
-from utils.aes import *
-from metrics.rank import get_rank
+from leakage_localization.models.soft_xor_layer import soft_xor
+from leakage_localization.utils.aes import *
+from leakage_localization.utils.metrics.rank import get_rank
 
 class TemplateAttackEvaluator:
     def __init__(self,

@@ -1,11 +1,34 @@
 import os
+import shutil
 from copy import copy
 import argparse
 
 import yaml
+from matplotlib import pyplot as plt
+import torch
 
-from common import *
-from datasets import download, AVAILABLE_DATASETS
+from leakage_localization.common import *
+from leakage_localization.datasets import download, AVAILABLE_DATASETS
+
+latex_installed = shutil.which('latex') is not None
+plt.rcParams.update({
+    'font.size': 10,
+    'font.family': 'Times New Roman'
+})
+if shutil.which('latex') is not None:
+    plt.rcParams.update({
+        'text.usetex': True,
+        'text.latex.preamble': r'\usepackage{times} \usepackage{amsmath} \usepackage{amssymb}'
+    })
+else:
+    print('Warning: Latex not installed. Plots might look ugly.')
+
+if torch.cuda.is_available():
+    torch.backends.cudnn.benchmark = True
+    gpu_properties = torch.cuda.get_device_properties(torch.cuda.current_device())
+    arch = 10*gpu_properties.major + gpu_properties.minor
+    if arch >= 70:
+        torch.set_float32_matmul_precision('high')
 
 def main():
     parser = argparse.ArgumentParser()
@@ -47,7 +70,7 @@ def main():
             download(dataset_name)
     elif clargs.action == 'create-plots':
         print('Creating plots for paper.')
-        from trials.real_trials.analysis_for_paper import do_analysis_for_paper
+        from leakage_localization.trials.real_trials.analysis_for_paper import do_analysis_for_paper
         do_analysis_for_paper()
     else:
         trial_name = clargs.trial_name or clargs.config_file
@@ -63,7 +86,7 @@ def main():
             print(f'\tConfig path: `{config_filepath}`')
             with open(config_filepath, 'r') as f:
                 config = yaml.load(f, Loader=yaml.FullLoader)
-            from trials.real_trials import Trial
+            from leakage_localization.trials.real_trials import Trial
             trial = Trial(
                 dataset_name=config['dataset'],
                 trial_config=config,
@@ -76,14 +99,14 @@ def main():
                 sub_assessment_flags = {key: True for key in sub_assessment_flags.keys()}
             trial(**sub_assessment_flags)
         elif clargs.action == 'run-synthetic-trials':
-            from trials.synthetic_data_experiments import Trial
+            from leakage_localization.trials.synthetic_data_experiments import Trial
             trial = Trial(
                 logging_dir=trial_dir,
                 seed_count=seed_count
             )
             trial()
         elif clargs.action == 'run-toy-gaussian-trials':
-            from trials.toy_gaussian_experiments import Trial
+            from leakage_localization.trials.toy_gaussian_experiments import Trial
             trial = Trial(
                 logging_dir=trial_dir,
                 seed_count=seed_count

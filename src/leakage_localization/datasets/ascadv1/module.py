@@ -7,10 +7,10 @@ from torch.utils.data import Dataset, DataLoader, Subset
 from torchvision import transforms
 import lightning as L
 
-from common import *
+from leakage_localization.common import *
 from .dataset import ASCADv1
-from utils.calculate_dataset_stats import calculate_dataset_stats
-from utils.download_unzip import download as _download, unzip, verify_sha256
+from leakage_localization.utils.calculate_dataset_stats import calculate_dataset_stats
+from leakage_localization.utils.download_unzip import download as _download, unzip, verify_sha256
 
 FIXED_DOWNLOAD_URL = r'https://www.data.gouv.fr/s/resources/ascad/20180530-163000/ASCAD_data.zip'
 FIXED_DOWNLOAD_SHA256 = r'a6884faf97133f9397aeb1af247dc71ab7616f3c181190f127ea4c474a0ad72c'

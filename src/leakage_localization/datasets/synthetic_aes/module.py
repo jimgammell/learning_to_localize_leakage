@@ -6,9 +6,9 @@ from torch.utils.data import Dataset, DataLoader
 from torchvision import transforms
 import lightning as L
 
-from common import *
+from leakage_localization.common import *
 from .dataset import SyntheticAES, SyntheticAESLike
-from utils.calculate_dataset_stats import calculate_dataset_stats
+from leakage_localization.utils.calculate_dataset_stats import calculate_dataset_stats
 from ..augmentation.additive_noise import AdditiveNoise
 
 class DataModule(L.LightningDataModule):

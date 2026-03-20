@@ -7,12 +7,12 @@ from matplotlib.ticker import LinearLocator, LogLocator
 import numpy as np
 from torch.utils.data import DataLoader
 
-from common import *
-from datasets.simple_gaussian import SimpleGaussianDataset
-from training_modules.adversarial_leakage_localization import ALLTrainer
-from training_modules.supervised_deep_sca import SupervisedTrainer
-from utils.baseline_assessments import NeuralNetAttribution, FirstOrderStatistics, OccPOI
-from trials.utils import *
+from leakage_localization.common import *
+from leakage_localization.datasets.simple_gaussian import SimpleGaussianDataset
+from leakage_localization.training_modules.adversarial_leakage_localization import ALLTrainer
+from leakage_localization.training_modules.supervised_deep_sca import SupervisedTrainer
+from leakage_localization.utils.baseline_assessments import NeuralNetAttribution, FirstOrderStatistics, OccPOI
+from leakage_localization.trials.utils import *
 
 to_names = {
     'snr': 'SNR',

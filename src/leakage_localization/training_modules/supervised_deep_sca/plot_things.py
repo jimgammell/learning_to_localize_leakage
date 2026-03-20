@@ -1,8 +1,8 @@
 import numpy as np
 from matplotlib import pyplot as plt
 
-from common import *
-from trials.utils import *
+from leakage_localization.common import *
+from leakage_localization.trials.utils import *
 
 def plot_hparam_sweep(logging_dir):
     with open(os.path.join(logging_dir, 'results.pickle'), 'rb') as f:

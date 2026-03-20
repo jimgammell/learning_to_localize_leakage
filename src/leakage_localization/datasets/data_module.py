@@ -7,8 +7,8 @@ from torch.utils.data import DataLoader, Dataset, Subset, ConcatDataset
 from torchvision import transforms
 import lightning as L
 
-from common import *
-from utils.calculate_dataset_stats import calculate_dataset_stats
+from leakage_localization.common import *
+from leakage_localization.utils.calculate_dataset_stats import calculate_dataset_stats
 
 def set_transforms(dataset, transform, target_transform):
     if isinstance(dataset, Subset):

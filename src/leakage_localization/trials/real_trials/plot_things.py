@@ -6,7 +6,7 @@ import pickle
 import numpy as np
 from matplotlib import pyplot as plt
 
-from common import *
+from leakage_localization.common import *
 
 def get_attack_point_label(attack_pt_name: str, dataset_name: str) -> str:
     if dataset_name in ['ascadv1-fixed', 'ascadv1-variable']:

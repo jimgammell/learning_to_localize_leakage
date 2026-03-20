@@ -6,11 +6,11 @@ from torch import nn, optim
 import lightning as L
 from einops import rearrange
 
-import models
-import utils.lr_schedulers
+from leakage_localization import models
+from leakage_localization.utils import lr_schedulers
 from ..utils import *
-from utils.metrics import get_rank
-from utils.aes import AES_SBOX
+from leakage_localization.utils.metrics import get_rank
+from leakage_localization.utils.aes import AES_SBOX
 
 class Module(L.LightningModule):
     def __init__(self,
@@ -62,7 +62,7 @@ class Module(L.LightningModule):
         self.optimizer = optim.AdamW(param_groups, lr=self.hparams.lr, betas=(self.hparams.beta_1, self.hparams.beta_2), eps=self.hparams.eps)
         lr_scheduler_constructor = (
             self.hparams.lr_scheduler_name if isinstance(self.hparams.lr_scheduler_name, optim.lr_scheduler.LRScheduler)
-            else getattr(utils.lr_schedulers, self.hparams.lr_scheduler_name) if hasattr(utils.lr_schedulers, self.hparams.lr_scheduler_name)
+            else getattr(lr_schedulers, self.hparams.lr_scheduler_name) if hasattr(lr_schedulers, self.hparams.lr_scheduler_name)
             else getattr(optim.lr_scheduler, self.hparams.lr_scheduler_name)
         )
         if self.trainer.max_epochs != -1:
@@ -104,7 +104,6 @@ class Module(L.LightningModule):
                 nn.utils.clip_grad_norm_(self.classifier.parameters(), max_norm=self.hparams.grad_clip)
             optimizer.step()
             lr_scheduler.step()
-        #assert all(torch.all(torch.isfinite(param)) for param in self.classifier.parameters())
         return rv
     
     def training_step(self, batch):

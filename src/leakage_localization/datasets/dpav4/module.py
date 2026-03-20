@@ -6,10 +6,10 @@ from torch.utils.data import Dataset, DataLoader, Subset
 from torchvision import transforms
 import lightning as L
 
-from common import *
+from leakage_localization.common import *
 from .dataset import DPAv4
-from utils.calculate_dataset_stats import calculate_dataset_stats
-from utils.download_unzip import download as _download, unzip, verify_sha256
+from leakage_localization.utils.calculate_dataset_stats import calculate_dataset_stats
+from leakage_localization.utils.download_unzip import download as _download, unzip, verify_sha256
 
 # Downloading the Zaid version, since the official version appears to no longer be available.
 DOWNLOAD_URL = r'https://github.com/gabzai/Methodology-for-efficient-CNN-architectures-in-SCA/raw/refs/heads/master/DPA-contest%20v4/DPAv4_dataset.zip'

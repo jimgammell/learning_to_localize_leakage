@@ -3,8 +3,8 @@ import numpy as np
 from torch.utils.data import Dataset
 
 from .data_generation import *
-from common import *
-from utils.aes import *
+from leakage_localization.common import *
+from leakage_localization.utils.aes import *
 
 # To do:
 #  - Set up the fixed noise profile to reflect no-ops

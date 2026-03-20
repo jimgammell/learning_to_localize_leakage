@@ -4,9 +4,9 @@ import torch
 from torch.utils.data import Dataset
 
 from .functional import *
-from utils.metrics.rank import _accumulate_ranks
-from utils.aes import *
-from common import *
+from leakage_localization.utils.metrics.rank import _accumulate_ranks
+from leakage_localization.utils.aes import *
+from leakage_localization.common import *
 
 class TemplateAttack:
     def __init__(self, points_of_interest: Sequence[int], target_key: str = 'subbytes', target_byte: Optional[int] = None):

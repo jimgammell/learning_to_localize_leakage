@@ -7,7 +7,7 @@ import torch
 from torch import nn
 from torch.utils.data import Subset, DataLoader
 
-from utils.metrics.rank import get_rank
+from leakage_localization.utils.metrics.rank import get_rank
 
 class ReshapeOutput(nn.Module):
     def __init__(self, model):

@@ -4,7 +4,7 @@ from numba import jit
 import torch
 from torch.utils.data import Dataset
 
-from utils.aes import *
+from leakage_localization.utils.aes import *
 
 @jit(nopython=True)
 def to_key_preds(int_var_preds, args, constants):

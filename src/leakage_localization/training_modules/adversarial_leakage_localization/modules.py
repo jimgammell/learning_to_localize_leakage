@@ -3,9 +3,8 @@ from math import log, log1p
 
 import torch
 from torch import nn
-from reinmax import reinmax
 
-import models
+from leakage_localization import models
 
 class CondMutInfEstimator(nn.Module):
     def __init__(self,
@@ -120,16 +119,6 @@ class SelectionMechanism(nn.Module):
         log_1mgamma = self.get_log_1mgamma()
         log_pdf = (alpha*log_gamma + (1-alpha)*log_1mgamma).sum(-1).squeeze(-1)
         return log_pdf
-    
-    def reinmax_sample(self, batch_size: int) -> torch.Tensor:
-        log_gamma = self.get_log_gamma().unsqueeze(0).repeat(batch_size, 1, 1).reshape(batch_size*self.timesteps_per_trace, 1)
-        log_1mgamma = self.get_log_1mgamma().unsqueeze(0).repeat(batch_size, 1, 1).reshape(batch_size*self.timesteps_per_trace, 1)
-        alpha, _ = reinmax(torch.stack([log_1mgamma, log_gamma], dim=-1), self.relaxation_temp)
-        alpha = alpha[..., 1]
-        alpha = alpha.reshape(batch_size, 1, self.timesteps_per_trace)
-        if self.adversarial_mode:
-            alpha = 1 - alpha
-        return alpha
     
     def concrete_sample(self, batch_size: int) -> torch.Tensor:
         log_gamma = self.get_log_gamma().unsqueeze(0).repeat(batch_size, 1, 1)

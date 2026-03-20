@@ -4,7 +4,7 @@ from tqdm import tqdm
 import numpy as np
 from torch.utils.data import Dataset, Subset
 
-from utils.chunk_iterator import chunk_iterator
+from leakage_localization.utils.chunk_iterator import chunk_iterator
 
 def _prepare_dataset(dataset: Dataset):
     dataset = copy(dataset)

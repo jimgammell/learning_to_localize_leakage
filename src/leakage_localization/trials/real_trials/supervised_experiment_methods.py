@@ -11,12 +11,12 @@ from matplotlib import pyplot as plt
 from torch import nn
 from torch.utils.data import Dataset, DataLoader
 
-from common import *
-from datasets.data_module import DataModule
-from training_modules.supervised_deep_sca import SupervisedTrainer, SupervisedModule
-from utils.aes_multi_trace_eval import AESMultiTraceEvaluator
-from utils.baseline_assessments.neural_net_attribution import NeuralNetAttribution
-from utils.baseline_assessments.occpoi import OccPOI
+from leakage_localization.common import *
+from leakage_localization.datasets.data_module import DataModule
+from leakage_localization.training_modules.supervised_deep_sca import SupervisedTrainer, SupervisedModule
+from leakage_localization.utils.aes_multi_trace_eval import AESMultiTraceEvaluator
+from leakage_localization.utils.baseline_assessments.neural_net_attribution import NeuralNetAttribution
+from leakage_localization.utils.baseline_assessments.occpoi import OccPOI
 from . import evaluation_methods
 
 def get_dataloader(profiling_dataset: Dataset, attack_dataset: Dataset, split: Literal['profile', 'attack'], **kwargs):

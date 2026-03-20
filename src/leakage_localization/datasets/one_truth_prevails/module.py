@@ -9,8 +9,8 @@ import lightning as L
 import gdown
 
 from .dataset import OneTruthPrevails
-from utils.calculate_dataset_stats import calculate_dataset_stats
-from utils.download_unzip import download as _download, unzip, verify_sha256
+from leakage_localization.utils.calculate_dataset_stats import calculate_dataset_stats
+from leakage_localization.utils.download_unzip import download as _download, unzip, verify_sha256
 
 URLS = [
     r'https://github.com/ECSIS-lab/one_truth_prevails/raw/refs/heads/main/1024/a_labels.npy',

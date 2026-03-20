@@ -6,10 +6,10 @@ from torch.utils.data import Dataset, DataLoader, Subset
 from torchvision import transforms
 import lightning as L
 
-from common import *
+from leakage_localization.common import *
 from .dataset import ED25519
-from utils.calculate_dataset_stats import calculate_dataset_stats
-from utils.download_unzip import download as _download, unzip, verify_sha256
+from leakage_localization.utils.calculate_dataset_stats import calculate_dataset_stats
+from leakage_localization.utils.download_unzip import download as _download, unzip, verify_sha256
 
 DOWNLOAD_URL = r'https://github.com/leoweissbart/MachineLearningBasedSideChannelAttackonEdDSA/raw/refs/heads/master/databaseEdDSA.h5'
 DOWNLOAD_SHA256 = r'3d2751397b3c5984fa4da97b6d1a656f30ce541cba86cac4ca104387ca7bb14f'

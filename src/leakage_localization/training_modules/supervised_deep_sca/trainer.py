@@ -7,6 +7,7 @@ from lightning import Trainer as LightningTrainer
 from lightning.pytorch.loggers.tensorboard import TensorBoardLogger
 from lightning.pytorch.callbacks import ModelCheckpoint, Callback
 from scipy.stats import spearmanr
+import shutil
 
 from leakage_localization.common import *
 from leakage_localization.trials.utils import *

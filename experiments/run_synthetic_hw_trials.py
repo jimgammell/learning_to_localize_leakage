@@ -20,3 +20,6 @@ def main():
         seed_count=args.seed_count
     )
     trial()
+
+if __name__ == '__main__':
+    main()

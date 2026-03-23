@@ -107,7 +107,7 @@ class Trial:
                         compute_leakage_assessments=True,
                         compute_occpoi=True if leaky_pair_count <= 8 else False
                     )
-                attr_leakage_assessments = np.load(os.path.join(trial_dir, 'final_leakage_assessments.npz'), allow_pickle=True)
+                attr_leakage_assessments = np.load(os.path.join(trial_dir, 'early_stop_leakage_assessments.npz'), allow_pickle=True)
                 for key, val in attr_leakage_assessments.items():
                     leakage_assessments[key][leaky_pair_count].append(val)
         for k1 in leakage_assessments:

@@ -2,6 +2,7 @@ from pathlib import Path
 from math import floor, log10
 from collections import defaultdict
 import pickle
+from copy import copy
 
 import pandas
 from scipy.stats import spearmanr
@@ -509,15 +510,15 @@ def plot_main_paper_qualitative_comparison(base_dir, dest):
     all_base_dir = os.path.join(base_dir, 'ascadv1_variable', 'all_runs', 'fair', 'seed=50', 'all_training')
     bl_base_dir = os.path.join(base_dir, 'ascadv1_variable', 'supervised_models_for_attribution', 'classification', 'seed=55')
     param_base_dir = os.path.join(base_dir, 'ascadv1_variable', 'first_order_parametric_statistical_assessment')
-    ORACLE_PATHS = {
-        r'$r_{\mathrm{in}}$': param_base_dir / r'attack_snr_r_in.npy',
-        r'$r_{2}$': param_base_dir / r'attack_snr_r.npy',
-        r'$r_{\mathrm{out}}$': param_base_dir / r'attack_snr_r_out.npy',
-        r'$w_2 \oplus k_2 \oplus r_{\mathrm{in}}$': param_base_dir / r'attack_snr_plaintext__key__r_in.npy',
-        r'$\operatorname{S}(w_2 \oplus k_2) \oplus r_2$': param_base_dir / r'attack_snr_subbytes__r.npy',
-        r'$\operatorname{S}(w_2 \oplus k_2) \oplus r_{\mathrm{out}}$': param_base_dir / r'attack_snr_subbytes__r_out.npy',
-        r'$S_{\mathrm{prev}} \oplus \operatorname{S}(w_2 \oplus k_2) \oplus r_{\mathrm{out}}$': param_base_dir / r'attack_snr_s_prev__subbytes__r_out.npy',
-        r'Security load': param_base_dir / r'attack_snr_security_load.npy'
+    oracle_paths = {
+        r'$r_{\mathrm{in}}$': os.path.join(param_base_dir, r'attack_snr_r_in.npy'),
+        r'$r_{2}$': os.path.join(param_base_dir, r'attack_snr_r.npy'),
+        r'$r_{\mathrm{out}}$': os.path.join(param_base_dir, r'attack_snr_r_out.npy'),
+        r'$w_2 \oplus k_2 \oplus r_{\mathrm{in}}$': os.path.join(param_base_dir, r'attack_snr_plaintext__key__r_in.npy'),
+        r'$\operatorname{S}(w_2 \oplus k_2) \oplus r_2$': os.path.join(param_base_dir, r'attack_snr_subbytes__r.npy'),
+        r'$\operatorname{S}(w_2 \oplus k_2) \oplus r_{\mathrm{out}}$': os.path.join(param_base_dir, r'attack_snr_subbytes__r_out.npy'),
+        r'$S_{\mathrm{prev}} \oplus \operatorname{S}(w_2 \oplus k_2) \oplus r_{\mathrm{out}}$': os.path.join(param_base_dir, r'attack_snr_s_prev__subbytes__r_out.npy'),
+        r'Security load': os.path.join(param_base_dir, r'attack_snr_security_load.npy')
     }
     all_assessment = np.load(os.path.join(all_base_dir, 'leakage_assessment.npy'))
     baseline_assessment = np.load(os.path.join(bl_base_dir, '7-second-order-occlusion.npz'), allow_pickle=True)['attribution']
@@ -675,6 +676,7 @@ def plot_main_paper_qualitative_comparison(base_dir, dest):
 
     fig.savefig(dest, dpi=150, bbox_inches='tight')
     plt.close(fig)
+    print(f'Saved leakiness vs. sensitive variable plot to {dest}')
 
 def main():
     fig_dir = os.path.join(OUTPUT_DIR, 'plots_for_paper')
@@ -693,6 +695,9 @@ def main():
     # Generate Fig. 11 where we plot the ALL-based leakage assessments for synthetic datasets.
     #   Fig. 4 in the main paper is a condensed version of this.
     plot_synthetic_dataset_experiments(OUTPUT_DIR, os.path.join(fig_dir, 'synthetic_experiments.pdf'))
+
+    # Generate Fig. 5, where we show that the baselines fail to identify some sensitive variables that ALL successfully identifies.
+    plot_main_paper_qualitative_comparison(OUTPUT_DIR, os.path.join(fig_dir, 'ascadv1v_per_sensitive_variable_leakiness.pdf'))
 
     # Generate Fig. 14 where we plot the oracle leakiness vs. the estimated leakiness by ALL.
     plot_leakiness_assessment_comparison_with_oracle(OUTPUT_DIR, os.path.join(fig_dir, 'qualitative_comparison_all_vs_oracle.pdf'))

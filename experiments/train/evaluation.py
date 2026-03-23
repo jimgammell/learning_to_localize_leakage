@@ -80,6 +80,9 @@ def test_model(
         dest_dir: Path
 ):
     for loader_key, loader in loaders.items():
+        dest = dest_dir / f'{loader_key}_attack_metrics.npz'
+        if dest.exists():
+            continue
         module.to('cuda')
         trainer = Trainer(
             accelerator='gpu',
@@ -89,7 +92,7 @@ def test_model(
         )
         results = trainer.test(module, dataloaders=loader)
         metrics = {k: np.array(v) for k, v in results[0].items()}
-        np.savez(dest_dir / f'{loader_key}_attack_metrics.npz', **metrics)
+        np.savez(dest, **metrics)
 
 def main():
     parser = argparse.ArgumentParser()

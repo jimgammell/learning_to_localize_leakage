@@ -45,7 +45,8 @@ if [ $CONFIG_ID -lt $((OFFSET + ${#INPUT_DROPOUT[@]})) ]; then
         --training.seed ${SEED}
     python -m experiments.train.evaluation \
         --ckpt-path ${DEST}/best_val_mtd.ckpt \
-        --do-attack-evaluation
+        --do-attack-evaluation \
+        --do-feature-attribution
     exit $?
 fi
 OFFSET=$((OFFSET + ${#INPUT_DROPOUT[@]}))
@@ -62,7 +63,8 @@ if [ $CONFIG_ID -lt $((OFFSET + ${#HIDDEN_DROPOUT[@]})) ]; then
         --training.seed ${SEED}
     python -m experiments.train.evaluation \
         --ckpt-path ${DEST}/best_val_mtd.ckpt \
-        --do-attack-evaluation
+        --do-attack-evaluation \
+        --do-feature-attribution
     exit $?
 fi
 OFFSET=$((OFFSET + ${#HIDDEN_DROPOUT[@]}))
@@ -79,7 +81,8 @@ if [ $CONFIG_ID -lt $((OFFSET + ${#WEIGHT_DECAY[@]})) ]; then
         --training.seed ${SEED}
     python -m experiments.train.evaluation \
         --ckpt-path ${DEST}/best_val_mtd.ckpt \
-        --do-attack-evaluation
+        --do-attack-evaluation \
+        --do-feature-attribution
     exit $?
 fi
 OFFSET=$((OFFSET + ${#WEIGHT_DECAY[@]}))
@@ -96,7 +99,8 @@ if [ $CONFIG_ID -lt $((OFFSET + ${#GAUSSIAN_NOISE[@]})) ]; then
         --training.seed ${SEED}
     python -m experiments.train.evaluation \
         --ckpt-path ${DEST}/best_val_mtd.ckpt \
-        --do-attack-evaluation
+        --do-attack-evaluation \
+        --do-feature-attribution
     exit $?
 fi
 OFFSET=$((OFFSET + ${#GAUSSIAN_NOISE[@]}))
@@ -113,7 +117,8 @@ if [ $CONFIG_ID -lt $((OFFSET + ${#RANDOM_ROLL[@]})) ]; then
         --training.seed ${SEED}
     python -m experiments.train.evaluation \
         --ckpt-path ${DEST}/best_val_mtd.ckpt \
-        --do-attack-evaluation
+        --do-attack-evaluation \
+        --do-feature-attribution
     exit $?
 fi
 OFFSET=$((OFFSET + ${#RANDOM_ROLL[@]}))
@@ -130,7 +135,8 @@ if [ $CONFIG_ID -lt $((OFFSET + ${#RANDOM_LPF[@]})) ]; then
         --training.seed ${SEED}
     python -m experiments.train.evaluation \
         --ckpt-path ${DEST}/best_val_mtd.ckpt \
-        --do-attack-evaluation
+        --do-attack-evaluation \
+        --do-feature-attribution
     exit $?
 fi
 OFFSET=$((OFFSET + ${#RANDOM_LPF[@]}))
@@ -147,7 +153,8 @@ if [ $CONFIG_ID -lt $((OFFSET + ${#MIXUP[@]})) ]; then
         --training.seed ${SEED}
     python -m experiments.train.evaluation \
         --ckpt-path ${DEST}/best_val_mtd.ckpt \
-        --do-attack-evaluation
+        --do-attack-evaluation \
+        --do-feature-attribution
     exit $?
 fi
 OFFSET=$((OFFSET + ${#MIXUP[@]}))

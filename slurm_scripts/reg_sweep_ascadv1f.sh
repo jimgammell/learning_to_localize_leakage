@@ -45,11 +45,15 @@ BASE=./outputs/ascadv1_fixed/reg_sweep
 if [ $CONFIG_ID -lt $((OFFSET + ${#INPUT_DROPOUT[@]})) ]; then
     IDX=$((CONFIG_ID - OFFSET))
     VAL=${INPUT_DROPOUT[$IDX]}
+    DEST=${BASE}/input_dropout_${VAL}/seed_${SEED}
     python -m experiments.train.supervised \
-        --dest ${BASE}/input_dropout_${VAL}/seed_${SEED} \
+        --dest ${DEST} \
         --config-file ascadv1_fixed \
         --model.input_dropout_rate ${VAL} \
         --training.seed ${SEED}
+    python -m experiments.train.evaluation \
+        --ckpt-path ${DEST}/best_val_mtd.ckpt \
+        --do-attack-evaluation
     exit $?
 fi
 OFFSET=$((OFFSET + ${#INPUT_DROPOUT[@]}))
@@ -58,11 +62,15 @@ OFFSET=$((OFFSET + ${#INPUT_DROPOUT[@]}))
 if [ $CONFIG_ID -lt $((OFFSET + ${#HIDDEN_DROPOUT[@]})) ]; then
     IDX=$((CONFIG_ID - OFFSET))
     VAL=${HIDDEN_DROPOUT[$IDX]}
+    DEST=${BASE}/hidden_dropout_${VAL}/seed_${SEED}
     python -m experiments.train.supervised \
-        --dest ${BASE}/hidden_dropout_${VAL}/seed_${SEED} \
+        --dest ${DEST} \
         --config-file ascadv1_fixed \
         --model.hidden_dropout_rate ${VAL} \
         --training.seed ${SEED}
+    python -m experiments.train.evaluation \
+        --ckpt-path ${DEST}/best_val_mtd.ckpt \
+        --do-attack-evaluation
     exit $?
 fi
 OFFSET=$((OFFSET + ${#HIDDEN_DROPOUT[@]}))
@@ -71,11 +79,15 @@ OFFSET=$((OFFSET + ${#HIDDEN_DROPOUT[@]}))
 if [ $CONFIG_ID -lt $((OFFSET + ${#WEIGHT_DECAY[@]})) ]; then
     IDX=$((CONFIG_ID - OFFSET))
     VAL=${WEIGHT_DECAY[$IDX]}
+    DEST=${BASE}/weight_decay_${VAL}/seed_${SEED}
     python -m experiments.train.supervised \
-        --dest ${BASE}/weight_decay_${VAL}/seed_${SEED} \
+        --dest ${DEST} \
         --config-file ascadv1_fixed \
         --training.weight_decay ${VAL} \
         --training.seed ${SEED}
+    python -m experiments.train.evaluation \
+        --ckpt-path ${DEST}/best_val_mtd.ckpt \
+        --do-attack-evaluation
     exit $?
 fi
 OFFSET=$((OFFSET + ${#WEIGHT_DECAY[@]}))
@@ -84,11 +96,15 @@ OFFSET=$((OFFSET + ${#WEIGHT_DECAY[@]}))
 if [ $CONFIG_ID -lt $((OFFSET + ${#GAUSSIAN_NOISE[@]})) ]; then
     IDX=$((CONFIG_ID - OFFSET))
     VAL=${GAUSSIAN_NOISE[$IDX]}
+    DEST=${BASE}/gaussian_noise_${VAL}/seed_${SEED}
     python -m experiments.train.supervised \
-        --dest ${BASE}/gaussian_noise_${VAL}/seed_${SEED} \
+        --dest ${DEST} \
         --config-file ascadv1_fixed \
         --training.additive_gaussian_noise ${VAL} \
         --training.seed ${SEED}
+    python -m experiments.train.evaluation \
+        --ckpt-path ${DEST}/best_val_mtd.ckpt \
+        --do-attack-evaluation
     exit $?
 fi
 OFFSET=$((OFFSET + ${#GAUSSIAN_NOISE[@]}))
@@ -97,11 +113,15 @@ OFFSET=$((OFFSET + ${#GAUSSIAN_NOISE[@]}))
 if [ $CONFIG_ID -lt $((OFFSET + ${#RANDOM_ROLL[@]})) ]; then
     IDX=$((CONFIG_ID - OFFSET))
     VAL=${RANDOM_ROLL[$IDX]}
+    DEST=${BASE}/random_roll_${VAL}/seed_${SEED}
     python -m experiments.train.supervised \
-        --dest ${BASE}/random_roll_${VAL}/seed_${SEED} \
+        --dest ${DEST} \
         --config-file ascadv1_fixed \
         --data.random_roll_scale ${VAL} \
         --training.seed ${SEED}
+    python -m experiments.train.evaluation \
+        --ckpt-path ${DEST}/best_val_mtd.ckpt \
+        --do-attack-evaluation
     exit $?
 fi
 OFFSET=$((OFFSET + ${#RANDOM_ROLL[@]}))
@@ -110,11 +130,15 @@ OFFSET=$((OFFSET + ${#RANDOM_ROLL[@]}))
 if [ $CONFIG_ID -lt $((OFFSET + ${#RANDOM_LPF[@]})) ]; then
     IDX=$((CONFIG_ID - OFFSET))
     VAL=${RANDOM_LPF[$IDX]}
+    DEST=${BASE}/random_lpf_${VAL}/seed_${SEED}
     python -m experiments.train.supervised \
-        --dest ${BASE}/random_lpf_${VAL}/seed_${SEED} \
+        --dest ${DEST} \
         --config-file ascadv1_fixed \
         --data.random_lpf_scale ${VAL} \
         --training.seed ${SEED}
+    python -m experiments.train.evaluation \
+        --ckpt-path ${DEST}/best_val_mtd.ckpt \
+        --do-attack-evaluation
     exit $?
 fi
 OFFSET=$((OFFSET + ${#RANDOM_LPF[@]}))
@@ -123,11 +147,15 @@ OFFSET=$((OFFSET + ${#RANDOM_LPF[@]}))
 if [ $CONFIG_ID -lt $((OFFSET + ${#MIXUP[@]})) ]; then
     IDX=$((CONFIG_ID - OFFSET))
     VAL=${MIXUP[$IDX]}
+    DEST=${BASE}/mixup_${VAL}/seed_${SEED}
     python -m experiments.train.supervised \
-        --dest ${BASE}/mixup_${VAL}/seed_${SEED} \
+        --dest ${DEST} \
         --config-file ascadv1_fixed \
         --training.mixup_alpha ${VAL} \
         --training.seed ${SEED}
+    python -m experiments.train.evaluation \
+        --ckpt-path ${DEST}/best_val_mtd.ckpt \
+        --do-attack-evaluation
     exit $?
 fi
 OFFSET=$((OFFSET + ${#MIXUP[@]}))

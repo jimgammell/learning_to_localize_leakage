@@ -1,10 +1,14 @@
 # Learning to Localize Leakage of Cryptographic Sensitive Variables
 
-This is the official implementation accompanying the paper "Learning to Localize Leakage of Cryptographic Sensitive Variables" (TMLR 2026) by Jimmy Gammell, Anand Raghunathan, Abolfazl Hashemi, and Kaushik Roy.
+This is the official implementation accompanying the paper "Learning to Localize Leakage of Cryptographic Sensitive Variables" (TMLR 2026) by Jimmy Gammell, Anand Raghunathan, Abolfazl Hashemi, and Kaushik Roy ([link](https://openreview.net/forum?id=9qxCSU8nDO&)).
+
+## Paper summary
+
+todo
 
 ## Installation
 
-This code was tested using Python 3.9.19, and certain dependencies (e.g. Captum) seem to break with more-recent versions. Follow the instructions below to install the project and its dependencies:
+This code was tested using Python 3.9.19, and certain dependencies (e.g. Captum) seem to break with newer versions. Follow the instructions below to install the project and its dependencies:
 1) Create and activate an environment for the project. For example, to do this with [micromamba](https://mamba.readthedocs.io/en/latest/installation/micromamba-installation.html):
 ```bash
 micromamba create --name leakage-localization python=3.9
@@ -58,9 +62,13 @@ mkdir -p resources/otp
 cd resources/otp
 ````
 
+## Usage
+
+todo
+
 ## Citation
 
-If you use this code or our work, please consider citing it as follows:
+If you use this code or our work, we would appreciate a citation:
 ```bibtex
 @article{Gammell_Learning_to_Localize_2026,
     author = {Gammell, Jimmy and Raghunathan, Anand and Hashemi, Abolfazl and Roy, Kaushik},
@@ -73,4 +81,4 @@ If you use this code or our work, please consider citing it as follows:
 
 ### Contact
 
-For questions or to point out bugs, please open an issue or contact me at `jgammell@purdue.edu`.
+If you have questions or want to point out bugs, don't hesitate to open an issue or contact me at `jgammell@purdue.edu`.

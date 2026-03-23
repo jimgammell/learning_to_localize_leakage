@@ -124,6 +124,8 @@ class Trial:
                 ax = axes[gamma_bar_idx, beta_idx]
                 for seed in range(self.seed_count):
                     subdir = os.path.join(exp_dir, f'seed={seed}', f'beta={beta}', f'gamma_bar={gamma_bar}')
+                    if not os.path.exists(os.path.join(subdir, 'leakage_assessments.npz')):
+                        subdir = os.path.join(exp_dir, f'seed={seed}', f'beta={beta}', f'starting_prob={gamma_bar}')
                     assert os.path.exists(os.path.join(subdir, 'leakage_assessments.npz'))
                     data = np.load(os.path.join(subdir, 'leakage_assessments.npz'), allow_pickle=True)
                     leakage_assessment = data['leakage_assessment'].reshape(-1)
@@ -175,6 +177,8 @@ class Trial:
                 ax = axes[gamma_bar_idx, leaky_pt_count_idx]
                 for seed in range(self.seed_count):
                     subdir = os.path.join(exp_dir, f'seed={seed}', f'count={leaky_pt_count}', f'gamma_bar={gamma_bar}')
+                    if not os.path.exists(os.path.join(subdir, 'leakage_assessments.npz')):
+                        subdir = os.path.join(exp_dir, f'seed={seed}', f'count={leaky_pt_count}', f'starting_prob={gamma_bar}')
                     assert os.path.exists(os.path.join(subdir, 'leakage_assessments.npz'))
                     data = np.load(os.path.join(subdir, 'leakage_assessments.npz'), allow_pickle=True)
                     leakage_assessment = data['leakage_assessment'].reshape(-1)
@@ -222,6 +226,8 @@ class Trial:
                 ax = axes[gamma_bar_idx, no_op_count_idx]
                 for seed in range(self.seed_count):
                     subdir = os.path.join(exp_dir, f'seed={seed}', f'count={no_op_count}', f'gamma_bar={gamma_bar}')
+                    if not os.path.exists(os.path.join(subdir, 'leakage_assessments.npz')):
+                        subdir = os.path.join(exp_dir, f'seed={seed}', f'count={no_op_count}', f'starting_prob={gamma_bar}')
                     assert os.path.exists(os.path.join(subdir, 'leakage_assessments.npz'))
                     data = np.load(os.path.join(subdir, 'leakage_assessments.npz'), allow_pickle=True)
                     leakage_assessment = data['leakage_assessment'].reshape(-1)
@@ -269,6 +275,8 @@ class Trial:
                 ax = axes[gamma_bar_idx, shuffle_loc_count_idx]
                 for seed in range(self.seed_count):
                     subdir = os.path.join(exp_dir, f'seed={seed}', f'count={shuffle_loc_count}', f'gamma_bar={gamma_bar}')
+                    if not os.path.exists(os.path.join(subdir, 'leakage_assessments.npz')):
+                        subdir = os.path.join(exp_dir, f'seed={seed}', f'count={shuffle_loc_count}', f'starting_prob={gamma_bar}')
                     assert os.path.exists(os.path.join(subdir, 'leakage_assessments.npz'))
                     data = np.load(os.path.join(subdir, 'leakage_assessments.npz'), allow_pickle=True)
                     leakage_assessment = data['leakage_assessment'].reshape(-1)

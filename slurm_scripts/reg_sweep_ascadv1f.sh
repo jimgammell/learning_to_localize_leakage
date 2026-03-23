@@ -8,7 +8,7 @@
 #SBATCH --time=8:00:00
 #SBATCH --output=./outputs/ascadv1_fixed/reg_sweep/slurm_%A_%a.out
 #SBATCH --error=./outputs/ascadv1_fixed/reg_sweep/slurm_%A_%a.out
-#SBATCH --array=0-146%2
+#SBATCH --array=0-146%3
 
 # 7 sweeps x 3 seeds = total array tasks
 # Sweep definitions (param_key, values):

@@ -8,7 +8,7 @@
 #SBATCH --time=4:00:00
 #SBATCH --output=./outputs/ches_ctf_2018/reg_sweep/slurm_%A_%a.out
 #SBATCH --error=./outputs/ches_ctf_2018/reg_sweep/slurm_%A_%a.out
-#SBATCH --array=0-146%2
+#SBATCH --array=0-146%3
 
 # 7 sweeps x 3 seeds = total array tasks
 # Total configs: 10+10+5+6+6+6+6 = 49

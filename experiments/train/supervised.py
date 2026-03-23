@@ -10,11 +10,8 @@ import yaml
 import pandas
 import lightning
 from torch.utils.data import Dataset, Subset, DataLoader
-import optuna
-
 from .entrypoint import main
 from experiments.initialization import *
-from .hyperparameter_tuning import get_study, sample_hparams
 from leakage_localization.datasets.common import PARTITION
 from leakage_localization.datasets.ascadv1 import ASCADv1_TorchDataset
 from leakage_localization.datasets.ches_ctf_2018 import CHESCTF2018_TorchDataset
@@ -281,14 +278,15 @@ def train_model(
 class PruningCallback(lightning.Callback):
     def __init__(
             self,
-            trial: optuna.Trial,
+            trial,
             config: Dict[str, Any]
     ):
         super().__init__()
         self.trial = trial
         self.config = config
-    
+
     def on_validation_epoch_end(self, trainer: lightning.Trainer, pl_module: lightning.LightningModule):
+        import optuna
         tracked_metric_key = self.config['training']['early_stop_metric']
         tracked_metric = trainer.callback_metrics[tracked_metric_key].item()
         self.trial.report(tracked_metric, step=trainer.current_epoch)
@@ -296,11 +294,12 @@ class PruningCallback(lightning.Callback):
             raise optuna.TrialPruned()
 
 def _optuna_objective(
-        trial: optuna.Trial,
+        trial,
         dest: Path,
         config: Dict[str, Any],
         enable_pruning: bool = False
 ) -> float:
+    from .hyperparameter_tuning import sample_hparams
     trial_dest = dest / f'trial_{trial.number}'
     config['training']['seed'] = trial.number
     config = sample_hparams(trial, config)
@@ -328,6 +327,7 @@ def run(
         sampler_type: str = 'tpe'
 ):
     if optuna_study_path is not None:
+        from .hyperparameter_tuning import get_study
         optuna_study_path.parent.mkdir(exist_ok=True, parents=True)
         optuna_study = get_study(optuna_study_path, config, enable_pruning=enable_pruning, sampler_type=sampler_type)
         optuna_objective = partial(_optuna_objective, dest=dest, config=config, enable_pruning=enable_pruning)

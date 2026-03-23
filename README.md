@@ -64,7 +64,24 @@ cd resources/otp
 
 ## Usage
 
-todo
+### How to train models
+
+The `experiments` directory contains entrypoints to run the main experiments from our paper. For each of the subsequent scripts, you can pass the `--help` argument to the command line for a list and brief explanation of the possible command line arguments.
+- Run the toy XOR-GMM experiments (Fig. 3) by running the following command:
+```bash
+python experiments/run_toy_gaussian_trials.py
+```
+- Run the synthetic AES experiments (Fig. 4) by running the following command:
+```bash
+python experiments/run_synthetic_hw_trials.py
+```
+
+### How to plot results
+
+The main figures from our paper can be generated without training models from scratch. To do so, download our raw results files from `TODO`, then extract them to the project directory. Then plot the results and save the figures to `outputs/plots_for_paper` by running the following command:
+```bash
+python experiments/plot_results.py
+```
 
 ## Citation
 

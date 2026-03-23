@@ -1,10 +1,12 @@
 from pathlib import Path
 from math import floor, log10
 from collections import defaultdict
+import pickle
 
 import pandas
 from scipy.stats import spearmanr
 from matplotlib import pyplot as plt
+from matplotlib.ticker import NullLocator
 
 from leakage_localization.common import *
 from leakage_localization.trials.synthetic_data_experiments import Trial as SyntheticTrial
@@ -46,6 +48,14 @@ OPTIMAL_WINDOW_SIZES = {
     'aes_hd': 31,
     'otiait': 3,
     'otp': 5
+}
+STEPS = {
+    'ascadv1_fixed': 20000,
+    'ascadv1_variable': 40000,
+    'aes_hd': 20000,
+    'dpav4': 10000,
+    'otiait': 1000,
+    'otp': 1000
 }
 
 def load_eval_metrics(base_dir):
@@ -177,6 +187,39 @@ def load_all_assessments(base_dir, selection_method='oracle'):
             assessments[dataset_name].append(assessment)
     assessments = {k: np.stack(v) for k, v in assessments.items()}
     return assessments
+
+def load_attack_curves(base_dir):
+    attack_curves = defaultdict(lambda: defaultdict(list))
+    collected_training_curves = defaultdict(list)
+    for dataset_name in DATASET_NAMES.keys():
+        for seed in [55, 56, 57, 58, 59]:
+            if dataset_name in ['ascadv1_fixed', 'ascadv1_variable', 'dpav4', 'aes_hd']:
+                attack_curve_path = os.path.join(
+                    base_dir, dataset_name, 'supervised_models_for_attribution', 'classification', f'seed={seed}', 'attack_performance.npy'
+                )
+                if not os.path.exists(attack_curve_path):
+                    print(f'Skipping file because it does not exist: {attack_curve_path}')
+                    continue
+                attack_curve = np.load(attack_curve_path)
+                attack_curves[dataset_name]['ours'].append(attack_curve)
+            with open(os.path.join(base_dir, dataset_name, 'supervised_models_for_attribution', 'classification', f'seed={seed}', 'training_curves.pickle'), 'rb') as f:
+                training_curves = pickle.load(f)
+            collected_training_curves[dataset_name].append({
+                'train_loss': training_curves['train_loss'] if 'train_loss' in training_curves.keys() else training_curves['train_loss_step'],
+                'val_loss': training_curves['val_loss'],
+                'train_rank': training_curves['train_rank'] if 'train_rank' in training_curves.keys() else training_curves['train_rank_step'],
+                'val_rank': training_curves['val_rank']
+            })
+        if os.path.exists(os.path.join(base_dir, dataset_name, 'pretrained_model_experiments')):
+            model_dir = os.path.join(base_dir, dataset_name, 'pretrained_model_experiments')
+            for subdir in os.listdir(model_dir):
+                if os.path.exists(os.path.join(model_dir, subdir, 'attack_performance.npy')):
+                    attack_performance = np.load(os.path.join(model_dir, subdir, 'attack_performance.npy'))
+                    attack_curves[dataset_name][subdir].append(attack_performance)
+                for seed_dir in [x for x in os.listdir(os.path.join(model_dir, subdir)) if x.split('=')[0] == 'seed']:
+                    attack_performance = np.load(os.path.join(model_dir, subdir, seed_dir, 'attack_performance.npy'))
+                    attack_curves[dataset_name][subdir].append(attack_performance)
+    return attack_curves, collected_training_curves
 
 def calculate_oracle_agreement(assessment, oracle):
     assert oracle.std() > 0
@@ -337,6 +380,302 @@ def plot_synthetic_dataset_experiments(base_dir, dest):
     synthetic_trial.plot_main_paper_sweeps(dest, dont_subsample=True)
     print(f'Saved synthetic experiment plots to {dest}.')
 
+def plot_attack_curves(base_dir, dest):
+    attack_curvess, training_curvess = load_attack_curves(base_dir)
+    linestyles = ['solid', 'dotted', 'dashed', 'dashdot', (5, (10, 3))]
+    markers = ['.', 'v', '^', 'P', '*']
+    colors = ['blue', 'green', 'orange', 'red', 'brown']
+    colors = {
+        'ours': colors[0],
+        'wouters': colors[1],
+        'zaid': colors[2],
+        'benadjila_cnn_best': colors[3],
+        'benadjila': colors[3],
+        'benadjila_mlp_best': colors[4]
+    }
+    to_method_label = {
+        'ours': 'Ours',
+        'wouters': 'WoutersNet',
+        'zaid': 'ZaidNet',
+        'benadjila': r"Benadjila's $\mathrm{CNN_{best}}$",
+        'benadjila_cnn_best': r"Benadjila's $\mathrm{CNN_{best}}$",
+        'benadjila_mlp_best': r"Benadjila's $\mathrm{MLP_{best}}$"
+    }
+    fontsize = 16
+    fig, axes = plt.subplots(6, 3, figsize=(3*PLOT_WIDTH, 6*PLOT_WIDTH))
+    for idx, dataset_name in enumerate(DATASET_NAMES.keys()):
+        axes_r = axes[idx, :]
+        training_curves = training_curvess[dataset_name]
+        for sidx, training_curves_run in enumerate(training_curves):
+            axes_r[0].plot(*training_curves_run['train_loss'], color=colors['ours'], linestyle=linestyles[sidx], alpha=0.25, label='train' if sidx==0 else None, **PLOT_KWARGS)
+            axes_r[0].plot(*training_curves_run['val_loss'], color=colors['ours'], linestyle=linestyles[sidx], label='val' if sidx==0 else None, **PLOT_KWARGS)
+            axes_r[1].plot(*training_curves_run['train_rank'], color=colors['ours'], linestyle=linestyles[sidx], alpha=0.25, label='train' if sidx==0 else None, **PLOT_KWARGS)
+            axes_r[1].plot(*training_curves_run['val_rank'], color=colors['ours'], linestyle=linestyles[sidx], label='val' if sidx==0 else None, **PLOT_KWARGS)
+        axes_r[0].set_xlabel('Training step', fontsize=fontsize)
+        axes_r[0].set_ylabel('Cross-entropy loss $\downarrow$', fontsize=fontsize)
+        axes_r[1].set_xlabel('Training step', fontsize=fontsize)
+        axes_r[1].set_ylabel('Mean correct key rank $\downarrow$', fontsize=fontsize)
+        if dataset_name in attack_curvess.keys():
+            for method in attack_curvess[dataset_name]:
+                if method == 'ours':
+                    continue
+                attack_curves = attack_curvess[dataset_name][method]
+                for sidx, attack_curves_run in enumerate(attack_curves):
+                    axes_r[2].plot(
+                        np.arange(1, len(attack_curves_run)+1), attack_curves_run, color=colors[method], marker=markers[sidx], markersize=1, linestyle='-', linewidth=0.25,
+                        label=to_method_label[method] if sidx==0 else None, **PLOT_KWARGS
+                    )
+                axes_r[2].set_xlabel('Traces seen', fontsize=fontsize)
+                axes_r[2].set_ylabel('Correct AES key rank', fontsize=fontsize)
+                axes_r[2].set_xscale('log')
+            attack_curves = attack_curvess[dataset_name]['ours']
+            for sidx, attack_curves_run in enumerate(attack_curves):
+                axes_r[2].plot(
+                    np.arange(1, len(attack_curves_run)+1), attack_curves_run, color=colors['ours'], marker=markers[sidx], markersize=1, linestyle='-', linewidth=0.25,
+                    label=to_method_label['ours'] if sidx==0 else None, **PLOT_KWARGS
+                )
+            axes_r[2].set_xlabel('Traces seen', fontsize=fontsize)
+            axes_r[2].set_ylabel('Correct AES key rank', fontsize=fontsize)
+            axes_r[2].set_xscale('log')
+        else:
+            axes_r[2].axis('off')
+        axes_r[0].legend(loc='upper right', fontsize=fontsize-2)
+        axes_r[1].legend(loc='upper right', fontsize=fontsize-2)
+        axes_r[0].set_title(f'Dataset: {DATASET_NAMES[dataset_name]}', fontsize=fontsize+2)
+        axes_r[1].set_title(f'Dataset: {DATASET_NAMES[dataset_name]}', fontsize=fontsize+2)
+        if dataset_name not in ['otiait', 'otp']:
+            axes_r[2].legend(loc='upper right', fontsize=fontsize-2)
+            axes_r[2].set_title(f'Dataset: {DATASET_NAMES[dataset_name]}', fontsize=fontsize+2)
+    fig.tight_layout()
+    fig.savefig(dest, **SAVEFIG_KWARGS)
+    plt.close(fig)
+    print(f'Saved training curve + rank vs. trace plots for the supervised models to {dest}.')
+
+def plot_advll_training_curves(base_dir, dest):
+    fontsize=16
+    curvess = {}
+    for dataset_name in DATASET_NAMES.keys():
+        curves = defaultdict(list)
+        for seed in [50, 51, 52, 53, 54]:
+            model_dir = os.path.join(base_dir, dataset_name, 'all_runs', 'fair', f'seed={seed}')
+            if dataset_name in ['ascadv1_fixed', 'ascadv1_variable', 'aes_hd']:
+                with open(os.path.join(model_dir, 'classifier_pretraining', 'training_curves.pickle'), 'rb') as f:
+                    pretrain_curves = pickle.load(f)
+                with open(os.path.join(model_dir, 'all_training', 'training_curves.pickle'), 'rb') as f:
+                    train_curves = pickle.load(f)
+                for mname in ['train_theta_loss', 'val_theta_loss', 'train_theta_rank', 'val_theta_rank', 'oracle_snr_corr']:
+                    curves[mname].append(np.concatenate([
+                        pretrain_curves[mname][-1] if mname in pretrain_curves else pretrain_curves[f'{mname}_step'][-1] if mname != 'oracle_snr_corr' else np.zeros(len(train_curves['oracle_snr_corr'][1])),
+                        train_curves[mname][-1] if mname in train_curves else train_curves[f'{mname}_step'][-1]
+                    ]))
+            else:
+                with open(os.path.join(model_dir, 'all_training', 'training_curves.pickle'), 'rb') as f:
+                    train_curves = pickle.load(f)
+                for mname in ['train_theta_loss', 'val_theta_loss', 'train_theta_rank', 'val_theta_rank', 'oracle_snr_corr']:
+                    curves[mname].append(train_curves[mname][-1] if mname in train_curves else train_curves[f'{mname}_step'][-1])
+        curves = {k: np.stack(v) for k, v in curves.items()}
+        curvess[dataset_name] = curves
+    fig, axes = plt.subplots(6, 3, figsize=(3*PLOT_WIDTH, 6*PLOT_WIDTH))
+    linestyles = ['solid', 'dotted', 'dashed', 'dashdot', (5, (10, 3))]
+    for dataset_name, axes_r in zip(DATASET_NAMES.keys(), axes):
+        curves = curvess[dataset_name]
+        if dataset_name in ['ascadv1_fixed', 'ascadv1_variable', 'aes_hd']:
+            axes_r[0].axvspan(0, STEPS[dataset_name]/2, color='gray', alpha=0.1)
+            axes_r[1].axvspan(0, STEPS[dataset_name]/2, color='gray', alpha=0.1)
+            axes_r[2].axvspan(0, STEPS[dataset_name]/2, color='gray', alpha=0.1)
+        for sidx in range(5):
+            axes_r[0].plot(np.linspace(1, STEPS[dataset_name], len(curves['train_theta_loss'][sidx, :])), -curves['train_theta_loss'][sidx, :], color='blue', linestyle=linestyles[sidx], alpha=0.25, label='train' if sidx==0 else None)
+            axes_r[0].plot(np.linspace(1, STEPS[dataset_name], len(curves['val_theta_loss'][sidx, :])), -curves['val_theta_loss'][sidx, :], color='blue', linestyle=linestyles[sidx], label='val' if sidx==0 else None)
+            axes_r[1].plot(np.linspace(1, STEPS[dataset_name], len(curves['train_theta_rank'][sidx, :])), curves['train_theta_rank'][sidx, :], color='blue', linestyle=linestyles[sidx], alpha=0.25, label='train' if sidx==0 else None)
+            axes_r[1].plot(np.linspace(1, STEPS[dataset_name], len(curves['val_theta_rank'][sidx, :])), curves['val_theta_rank'][sidx, :], color='blue', linestyle=linestyles[sidx], label='val' if sidx==0 else None)
+            axes_r[2].plot(np.linspace(1, STEPS[dataset_name], len(curves['oracle_snr_corr'][sidx, :])), curves['oracle_snr_corr'][sidx, :], color='blue', linestyle=linestyles[sidx])
+        axes_r[0].set_xlabel('Training step', fontsize=fontsize)
+        axes_r[0].set_ylabel(r'MC estimate of $\mathcal{L}(\boldsymbol{\theta}, \tilde{\boldsymbol{\eta}})$ $\updownarrow$', fontsize=fontsize)
+        axes_r[1].set_xlabel('Training step', fontsize=fontsize)
+        axes_r[1].set_ylabel(r'Classifier mean rank $\downarrow$', fontsize=fontsize)
+        axes_r[2].set_xlabel('Training step', fontsize=fontsize)
+        axes_r[2].set_ylabel(r'Oracle agreement $\uparrow$', fontsize=fontsize)
+        axes_r[0].legend(loc='upper right', fontsize=fontsize-2)
+        axes_r[1].legend(loc='upper right', fontsize=fontsize-2)
+        axes_r[0].set_title(f'Dataset: {DATASET_NAMES[dataset_name]}', fontsize=fontsize+2)
+        axes_r[1].set_title(f'Dataset: {DATASET_NAMES[dataset_name]}', fontsize=fontsize+2)
+        axes_r[2].set_title(f'Dataset: {DATASET_NAMES[dataset_name]}', fontsize=fontsize+2)
+    fig.tight_layout()
+    fig.savefig(dest)
+    plt.close(fig)
+    print(f'Saved training curves for ALL to {dest}.')
+
+def plot_main_paper_qualitative_comparison(base_dir, dest):
+    all_base_dir = os.path.join(base_dir, 'ascadv1_variable', 'all_runs', 'fair', 'seed=50', 'all_training')
+    bl_base_dir = os.path.join(base_dir, 'ascadv1_variable', 'supervised_models_for_attribution', 'classification', 'seed=55')
+    param_base_dir = os.path.join(base_dir, 'ascadv1_variable', 'first_order_parametric_statistical_assessment')
+    ORACLE_PATHS = {
+        r'$r_{\mathrm{in}}$': param_base_dir / r'attack_snr_r_in.npy',
+        r'$r_{2}$': param_base_dir / r'attack_snr_r.npy',
+        r'$r_{\mathrm{out}}$': param_base_dir / r'attack_snr_r_out.npy',
+        r'$w_2 \oplus k_2 \oplus r_{\mathrm{in}}$': param_base_dir / r'attack_snr_plaintext__key__r_in.npy',
+        r'$\operatorname{S}(w_2 \oplus k_2) \oplus r_2$': param_base_dir / r'attack_snr_subbytes__r.npy',
+        r'$\operatorname{S}(w_2 \oplus k_2) \oplus r_{\mathrm{out}}$': param_base_dir / r'attack_snr_subbytes__r_out.npy',
+        r'$S_{\mathrm{prev}} \oplus \operatorname{S}(w_2 \oplus k_2) \oplus r_{\mathrm{out}}$': param_base_dir / r'attack_snr_s_prev__subbytes__r_out.npy',
+        r'Security load': param_base_dir / r'attack_snr_security_load.npy'
+    }
+    all_assessment = np.load(os.path.join(all_base_dir, 'leakage_assessment.npy'))
+    baseline_assessment = np.load(os.path.join(bl_base_dir, '7-second-order-occlusion.npz'), allow_pickle=True)['attribution']
+    oracle_assessments = {k: np.load(v) for k, v in oracle_paths.items()}
+
+    def disable_xticks(ax):
+        ax.tick_params(
+            axis='x',
+            which='both',
+            labelbottom=False
+        )
+    def disable_yticks(ax):
+        ax.tick_params(
+            axis='y',
+            which='both',
+            labelleft=False
+        )
+    def disable_twinyticks(ax):
+        ax.tick_params(
+            axis='y',
+            which='both',
+            labelleft=False,
+            labelright=False,
+            left=False,
+            right=True
+        )
+
+    fig = plt.figure(figsize=(16, 4))
+    gs = fig.add_gridspec(2, 9, width_ratios=[1, 1, 0.2, 1, 1, 0.2, 1, 1, 1], height_ratios=[1, 1], wspace=0.25, hspace=0.25)
+    vars_ax = fig.add_subplot(gs[0:2, 6:9])
+    vars_tax = vars_ax.twinx()
+    oracle_ax = fig.add_subplot(gs[0:2, 0:2])
+    bl_ax = fig.add_subplot(gs[0, 3:5])
+    all_ax = fig.add_subplot(gs[1, 3:5])
+    composite_ax = fig.add_subplot(gs[0, 6])
+    rin_ax = fig.add_subplot(gs[0, 7], sharex=composite_ax)
+    rout_ax = fig.add_subplot(gs[1, 6], sharex=composite_ax)
+    r_ax = fig.add_subplot(gs[1, 7], sharex=composite_ax)
+    secl_ax = fig.add_subplot(gs[0, 8], sharex=composite_ax)
+    aux_ax = fig.add_subplot(gs[1, 8], sharex=composite_ax)
+
+    disable_xticks(composite_ax)
+    disable_xticks(rin_ax)
+    disable_xticks(secl_ax)
+    disable_yticks(rin_ax)
+    disable_yticks(secl_ax)
+    disable_yticks(r_ax)
+    disable_yticks(aux_ax)
+    disable_xticks(bl_ax)
+
+    def make_overlay_axis_inert(ax):
+        ax.set_frame_on(False)
+        ax.patch.set_visible(False)
+        for s in ax.spines.values():
+            s.set_visible(False)
+        ax.tick_params(which='both', top=False, bottom=False, left=False, right=False,
+                    labelbottom=False, labelleft=False, labelright=False)
+        ax.xaxis.set_major_locator(NullLocator())
+        ax.xaxis.set_minor_locator(NullLocator())
+        ax.yaxis.set_major_locator(NullLocator())
+        ax.yaxis.set_minor_locator(NullLocator())
+    make_overlay_axis_inert(vars_ax)
+    make_overlay_axis_inert(vars_tax)
+
+    vars_ax.set_xlabel(r'Leakiness from white-box assessment', labelpad=20)
+    vars_ax.set_ylabel(r'Leakiness estimated by \textsf{ALL} (ours)', color='blue', labelpad=30)
+    vars_tax.set_ylabel(r'Leakiness estimated by $2^{\mathrm{nd}}$-order 7-Occlusion', color='green', labelpad=25)
+
+    oracle_ax.set_xlabel(r'Time $t$')
+    oracle_ax.set_ylabel(r"`Oracle' leakiness of $X_t$")
+    oracle_ax.set_title(r'White-box SNR assessment')
+    kwargs = dict(marker='.', markersize=1, linestyle='-', linewidth=0.2, rasterized=True)
+    oracle_kwargs = [
+        {'color': 'red'},
+        {'color': 'yellow'},
+        {'color': 'teal'},
+        {'color': 'green'},
+        {'color': 'black'},
+        {'color': 'blue'},
+        {'color': 'teal', 'linestyle': 'dotted'},
+        {'color': 'grey', 'linestyle': 'dotted'}
+    ]
+    for (target_var_name, oracle_snr), _oracle_kwargs in zip(oracle_assessments.items(), oracle_kwargs):
+        _kwargs = copy(kwargs)
+        _kwargs.update(_oracle_kwargs)
+        oracle_ax.plot(oracle_snr, **_kwargs, label=target_var_name)
+    oracle_ax.legend(loc='upper center', ncol=2, fontsize=8)
+    oracle_ax.set_yscale('log')
+
+    bl_ax.set_ylabel(r'Estimated leakiness of $X_t$')
+    bl_ax.set_title(r'$2^{\mathrm{nd}}$-order 7-occlusion (best baseline)')
+    bl_ax.plot(baseline_assessment, color='green', **kwargs)
+    bl_ax.set_yscale('log')
+
+    all_ax.set_xlabel(r'Time $t$')
+    all_ax.set_ylabel(r'Estimated leakiness of $X_t$')
+    all_ax.set_title(r'\textsf{ALL} (ours)')
+    all_ax.plot(all_assessment, color='blue', **kwargs)
+
+    all_kwargs = {'marker': 'o', 'markersize': 1, 'rasterized': True, 'linestyle': 'none'}
+    bl_kwargs = {'marker': '^', 'markersize': 1, 'alpha': 0.5, 'rasterized': True, 'linestyle': 'none'}
+
+    composite_assessment = np.stack(list(oracle_assessments.values())).mean(axis=0)
+    composite_ax.set_title(r'All variables', fontsize=10)
+    composite_ax.plot(composite_assessment, all_assessment, color='blue', **all_kwargs)
+    composite_tax = composite_ax.twinx()
+    composite_tax.plot(composite_assessment, baseline_assessment, color='green', **bl_kwargs)
+    composite_ax.set_xscale('log')
+    composite_tax.set_yscale('log')
+
+    rin_assessment = np.stack([oracle_assessments[r'$r_{\mathrm{in}}$'], oracle_assessments[r'$w_2 \oplus k_2 \oplus r_{\mathrm{in}}$']]).mean(axis=0)
+    rin_ax.set_title(r'$(r_{\mathrm{in}},\,w_2 \oplus k_2 \oplus r_{\mathrm{in}})$', fontsize=10)
+    rin_tax = rin_ax.twinx()
+    rin_ax.plot(rin_assessment, all_assessment, color='blue', **all_kwargs)
+    rin_tax.plot(rin_assessment, baseline_assessment, color='green', **bl_kwargs)
+    rin_ax.set_xscale('log')
+    rin_tax.set_yscale('log')
+
+    rout_assessment = np.stack([oracle_assessments[r'$r_{\mathrm{out}}$'], oracle_assessments[r'$\operatorname{S}(w_2 \oplus k_2) \oplus r_{\mathrm{out}}$']]).mean(axis=0)
+    rout_ax.set_title(r'$(r_{\mathrm{out}},\,\operatorname{S}(w_2 \oplus k_2) \oplus r_{\mathrm{out}})$', fontsize=10)
+    rout_tax = rout_ax.twinx()
+    rout_ax.plot(rout_assessment, all_assessment, color='blue', **all_kwargs)
+    rout_tax.plot(rout_assessment, baseline_assessment, color='green', **bl_kwargs)
+    rout_ax.set_xscale('log')
+    rout_tax.set_yscale('log')
+
+    r_assessment = np.stack([oracle_assessments[r'$r_{2}$'], oracle_assessments[r'$\operatorname{S}(w_2 \oplus k_2) \oplus r_2$']]).mean(axis=0)
+    r_ax.set_title(r'$(r_2,\,\operatorname{S}(w_2 \oplus k_2) \oplus r_2)$', fontsize=10)
+    r_tax = r_ax.twinx()
+    r_ax.plot(r_assessment, all_assessment, color='blue', **all_kwargs)
+    r_tax.plot(r_assessment, baseline_assessment, color='green', **bl_kwargs)
+    r_ax.set_xscale('log')
+    r_tax.set_yscale('log')
+
+    secl_assessment = oracle_assessments[r'Security load']
+    secl_ax.set_title(r'Security load', fontsize=10)
+    secl_tax = secl_ax.twinx()
+    secl_ax.plot(secl_assessment, all_assessment, color='blue', **all_kwargs)
+    secl_tax.plot(secl_assessment, baseline_assessment, color='green', **bl_kwargs)
+    secl_ax.set_xscale('log')
+    secl_tax.set_yscale('log')
+
+    aux_assessment = oracle_assessments[r'$S_{\mathrm{prev}} \oplus \operatorname{S}(w_2 \oplus k_2) \oplus r_{\mathrm{out}}$']
+    aux_ax.set_title(r'$S_{\mathrm{prev}} \oplus \operatorname{S}(w_2 \oplus k_2) \oplus r_{\mathrm{out}}$', fontsize=10)
+    aux_tax = aux_ax.twinx()
+    aux_ax.plot(aux_assessment, all_assessment, color='blue', **all_kwargs)
+    aux_tax.plot(aux_assessment, baseline_assessment, color='green', **bl_kwargs)
+    aux_ax.set_xscale('log')
+    aux_tax.set_yscale('log')
+
+    disable_twinyticks(composite_tax)
+    disable_twinyticks(rin_tax)
+    disable_twinyticks(rout_tax)
+    disable_twinyticks(r_tax)
+
+    fig.savefig(dest, dpi=150, bbox_inches='tight')
+    plt.close(fig)
+
 def main():
     fig_dir = os.path.join(OUTPUT_DIR, 'plots_for_paper')
     os.makedirs(fig_dir, exist_ok=True)
@@ -358,6 +697,11 @@ def main():
     # Generate Fig. 14 where we plot the oracle leakiness vs. the estimated leakiness by ALL.
     plot_leakiness_assessment_comparison_with_oracle(OUTPUT_DIR, os.path.join(fig_dir, 'qualitative_comparison_all_vs_oracle.pdf'))
 
+    # Generate Fig. 18 where we plot the training curves and rank vs. trace count for the supervised models.
+    plot_attack_curves(OUTPUT_DIR, os.path.join(fig_dir, 'attack_curves.pdf'))
+
+    # Generate Fig. 15 where we plot the training curves of ALL.
+    plot_advll_training_curves(OUTPUT_DIR, os.path.join(fig_dir, 'all_training_curves.pdf'))
 
 if __name__ == '__main__':
     main()

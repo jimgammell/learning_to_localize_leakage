@@ -105,7 +105,7 @@ class Trial:
                         logging_dir=trial_dir,
                         max_steps=self.run_kwargs['max_steps'],
                         compute_leakage_assessments=True,
-                        compute_occpoi=True if leaky_pair_count <= 8 else False
+                        compute_occpoi=False
                     )
                 attr_leakage_assessments = np.load(os.path.join(trial_dir, 'early_stop_leakage_assessments.npz'), allow_pickle=True)
                 for key, val in attr_leakage_assessments.items():

@@ -472,8 +472,8 @@ class Trial:
                 np.savez(os.path.join(logging_dir, 'leakage_assessments.npz'), leakage_assessments=leakage_assessments)
     
     def __call__(self):
-        #out = self.run_first_order_experiments(os.path.join(self.logging_dir, 'first_order'))
-        #self.plot_first_order_experiments(os.path.join(self.logging_dir, 'first_order'), out)
+        out = self.run_first_order_experiments(os.path.join(self.logging_dir, 'first_order'))
+        self.plot_first_order_experiments(os.path.join(self.logging_dir, 'first_order'), out)
         out = self.run_multi_xor_experiments(os.path.join(self.logging_dir, 'multi_xor'))
         self.plot_multi_xor_experiments(os.path.join(self.logging_dir, 'multi_xor'), out)
         r"""self.leakage_localization_kwargs['starting_prob'] = 0.5

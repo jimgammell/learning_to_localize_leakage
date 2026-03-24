@@ -384,9 +384,9 @@ def plot_synthetic_dataset_experiments(base_dir, dest):
 
 def plot_toy_gaussian_experiments(base_dir, dest):
     toy_gaussian_trial = ToyGaussianTrial(logging_dir=os.path.join(base_dir, 'toy_gaussian'))
-    leakage_assessments = np.load(os.path.join(base_dir, 'toy_gaussian', 'first_order', 'leakage_assessments.npz'), allow_pickle=True)
+    leakage_assessments = np.load(os.path.join(base_dir, 'toy_gaussian', 'leakage_assessments.npz'), allow_pickle=True)
     leakage_assessments = {k: leakage_assessments[k].item() for k in leakage_assessments.files}
-    toy_gaussian_trial.plot_first_order_experiments(dest, leakage_assessments)
+    toy_gaussian_trial.plot_experiments(dest, leakage_assessments)
     print(f'Saved toy gaussian experiment plots to {dest}.')
 
 def plot_attack_curves(base_dir, dest):

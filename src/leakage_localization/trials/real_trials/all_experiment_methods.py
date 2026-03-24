@@ -6,6 +6,7 @@ from copy import copy
 from tqdm import tqdm
 
 import numpy as np
+from matplotlib import pyplot as plt
 from scipy.stats import spearmanr
 import torch
 from torch import nn

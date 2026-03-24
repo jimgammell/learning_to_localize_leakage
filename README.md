@@ -88,7 +88,7 @@ python experiments/run_real_trials.py --dataset <DATASET>
 
 ### How to plot results
 
-The main figures from our paper can be generated without training models from scratch. To do so, download our raw results files from `TODO`, then extract them to the project directory. Then plot the results and save the figures to `outputs/plots_for_paper` by running the following command:
+The main figures from our paper can be generated without training models from scratch. To do so, download and extract our raw results files as described above. Then plot the results and save the figures to `outputs/plots_for_paper` by running the following command:
 ```bash
 python experiments/plot_results.py
 ```

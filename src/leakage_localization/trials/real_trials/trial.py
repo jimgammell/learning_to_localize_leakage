@@ -266,13 +266,10 @@ class Trial:
             unconditional_all_kwargs = copy(base_all_kwargs)
             unconditional_all_kwargs['omit_classifier_conditioning'] = True
             self.run_all_hsweep(self.all_unconditional_ablation_dir, 0, unconditional_all_kwargs)
-        #interpretive_all_kwargs = copy(base_all_kwargs)
-        #interpretive_all_kwargs['classifier_to_interpret'] = supervised_experiment_methods.load_trained_supervised_model(os.path.join(self.supervised_attribution_dir, 'classification', 'seed=55'))
-        #self.run_all_hsweep(self.all_interpretive_ablation_dir, 0, interpretive_all_kwargs)
-        for x in tqdm(range(self.trial_config['all_htune_trial_count'])):
-            model_dir = os.path.join(self.all_hparam_sweep_dir, f'trial_{x}')
-            leakage_assessment = np.load(os.path.join(model_dir, 'leakage_assessment.npy'))
-            self.evaluate_leakage_assessment(leakage_assessment, 0, dest=os.path.join(model_dir, 'evaluation_metrics.npz'))
+            for x in tqdm(range(self.trial_config['all_htune_trial_count'])):
+                model_dir = os.path.join(self.all_hparam_sweep_dir, f'trial_{x}')
+                leakage_assessment = np.load(os.path.join(model_dir, 'leakage_assessment.npy'))
+                self.evaluate_leakage_assessment(leakage_assessment, 0, dest=os.path.join(model_dir, 'evaluation_metrics.npz'))
         base_seed += self.trial_config['all_classifiers_pretrain_htune_trial_count'] + self.trial_config['all_htune_trial_count']
         selection_dnn_seeds = [int(x.split('=')[1]) for x in os.listdir(self.supervised_selection_dir) if x.split('=')[0] == 'seed']
         selection_dnn_dir = os.path.join(self.supervised_selection_dir, f'seed={selection_dnn_seeds[0]}')

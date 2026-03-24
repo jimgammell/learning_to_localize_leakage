@@ -46,6 +46,7 @@ def main():
     args = parser.parse_args()
 
     config_name = args.trial_config or args.dataset
+    config_name = config_name.replace('-', '_')
     config_path = os.path.join(CONFIG_DIR, f'{config_name}.yaml')
     assert os.path.exists(config_path), f'Invalid config path specified: {config_path}'
     with open(config_path, 'r') as f:

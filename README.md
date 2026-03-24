@@ -2,10 +2,6 @@
 
 This is the official implementation accompanying the paper "Learning to Localize Leakage of Cryptographic Sensitive Variables" (TMLR 2026) by Jimmy Gammell, Anand Raghunathan, Abolfazl Hashemi, and Kaushik Roy ([link](https://openreview.net/forum?id=9qxCSU8nDO&)).
 
-## Paper summary
-
-todo
-
 ## Installation
 
 This code was tested using Python 3.9.19, and certain dependencies (e.g. Captum) seem to break with newer versions. Follow the instructions below to install the project and its dependencies:
@@ -62,9 +58,16 @@ mkdir -p resources/otp
 cd resources/otp
 ````
 
+### Download preexisting results
+
+We are distributing a subset of our raw results. These are chosen to allow users to 1) re-generate the important figures from our paper without having to re-run experiments, and 2) selectively re-run experiments without having to run their pre-requisite experiments (e.g. hyperparameter tuning, training supervised models for use in model selection). You can download (6.4GB) and extract the results as follows:
+```bash
+
+```
+
 ## Usage
 
-### How to train models
+### How to run experiments from paper
 
 The `experiments` directory contains entrypoints to run the main experiments from our paper. For each of the subsequent scripts, you can pass the `--help` argument to the command line for a list and brief explanation of the possible command line arguments.
 - Run the toy XOR-GMM experiments (Fig. 3) by running the following command:
@@ -75,6 +78,11 @@ python experiments/run_toy_gaussian_trials.py
 ```bash
 python experiments/run_synthetic_hw_trials.py
 ```
+- Run the experiments on real datasets by running the following command:
+```bash
+python experiments/run_real_trials.py --dataset <DATASET>
+```
+  where `<DATASET>` denotes one of the following dataset identifiers: `ascadv1-fixed`, `ascadv1-variable`, `dpav4`, `aes-hd`, `otiait`, `otp`.
 
 ### How to plot results
 

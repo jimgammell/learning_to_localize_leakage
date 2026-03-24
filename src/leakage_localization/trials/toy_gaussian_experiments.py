@@ -118,7 +118,7 @@ class Trial:
         np.savez(os.path.join(logging_dir, 'leakage_assessments.npz'), **leakage_assessments)
         return leakage_assessments
     
-    def plot_first_order_experiments(self, logging_dir, leakage_assessments):
+    def plot_first_order_experiments(self, dest, leakage_assessments):
         to_kwargs = {
             'snr': {'color': 'green', 'label': 'SNR', 'markersize': 3, 'marker': 'o', 'linestyle': 'solid'},
             'sosd': {'color': 'green', 'label': 'SOSD', 'markersize': 4, 'marker': '^', 'linestyle': 'dotted'},
@@ -150,8 +150,7 @@ class Trial:
         ax.set_ylabel(r'Rank of nonleaky measurement $\downarrow$')
         ax.legend(ncol=3, loc='upper left', fontsize='x-small')
         fig.tight_layout()
-        fig.savefig(os.path.join(logging_dir, 'visualization.png'), **SAVEFIG_KWARGS)
-        fig.savefig(os.path.join(logging_dir, 'visualization.pdf'), **SAVEFIG_KWARGS)
+        fig.savefig(dest, **SAVEFIG_KWARGS)
 
     def run_multi_xor_experiments(self, logging_dir, max_leaky_pair_count: int = 12, run_baselines: bool = True):
         leakage_assessments = {key: defaultdict(list) for key in ['all', 'gradvis', 'saliency', 'lrp', 'inputxgrad']}
@@ -475,13 +474,4 @@ class Trial:
     
     def __call__(self):
         out = self.run_first_order_experiments(os.path.join(self.logging_dir, 'first_order'))
-        self.plot_first_order_experiments(os.path.join(self.logging_dir, 'first_order'), out)
-        #out = self.run_multi_xor_experiments(os.path.join(self.logging_dir, 'multi_xor'))
-        #self.plot_multi_xor_experiments(os.path.join(self.logging_dir, 'multi_xor'), out)
-        r"""self.leakage_localization_kwargs['starting_prob'] = 0.5
-        self.run_xor_var_sweep()
-        self.plot_xor_var_sweep()
-        self.leakage_localization_kwargs['starting_prob'] = 0.9
-        self.run_1o_count_sweep()
-        self.plot_1o_count_sweep()
-        self.create_main_paper_plot()"""
+        self.plot_first_order_experiments(os.path.join(self.logging_dir, 'first_order', 'leakage_assessments.pdf'), out)

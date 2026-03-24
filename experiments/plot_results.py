@@ -11,6 +11,7 @@ from matplotlib.ticker import NullLocator
 
 from leakage_localization.common import *
 from leakage_localization.trials.synthetic_data_experiments import Trial as SyntheticTrial
+from leakage_localization.trials.toy_gaussian_experiments import Trial as ToyGaussianTrial
 from init_things import *
 
 DATASET_NAMES = {
@@ -381,6 +382,13 @@ def plot_synthetic_dataset_experiments(base_dir, dest):
     synthetic_trial.plot_main_paper_sweeps(dest, dont_subsample=True)
     print(f'Saved synthetic experiment plots to {dest}.')
 
+def plot_toy_gaussian_experiments(base_dir, dest):
+    toy_gaussian_trial = ToyGaussianTrial(logging_dir=os.path.join(base_dir, 'toy_gaussian'))
+    leakage_assessments = np.load(os.path.join(base_dir, 'toy_gaussian', 'first_order', 'leakage_assessments.npz'), allow_pickle=True)
+    leakage_assessments = {k: leakage_assessments[k].item() for k in leakage_assessments.files}
+    toy_gaussian_trial.plot_first_order_experiments(dest, leakage_assessments)
+    print(f'Saved toy gaussian experiment plots to {dest}.')
+
 def plot_attack_curves(base_dir, dest):
     attack_curvess, training_curvess = load_attack_curves(base_dir)
     linestyles = ['solid', 'dotted', 'dashed', 'dashdot', (5, (10, 3))]
@@ -691,6 +699,7 @@ def main():
     create_performance_comparison_table(os.path.join(fig_dir, 'ta_mtd_table'), ta_mtd)
 
     # Generate Fig. 3 where we plot the performance on the toy Gaussian dataset for various methods.
+    plot_toy_gaussian_experiments(OUTPUT_DIR, os.path.join(fig_dir, 'toy_gaussian_experiments.pdf'))
 
     # Generate Fig. 11 where we plot the ALL-based leakage assessments for synthetic datasets.
     #   Fig. 4 in the main paper is a condensed version of this.

@@ -11,7 +11,7 @@ rsync -av \
     --exclude "*/lightning_output" \
     --exclude "*.png" \
     --exclude "*.pdf" \
-    --exclude "*ablation" \
+    --exclude "*ablation*" \
     --exclude "*all_sensitivity_analysis" \
     --exclude "*backup*" \
     $src $dest

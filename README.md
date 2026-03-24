@@ -58,7 +58,7 @@ mkdir -p resources/otp
 cd resources/otp
 ````
 
-### Download preexisting results
+### Downloading raw result files
 
 We are distributing a subset of our raw results. These are chosen to allow users to 1) re-generate the important figures from our paper without having to re-run experiments, and 2) selectively re-run experiments without having to run their pre-requisite experiments (e.g. hyperparameter tuning, training supervised models for use in model selection). You can download (6.4GB) and extract the results as follows:
 ```bash

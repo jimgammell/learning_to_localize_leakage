@@ -29,4 +29,5 @@ dependencies = [
     "einops",
     "tensorboard",
     "imageio",
+    "pandas",
 ]

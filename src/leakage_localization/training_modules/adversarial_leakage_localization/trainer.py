@@ -8,6 +8,7 @@ from torch.utils.data import Dataset, DataLoader
 from lightning import LightningModule, Trainer as LightningTrainer
 from lightning.pytorch.loggers.tensorboard import TensorBoardLogger
 from lightning.pytorch.callbacks import ModelCheckpoint
+import shutil
 
 from leakage_localization.common import *
 from leakage_localization.trials.utils import *

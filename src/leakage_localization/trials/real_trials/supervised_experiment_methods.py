@@ -75,7 +75,7 @@ def load_trained_supervised_model(
     else: # this is a model we have trained
         checkpoint_path = os.path.join(model_dir, 'early_stop_checkpoint.ckpt')
         assert os.path.exists(checkpoint_path)
-        lightning_module = SupervisedModule.load_from_checkpoint(checkpoint_path, map_location='cpu')
+        lightning_module = SupervisedModule.load_from_checkpoint(checkpoint_path, map_location='cpu', weights_only=False)
         if as_lightning_module:
             return lightning_module
         else:

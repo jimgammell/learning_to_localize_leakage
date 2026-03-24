@@ -114,15 +114,15 @@ def run_template_attack_test(
 ):
     if dataset_name in ['ascadv1-fixed', 'ascadv1-variable', 'aes-hd', 'dpav4']: # AES datasets where we accumulate prediction over multiple traces
         if dataset_name in ['ascadv1-fixed', 'ascadv1-variable']:
-            from datasets.ascadv1 import to_key_preds
+            from leakage_localization.datasets.ascadv1 import to_key_preds
             arg_keys = ['plaintext']
             constants = None
         elif dataset_name == 'dpav4':
-            from datasets.dpav4 import to_key_preds
+            from leakage_localization.datasets.dpav4 import to_key_preds
             arg_keys = ['plaintext', 'offset']
             constants = [profiling_dataset.mask]
         elif dataset_name == 'aes-hd':
-            from datasets.aes_hd import to_key_preds
+            from leakage_localization.datasets.aes_hd import to_key_preds
             arg_keys = ['ciphertext_11', 'ciphertext_7']
             constants = None
         if dataset_name in ['ascadv1-fixed', 'ascadv1-variable']: # second-order datasets, so we want to increase likelihood of catching all the leaky variables

@@ -13,5 +13,5 @@ rsync -av \
     --exclude "*.pdf" \
     --exclude "*ablation" \
     --exclude "*all_sensitivity_analysis" \
-    --exclude "*backup* \
+    --exclude "*backup*" \
     $src $dest

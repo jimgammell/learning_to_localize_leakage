@@ -111,6 +111,10 @@ class Trial:
         rv = {}
         for target in self.oracle_targets:
             path = os.path.join(self.first_order_parametric_stats_dir, f'attack_snr_{target}.npy')
+            if not os.path.exists(path):
+                stats_computor = FirstOrderStatistics(self.attack_dataset, targets=self.oracle_targets)
+                for target in self.oracle_targets:
+                    np.save(path, stats_computor.snr_vals[target].reshape(-1))
             assessment = np.load(path)
             rv[target] = assessment
         if reduce:
@@ -140,8 +144,6 @@ class Trial:
             np.save(os.path.join(self.first_order_parametric_stats_dir, 'random.npy'), random_assessment)
         else:
             random_assessment = np.load(os.path.join(self.first_order_parametric_stats_dir, 'random.npy'))
-        for seed_idx in range(5):
-            self.evaluate_leakage_assessment(random_assessment[seed_idx, :], dest=os.path.join(self.first_order_parametric_stats_dir, f'random_evaluation_metrics_{seed_idx}.npz'), print_res=True)
         if not os.path.exists(os.path.join(self.first_order_parametric_stats_dir, 'first_order_stats.npz')):
             stats_computor = FirstOrderStatistics(self.profiling_dataset, 'label')
             snr = stats_computor.snr_vals['label'].reshape(-1)
@@ -153,11 +155,17 @@ class Trial:
             snr = rv['snr']
             sosd = rv['sosd']
             cpa = rv['cpa']
+        for seed_idx in range(5):
+            self.evaluate_leakage_assessment(
+                random_assessment[seed_idx, :],
+                dest=os.path.join(self.first_order_parametric_stats_dir, f'random_evaluation_metrics_{seed_idx}.npz'),
+                print_res=True
+            )
         self.evaluate_leakage_assessment(snr, dest=os.path.join(self.first_order_parametric_stats_dir, 'snr_evaluation_metrics.npz'), print_res=True)
         self.evaluate_leakage_assessment(sosd, dest=os.path.join(self.first_order_parametric_stats_dir, 'sosd_evaluation_metrics.npz'), print_res=True)
         self.evaluate_leakage_assessment(cpa, dest=os.path.join(self.first_order_parametric_stats_dir, 'cpa_evaluation_metrics.npz'), print_res=True)
     
-    def run_supervised_trials(self):
+    def run_supervised_trials(self, full_experiments: bool = False):
         print('Running supervised trials.')
         base_seed = 0
         base_supervised_kwargs = copy(self.trial_config['default_kwargs'])
@@ -166,26 +174,28 @@ class Trial:
             self.supervised_hparam_sweep_dir, self.profiling_dataset, self.attack_dataset, training_kwargs=base_supervised_kwargs,
             trial_count=self.trial_config['supervised_htune_trial_count'], max_steps=self.trial_config['supervised_train_steps'], starting_seed=base_seed
         )
-        supervised_experiment_methods.run_supervised_hparam_sweep(
-            self.supervised_dropout_ablation, self.profiling_dataset, self.attack_dataset, training_kwargs=base_supervised_kwargs, heavy_dropout_ablation=True,
-            trial_count=self.trial_config['supervised_htune_trial_count'], max_steps=self.trial_config['supervised_train_steps'], starting_seed=base_seed
-        )
-        print('Doing neural net attribution assessments...')
-        for seed_idx in self.run_particular_seeds:
-            for x in tqdm((self.trial_config['supervised_htune_trial_count']//5)*seed_idx + np.arange(self.trial_config['supervised_htune_trial_count']//5)):
-                model_dir = os.path.join(self.supervised_hparam_sweep_dir, f'trial_{x}')
-                print(f'Evaluating model in {model_dir}...')
-                self.evaluate_supervised_model(model_dir, seed_idx=0, print_res=True)
-                model_dir = os.path.join(self.supervised_dropout_ablation, f'trial_{x}')
-                print(f'Evaluating model in {model_dir}...')
-                self.evaluate_supervised_model(model_dir, seed_idx=0, print_res=True, skip_metrics=True)
-        print('Computing selection criteria...')
-        self.compute_selection_criterion_for_attribution_prefix('gradvis')
-        self.compute_selection_criterion_for_attribution_prefix('lrp')
-        self.compute_selection_criterion_for_attribution_prefix('saliency')
-        self.compute_selection_criterion_for_attribution_prefix('1-occlusion')
-        self.compute_selection_criterion_for_attribution_prefix('inputxgrad')
-        self.compute_selection_criterion_for_attribution_prefix(f'{OPTIMAL_WINDOW_SIZES[self.dataset_name]}-occlusion')
+        if full_experiments:
+            supervised_experiment_methods.run_supervised_hparam_sweep(
+                self.supervised_dropout_ablation, self.profiling_dataset, self.attack_dataset, training_kwargs=base_supervised_kwargs, heavy_dropout_ablation=True,
+                trial_count=self.trial_config['supervised_htune_trial_count'], max_steps=self.trial_config['supervised_train_steps'], starting_seed=base_seed
+            )
+        if full_experiments:
+            print('Doing neural net attribution assessments...')
+            for seed_idx in self.run_particular_seeds:
+                for x in tqdm((self.trial_config['supervised_htune_trial_count']//5)*seed_idx + np.arange(self.trial_config['supervised_htune_trial_count']//5)):
+                    model_dir = os.path.join(self.supervised_hparam_sweep_dir, f'trial_{x}')
+                    print(f'Evaluating model in {model_dir}...')
+                    self.evaluate_supervised_model(model_dir, seed_idx=0, print_res=True)
+                    model_dir = os.path.join(self.supervised_dropout_ablation, f'trial_{x}')
+                    print(f'Evaluating model in {model_dir}...')
+                    self.evaluate_supervised_model(model_dir, seed_idx=0, print_res=True, skip_metrics=True)
+            print('Computing selection criteria...')
+            self.compute_selection_criterion_for_attribution_prefix('gradvis')
+            self.compute_selection_criterion_for_attribution_prefix('lrp')
+            self.compute_selection_criterion_for_attribution_prefix('saliency')
+            self.compute_selection_criterion_for_attribution_prefix('1-occlusion')
+            self.compute_selection_criterion_for_attribution_prefix('inputxgrad')
+            self.compute_selection_criterion_for_attribution_prefix(f'{OPTIMAL_WINDOW_SIZES[self.dataset_name]}-occlusion')
         base_seed += self.trial_config['supervised_htune_trial_count']
         best_supervised_hparams = supervised_experiment_methods.get_best_supervised_model_hparams(
             self.supervised_hparam_sweep_dir, self.profiling_dataset, self.attack_dataset, self.dataset_name, self.load_oracle_assessment()
@@ -213,9 +223,10 @@ class Trial:
                 kwargs.update(hparams)
                 supervised_experiment_methods.train_supervised_model(
                     subdir, self.profiling_dataset, self.attack_dataset, training_kwargs=kwargs, dataset_name=self.dataset_name,
-                    max_steps=self.trial_config['supervised_train_steps'], seed=seed, reference_leakage_assessment=self.load_oracle_assessment()
+                    max_steps=self.trial_config['supervised_train_steps'], seed=seed,
+                    reference_leakage_assessment=self.load_oracle_assessment() if full_experiments else None
                 )
-                self.evaluate_supervised_model(subdir, seed_idx=seed_idx, print_res=True, cost='full')
+                self.evaluate_supervised_model(subdir, seed_idx=seed_idx, print_res=True, cost='full' if full_experiments else 'reduced')
                 # experiments with a handful of publicly-released pretrained models as a sanity check
                 if self.dataset_name == 'ascadv1-fixed':
                     self.evaluate_supervised_model(os.path.join(self.pretrained_model_experiment_dir, 'benadjila_cnn_best'), seed_idx=seed_idx, print_res=True)
@@ -242,18 +253,19 @@ class Trial:
             reference_leakage_assessment=self.load_oracle_assessment()
         )
 
-    def run_all_trials(self):
+    def run_all_trials(self, full_experiments: bool = False):
         base_seed = 0
         base_all_kwargs = copy(self.trial_config['default_kwargs'])
         base_all_kwargs.update(self.trial_config['classifiers_pretrain_kwargs'])
         base_all_kwargs.update(self.trial_config['all_kwargs'])
         self.run_all_hsweep(self.all_hparam_sweep_dir, 0, base_all_kwargs)
-        cooperative_all_kwargs = copy(base_all_kwargs)
-        cooperative_all_kwargs['adversarial_mode'] = False
-        self.run_all_hsweep(self.all_cooperative_ablation_dir, 0, cooperative_all_kwargs)
-        unconditional_all_kwargs = copy(base_all_kwargs)
-        unconditional_all_kwargs['omit_classifier_conditioning'] = True
-        self.run_all_hsweep(self.all_unconditional_ablation_dir, 0, unconditional_all_kwargs)
+        if full_experiments:
+            cooperative_all_kwargs = copy(base_all_kwargs)
+            cooperative_all_kwargs['adversarial_mode'] = False
+            self.run_all_hsweep(self.all_cooperative_ablation_dir, 0, cooperative_all_kwargs)
+            unconditional_all_kwargs = copy(base_all_kwargs)
+            unconditional_all_kwargs['omit_classifier_conditioning'] = True
+            self.run_all_hsweep(self.all_unconditional_ablation_dir, 0, unconditional_all_kwargs)
         #interpretive_all_kwargs = copy(base_all_kwargs)
         #interpretive_all_kwargs['classifier_to_interpret'] = supervised_experiment_methods.load_trained_supervised_model(os.path.join(self.supervised_attribution_dir, 'classification', 'seed=55'))
         #self.run_all_hsweep(self.all_interpretive_ablation_dir, 0, interpretive_all_kwargs)
@@ -299,24 +311,28 @@ class Trial:
             for key, val in results.items():
                 print(f'\t{key}: {val.mean()} +/- {val.std()}')
         base_seed += 5
-        print('Evaluating the sensitivity of ALL to hyperparameters.')
-        for seed in base_seed + self.run_particular_seeds:
-            hparams = copy(base_all_kwargs)
-            if best_pretrain_hparams is not None:
-                kwargs.update(best_pretrain_hparams)
-            kwargs.update(best_all_hparams['oracle'])
-            all_experiment_methods.evaluate_all_hparam_sensitivity(
-                os.path.join(self.all_sensitivity_analysis_dir, f'seed={seed}'), self.profiling_dataset, self.attack_dataset,
-                training_kwargs=kwargs, max_steps=self.trial_config['all_train_steps'], seed=seed, reference_leakage_assessment=self.load_oracle_assessment(),
-                pretrain_max_steps=self.trial_config['all_classifiers_pretrain_steps'], pretrain_kwargs=best_pretrain_hparams,
-                pretrain_classifiers_dir=os.path.join(self.all_dir, 'oracle', f'seed={seed-self.seed_count}', 'classifier_pretraining') if self.dataset_name in ['ascadv1-fixed', 'ascadv1-variable', 'aes-hd'] else None
-            )
-
+        if full_experiments:
+            print('Evaluating the sensitivity of ALL to hyperparameters.')
+            for seed in base_seed + self.run_particular_seeds:
+                hparams = copy(base_all_kwargs)
+                if best_pretrain_hparams is not None:
+                    kwargs.update(best_pretrain_hparams)
+                kwargs.update(best_all_hparams['oracle'])
+                all_experiment_methods.evaluate_all_hparam_sensitivity(
+                    os.path.join(self.all_sensitivity_analysis_dir, f'seed={seed}'), self.profiling_dataset, self.attack_dataset,
+                    training_kwargs=kwargs, max_steps=self.trial_config['all_train_steps'], seed=seed, reference_leakage_assessment=self.load_oracle_assessment(),
+                    pretrain_max_steps=self.trial_config['all_classifiers_pretrain_steps'], pretrain_kwargs=best_pretrain_hparams,
+                    pretrain_classifiers_dir=os.path.join(self.all_dir, 'oracle', f'seed={seed-self.seed_count}', 'classifier_pretraining') if self.dataset_name in ['ascadv1-fixed', 'ascadv1-variable', 'aes-hd'] else None
+                )
 
     def compute_dnn_occlusion_tests(self, leakage_assessment, seed_idx, quiet: bool = True):
+        if not os.path.exists(self.supervised_selection_dir):
+            print('Could not do DNN occlusion tests because the supervised models have not been trained. Try again after running this module with run_supervised_trials=True.')
+            return None, None
         available_seeds = [int(x.split('=')[1]) for x in os.listdir(self.supervised_selection_dir) if x.split('=')[0] == 'seed']
         available_seeds.sort()
         seed = available_seeds[seed_idx]
+        model_path = os.path.join(self.supervised_selection_dir, f'seed={seed}')
         model = supervised_experiment_methods.load_trained_supervised_model(os.path.join(self.supervised_selection_dir, f'seed={seed}'))
         dataloader = self.get_dataloader(split='attack', num_workers=0)
         traces, labels = [], []
@@ -366,6 +382,9 @@ class Trial:
             rev_dnno = evaluations['rev_dnno']
             ta_ttd = evaluations['ta_ttd']
             oracle_agreement = evaluations['oracle_agreement']
+            if fwd_dnno is None or rev_dnno is None:
+                fwd_dnno, rev_dnno = self.compute_dnn_occlusion_tests(leakage_assessment, seed_idx, quiet=not print_res)
+                np.savez(dest, fwd_dnno=fwd_dnno, rev_dnno=rev_dnno, ta_ttd=ta_ttd, oracle_agreement=oracle_agreement)
         else:
             fwd_dnno, rev_dnno = self.compute_dnn_occlusion_tests(leakage_assessment, seed_idx, quiet=not print_res)
             ta_ttd = evaluation_methods.run_template_attack_test(leakage_assessment, self.profiling_dataset, self.attack_dataset, dataset_name=self.dataset_name)
@@ -379,9 +398,9 @@ class Trial:
         if print_res:
             print(f'Evaluation metrics saved to `{dest}`:')
             print(f'\tOracle agreement: {oracle_agreement}')
-            print(f'\tTemplate attack MTTD: {ta_ttd}')
-            print(f'\tForward DNN occlusion AUC: {fwd_dnno.mean()}')
-            print(f'\tReverse DNN occlusion AUC: {rev_dnno.mean()}')
+            print(f'\tTemplate attack MTTD: {ta_ttd + (1 if self.dataset_name in ["otiait", "otp"] else 0)}')
+            print(f'\tForward DNN occlusion AUC: {fwd_dnno.mean() if fwd_dnno is not None else None}')
+            print(f'\tReverse DNN occlusion AUC: {rev_dnno.mean() if rev_dnno is not None else None}')
         return dict(fwd_dnno=fwd_dnno, rev_dnno=rev_dnno, ta_ttd=ta_ttd, oracle_agreement=oracle_agreement)
     
     def evaluate_supervised_model(self, output_dir, seed_idx=0, cost: Literal['reduced', 'full'] = 'reduced', print_res=False, skip_metrics=False):
@@ -448,12 +467,13 @@ class Trial:
     def __call__(self,
         run_parametric_trials: bool = False,
         run_supervised_trials: bool = False,
-        run_all_trials: bool = False
+        run_all_trials: bool = False,
+        full_experiments: bool = False
     ):
         self.construct_datasets()
         if run_parametric_trials:
             self.run_parametric_trials()
         if run_supervised_trials:
-            self.run_supervised_trials()
+            self.run_supervised_trials(full_experiments=full_experiments)
         if run_all_trials:
-            self.run_all_trials()
+            self.run_all_trials(full_experiments=full_experiments)

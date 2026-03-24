@@ -39,6 +39,10 @@ def main():
     parser.add_argument(
         '--run-advll-trials', default=False, action='store_true', help='Run ALL on this dataset.'
     )
+    parser.add_argument(
+        '--full-experiments', default=False, action='store_true',
+        help='We have a lot of time-consuming ablations and baselines. By default I\'ll disable these because I don\'t think most people will use them, but you can pass this argument to enable them.'
+    )
     args = parser.parse_args()
 
     config_name = args.trial_config or args.dataset
@@ -60,7 +64,8 @@ def main():
     trial(
         run_parametric_trials=args.run_parametric_trials,
         run_supervised_trials=args.run_supervised_trials,
-        run_all_trials=args.run_advll_trials
+        run_all_trials=args.run_advll_trials,
+        full_experiments=args.full_experiments
     )
 
 if __name__ == '__main__':

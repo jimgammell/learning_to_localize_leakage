@@ -67,6 +67,8 @@ class Trial:
                     np.savez(os.path.join(trial_dir, 'leakage_assessment.npz'), **param_assessments)
                 else:
                     param_assessments = np.load(os.path.join(trial_dir, 'leakage_assessments.npz'), allow_pickle=True)
+                for k, v in param_assessments.items():
+                    leakage_assessments[k][leaky_pair_count].append(v)
                 trial_dir = os.path.join(logging_dir, f'seed={seed}', f'leaky_pair_count={leaky_pair_count}', 'advll')
                 if not os.path.exists(os.path.join(trial_dir, 'leakage_assessment.npy')):
                     set_seed(seed)

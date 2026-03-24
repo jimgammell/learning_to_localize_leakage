@@ -54,6 +54,7 @@ def main():
     if 'dataset' in config:
         assert config['dataset'] == args.dataset
     trial_name = args.trial_name or args.dataset
+    trial_name = trial_name.replace('-', '_')
     trial_path = os.path.join(OUTPUT_DIR, trial_name)
     trial = Trial(
         dataset_name=args.dataset,

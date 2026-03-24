@@ -16,4 +16,5 @@ rsync -av \
     --exclude "*hparam_sweep/trial_*" \
     --exclude "*hparam_sweep/classifiers_pretraining" \
     --exclude "*all_sensitivity_analysis" \
+    --exclude "*backup* \
     $src $dest

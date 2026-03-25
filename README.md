@@ -97,12 +97,15 @@ python experiments/plot_results.py
 
 If you use this code or our work, we would appreciate a citation:
 ```bibtex
-@article{Gammell_Learning_to_Localize_2026,
-    author = {Gammell, Jimmy and Raghunathan, Anand and Hashemi, Abolfazl and Roy, Kaushik},
-    journal = {Transactions on Machine Learning Research},
-    title = {{Learning to Localize Leakage of Cryptographic Sensitive Variables}},
-    url = {https://openreview.net/forum?id=9qxCSU8nDO&},
-    year = {2026}
+@article{
+gammell2026learning,
+title={Learning to Localize Leakage of Cryptographic Sensitive Variables},
+author={Jimmy Gammell and Anand Raghunathan and Abolfazl Hashemi and Kaushik Roy},
+journal={Transactions on Machine Learning Research},
+issn={2835-8856},
+year={2026},
+url={https://openreview.net/forum?id=9qxCSU8nDO},
+note={}
 }
 ```
 

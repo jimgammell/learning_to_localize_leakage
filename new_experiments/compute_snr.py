@@ -9,7 +9,7 @@ from leakage_localization.datasets import DATASET, PARTITION
 from leakage_localization.parametric.snr import compute_snr
 
 from init_things import *
-from utils.load_dataset import load_numpy_dataset
+from utils.load_data import load_numpy_dataset
 
 def run_compute_snr(
         dataset_id: DATASET,
@@ -35,6 +35,7 @@ def run_visualize_snr(
         partition_id: PARTITION
 ):
     assert dest.exists()
+    var_names = list()
     snr_vals = dict()
     for file in dest.iterdir():
         if not file.name.endswith('.npy'):
@@ -43,11 +44,13 @@ def run_visualize_snr(
         if not _partition_id == partition_id:
             continue
         snr_val = np.load(file)
+        var_names.append(var_name)
         snr_vals[var_name] = snr_val
-    var_count = len(snr_vals)
+    var_names.sort()
+    var_count = len(var_names)
     byte_count = max(snr_val.shape[0] for snr_val in snr_vals.values())
     fig, axes = plt.subplots(var_count, byte_count, sharex=True, sharey='row', figsize=(2*byte_count, 2*var_count))
-    for row_idx, var_name in enumerate(snr_vals):
+    for row_idx, var_name in enumerate(var_names):
         snr_val = snr_vals[var_name]
         for col_idx in range(byte_count):
             ax = axes[row_idx, col_idx]
@@ -57,7 +60,7 @@ def run_visualize_snr(
             else:
                 ax.axis('off')
     for row_idx in range(var_count):
-        axes[row_idx, 0].set_ylabel(f'SNR of {list(snr_vals.keys())[row_idx]}')
+        axes[row_idx, 0].set_ylabel(f'SNR of {var_names[row_idx]}')
     for col_idx in range(byte_count):
         axes[0, col_idx].set_title(f'Byte {col_idx}')
         axes[-1, col_idx].set_xlabel('Time')

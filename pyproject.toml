@@ -23,7 +23,7 @@ dependencies = [
     "trsfile==0.3.2",
     "captum",
 ]
-requires-python = "==3.11.*"
+requires-python = ">=3.11"
 authors = [
     {name = "Jim Gammell", email = "jgammell.purdue@gmail.com"}
 ]

@@ -60,7 +60,7 @@ cd resources/otp
 
 ### Downloading raw result files
 
-We are distributing a subset of our raw results. These are chosen to allow users to 1) re-generate the important figures from our paper without having to re-run experiments, and 2) selectively re-run experiments without having to run their pre-requisite experiments (e.g. hyperparameter tuning, training supervised models for use in model selection). You can download (27GB) and extract the results as follows:
+We are distributing a subset of our raw results. These are chosen to allow users to 1) re-generate the important figures from our paper without having to re-run experiments, and 2) selectively re-run experiments without having to run their pre-requisite experiments (e.g. hyperparameter tuning, training supervised models for use in model selection). You can download (28.4GB) and extract the results as follows:
 ```bash
 wget -O results.tar.gz "https://huggingface.co/buckets/jgammell/learning-to-localize-leakage/resolve/results.tar.gz?download=true"
 tar -xzvf results.tar.gz

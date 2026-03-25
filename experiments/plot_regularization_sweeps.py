@@ -1,9 +1,10 @@
 from pathlib import Path
-from typing import Tuple
+from typing import Dict, Tuple
 
 from matplotlib import pyplot as plt
 import numpy as np
 from numpy.typing import NDArray
+import yaml
 
 from experiments.initialization import *
 
@@ -17,11 +18,32 @@ SWEEP_PREFIXES = [
     'mixup',
 ]
 
+# Maps sweep prefix to the yaml config path for extracting the default value
+SWEEP_PREFIX_TO_YAML_KEY = {
+    'input_dropout':  ('model', 'input_dropout_rate'),
+    'hidden_dropout': ('model', 'hidden_dropout_rate'),
+    'weight_decay':   ('training', 'weight_decay'),
+    'gaussian_noise': ('training', 'additive_gaussian_noise'),
+    'random_roll':    ('data', 'random_roll_scale'),
+    'random_lpf':     ('data', 'random_lpf_scale'),
+    'mixup':          ('training', 'mixup_alpha'),
+}
+
 DATASETS = [
     ('ascadv1_fixed',    'ASCADv1-fixed',    'test/acc', 'Accuracy'),
     ('ascadv1_variable', 'ASCADv1-variable', 'test/acc', 'Accuracy'),
     ('ches_ctf_2018',    'CHES-CTF-2018',    'test/mtd', 'MTD'),
 ]
+
+
+def load_default_values(config_file: str) -> Dict[str, float]:
+    config_path = Path(f'./experiments/local_config/{config_file}.yaml')
+    with open(config_path, 'r') as f:
+        config = yaml.safe_load(f)
+    defaults = {}
+    for prefix, (section, key) in SWEEP_PREFIX_TO_YAML_KEY.items():
+        defaults[prefix] = float(config[section][key])
+    return defaults
 
 def load_sweep(base_dir: Path, prefix: str, metric_key: str) -> Tuple[NDArray, NDArray, NDArray]:
     """Discover dirs matching prefix, parse values, load metrics. Returns (values, means, stds) sorted by value."""
@@ -54,10 +76,11 @@ def load_sweep(base_dir: Path, prefix: str, metric_key: str) -> Tuple[NDArray, N
 
 
 def plot_sweeps():
-    fig, axes = plt.subplots(len(DATASETS), len(SWEEP_PREFIXES), figsize=(WIDTH * 2.5, 0.8 * WIDTH * len(DATASETS) / len(SWEEP_PREFIXES) * 2.5), squeeze=False)
+    fig, axes = plt.subplots(len(DATASETS), len(SWEEP_PREFIXES), figsize=(WIDTH * 2.5, 0.8 * WIDTH * len(DATASETS) / len(SWEEP_PREFIXES) * 2.5), squeeze=False, sharey='row')
 
     for row, (dataset_key, dataset_label, metric_key, metric_label) in enumerate(DATASETS):
         base_dir = Path(f'./outputs/{dataset_key}/reg_sweep')
+        defaults = load_default_values(dataset_key)
         for col, prefix in enumerate(SWEEP_PREFIXES):
             ax = axes[row, col]
             vals, means, stds = load_sweep(base_dir, prefix, metric_key)
@@ -66,6 +89,14 @@ def plot_sweeps():
                 continue
             ax.plot(vals, means, color='blue', marker='o', markersize=3)
             ax.fill_between(vals, means - stds, means + stds, alpha=0.2, color='blue')
+            # Mark the default (tuned) value with a red star
+            default_val = defaults[prefix]
+            if default_val in vals:
+                idx = np.where(vals == default_val)[0][0]
+                ax.plot(default_val, means[idx], marker='*', color='red', markersize=10, zorder=5)
+            elif len(vals) >= 2:
+                default_mean = np.interp(default_val, vals, means)
+                ax.plot(default_val, default_mean, marker='*', color='red', markersize=10, zorder=5)
             if row == len(DATASETS) - 1:
                 ax.set_xlabel(prefix.replace('_', ' ').title())
             if col == 0:

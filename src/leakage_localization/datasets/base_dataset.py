@@ -13,7 +13,15 @@ class Base_NumpyDataset(ABC):
     timestep_count: int
 
     @abstractmethod
+    def target_preds_to_key_preds(self, target: NDArray[np.floating], int_vars: Dict[str, NDArray[np.uint8]]) -> NDArray[np.floating]:
+        pass
+
+    @abstractmethod
     def compute_intermediate_variables(self, *args: NDArray[np.integer]) -> Dict[str, NDArray[np.integer]]:
+        pass
+
+    @abstractmethod
+    def np_getitem(self, _idx: Union[int, Sequence[int]]) -> Tuple[NDArray[np.floating], NDArray[np.integer], Dict[str, NDArray[np.integer]]]:
         pass
 
     @abstractmethod

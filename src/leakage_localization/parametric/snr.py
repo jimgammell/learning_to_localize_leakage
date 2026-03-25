@@ -113,7 +113,7 @@ def compute_snr(
         # Compute per-target means
         counts_safe = np.where(per_target_counts > 0, per_target_counts, 1)
         per_target_means = per_target_sums / counts_safe[..., np.newaxis]
-        del per_target_sums, per_target_counts
+        del per_target_sums
 
         # Pass 2: Accumulate squared deviations for noise variance
         noise_sum_sq = np.zeros((byte_count, col_count), dtype=dtype)
@@ -133,10 +133,15 @@ def compute_snr(
                 progress_bar.update(batch_size)
 
         # Compute SNR for this intermediate variable
-        signal_var = np.var(per_target_means, axis=1)
+        # Weighted variance of per-target means, using counts as weights,
+        # so that unobserved target values (zero-filled) don't bias the result.
+        weights = per_target_counts[..., np.newaxis].astype(dtype)  # (byte_count, 256, 1)
+        total_weights = weights.sum(axis=1, keepdims=True)  # (byte_count, 1, 1)
+        weighted_mean = (weights * per_target_means).sum(axis=1, keepdims=True) / total_weights  # (byte_count, 1, col_count)
+        signal_var = (weights * (per_target_means - weighted_mean) ** 2).sum(axis=1) / total_weights.squeeze(1)  # (byte_count, col_count)
         noise_var = noise_sum_sq / row_count
         snr_vals[int_val_key] = signal_var / noise_var
-        del per_target_means, noise_sum_sq
+        del per_target_means, per_target_counts, noise_sum_sq
 
     if use_progress_bar:
         progress_bar.close()

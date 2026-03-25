@@ -2,7 +2,7 @@ from typing import Literal, get_args
 from pathlib import Path
 
 from .common import PARTITION
-from .base_dataset import Base_NumpyDataset
+from .base_dataset import Base_NumpyDataset, Base_TorchDataset
 
 DATASET = Literal[
     'ascadv1-fixed',

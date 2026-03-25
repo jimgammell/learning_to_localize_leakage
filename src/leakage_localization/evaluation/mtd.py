@@ -58,6 +58,19 @@ def accumulate_ranks(
     assert np.isfinite(rank_over_time).all()
     return rank_over_time
 
+def compute_mtd(ranks_over_time: NDArray[np.floating], reduction: REDUCTION) -> NDArray[np.floating]:
+    incorrect = ranks_over_time > 1
+    first_correct = incorrect.shape[1] - np.argmax(incorrect[:, ::-1, :], axis=1) + 1
+    first_correct[~incorrect.any(axis=1)] = 1
+    per_byte_mtd = (first_correct).astype(np.float32)
+    if reduction == 'max':
+        mtd = per_byte_mtd.max(axis=1).mean()
+    elif reduction == 'mean':
+        mtd = per_byte_mtd.mean() # not really MTD, but gives a signal for hyperparameter tuning when not all key bytes learn
+    else:
+        assert False
+    return mtd
+
 class MinimumTracesToDisclosure(Metric):
     def __init__(
             self,
@@ -102,14 +115,5 @@ class MinimumTracesToDisclosure(Metric):
         )
         assert np.isfinite(rank_over_time).all()
         assert (rank_over_time >= 1).all()
-        if self.reduction == 'max':
-            incorrect = rank_over_time > 1
-            first_correct = incorrect.shape[1] - np.argmax(incorrect[:, ::-1, :], axis=1) + 1
-            first_correct[~incorrect.any(axis=1)] = 1
-            per_byte_mtd = (first_correct).astype(np.float32)
-            mtd = per_byte_mtd.max(axis=1).mean()
-        elif self.reduction == 'mean':
-            mtd = rank_over_time.mean() # not really MTD, but more granular and preferable for hyperparameter tuning when not all key bytes learn
-        else:
-            assert False
+        mtd = compute_mtd(rank_over_time, reduction=self.reduction)
         return torch.tensor(mtd, dtype=torch.float32)

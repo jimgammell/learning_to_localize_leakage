@@ -1,0 +1,84 @@
+data:
+  id: ascadv1-fixed
+  target_byte: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]
+  target_variable: subbytes
+  preprocessing: standardize
+  random_roll_scale: 0.
+  random_lpf_scale: 0.
+  val_prop: 0.2
+training:
+  total_steps: 97608
+  lr_warmup_frac: 0.05
+  lr_const_frac: 0.
+  batch_size: 256
+  base_lr: 2.0e-3
+  lr_decay_multiplier: 1.0e-4
+  weight_decay: 0.15
+  label_smoothing: 0.
+  mixup_alpha: 0.
+  additive_gaussian_noise: 0.
+  grad_clip_val: 1.
+  accumulate_grad_batches: 1
+  early_stop_metric: val/mtd
+  early_stop_mode: min
+  seed: 0
+  compile: true
+  num_workers: 8
+mtd:
+  attack_count: 1000
+  traces_per_attack: 1000
+model:
+  grey_box_head: null
+  leakage_model: id
+  trunk: transformer
+  position_embedding: rope
+  pooling: token
+  head: tied
+  fnn_style: mlp
+  patch_size: 1000
+  use_fourier_embed: false
+  fourier_embed_num_bands: null
+  fourier_embed_sigma: null
+  embedding_dim: 512
+  expansion_factor: 4
+  trunk_blocks: 8
+  head_count: null
+  register_tokens: 0
+  input_dropout_rate: 0.3
+  input_droppatch_rate: 0.
+  hidden_dropout_rate: 0.1
+  use_bias: false
+  perceiver_latent_dim: null
+  perceiver_self_attn_per_cross_attn_blocks: null
+  perceiver_cross_attn_head_count: null
+search_space:
+  training:
+    base_lr:
+      type: float
+      low: 5.e-4
+      high: 5.e-3
+      log: true
+    lr_decay_multiplier:
+      type: float
+      low: 1.e-4
+      high: 1.0
+      log: true
+    total_steps:
+      type: int
+      low: 9750
+      high: 97500
+      step: 9750
+    weight_decay:
+      type: float
+      low: 1.e-4
+      high: 1.0
+      log: true
+  model:
+    input_dropout_rate:
+      type: float
+      low: 0.0
+      high: 0.5
+    hidden_dropout_rate:
+      type: float
+      low: 0.0
+      high: 0.3

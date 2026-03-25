@@ -5,7 +5,7 @@ import numpy as np
 from experiments.initialization import *
 from .entrypoint import main
 from leakage_localization.datasets import DATASET, PARTITION
-from leakage_localization.parametric_attribution import compute_snr
+from leakage_localization.parametric import compute_snr
 
 def compute_snr_for_dataset(
         *,

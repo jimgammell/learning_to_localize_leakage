@@ -8,8 +8,8 @@ import numpy as np
 from matplotlib import pyplot as plt
 import torch
 
-from . import directories
-from . import mpl_constants
+from .directories import *
+from .mpl_constants import *
 
 SEED: int = 0
 
@@ -26,6 +26,7 @@ def str_to_seed(s: str) -> int:
     return (SEED + crc32(s.encode())) & 0xFFFFFFFF
 
 def init(clargs: Optional[Dict[str, Any]] = None):
+    logging.basicConfig(level=logging.INFO)
     latex_available = shutil.which('latex') is not None
     if not latex_available:
         logging.warning('Latex installation not found. Falling back to non-Latex plotting, which might look ugly.')
@@ -45,5 +46,4 @@ def init(clargs: Optional[Dict[str, Any]] = None):
     directories.init_directories(clargs, directory_config)
 
 init()
-from .directories import *
-from .mpl_constants import *
+from .directories import * # since global variables change after the init function is run

@@ -9,7 +9,7 @@ from torchmetrics.utilities import dim_zero_cat
 
 from .rank import _get_rank
 
-REDUCTION = Literal['max', 'mean']
+REDUCTION = Literal['max', 'mean', 'none']
 
 @jit(nopython=True, parallel=True)
 def _accumulate_ranks(
@@ -41,10 +41,29 @@ def accumulate_ranks(
         attack_count: int = 1000,
         traces_per_attack: Optional[int] = None
 ) -> NDArray[np.floating]:
+    if len(logits.shape) == 2:
+        assert all(len(x.shape) == 1 for x in int_vars.values())
+        logits = logits[:, None, :]
+        int_vars = {k: v[:, None] for k, v in int_vars.items()}
+    elif len(logits.shape) == 3:
+        assert all(len(x.shape) == 2 for x in int_vars.values())
+    else:
+        assert False
     total_trace_count, byte_count, class_count = logits.shape
     assert all(total_trace_count == x.shape[0] for x in int_vars.values())
-    log_target_probs = torch.log_softmax(logits.double(), dim=-1).cpu().numpy()
-    int_vars = {k: v.cpu().numpy() for k, v in int_vars.items()}
+    assert all(byte_count == x.shape[1] for x in int_vars.values())
+    if isinstance(logits, torch.Tensor):
+        log_target_probs = torch.log_softmax(logits.double(), dim=-1).cpu().numpy()
+    elif isinstance(logits, np.ndarray):
+        log_target_probs = torch.log_softmax(torch.from_numpy(logits).double(), dim=-1).numpy()
+    else:
+        assert False
+    if all(isinstance(x, torch.Tensor) for x in int_vars.values()):
+        int_vars = {k: v.cpu().numpy() for k, v in int_vars.items()}
+    elif all(isinstance(x, np.ndarray) for x in int_vars.values()):
+        pass
+    else:
+        assert False
     log_key_probs = target_preds_to_key_preds(log_target_probs, int_vars)
     if traces_per_attack is None:
         traces_per_attack = logits.shape[0]
@@ -67,6 +86,8 @@ def compute_mtd(ranks_over_time: NDArray[np.floating], reduction: REDUCTION) -> 
         mtd = per_byte_mtd.max(axis=1).mean()
     elif reduction == 'mean':
         mtd = per_byte_mtd.mean() # not really MTD, but gives a signal for hyperparameter tuning when not all key bytes learn
+    elif reduction == 'none':
+        mtd = per_byte_mtd
     else:
         assert False
     return mtd

@@ -13,7 +13,7 @@ class Base_NumpyDataset(ABC):
     timestep_count: int
 
     @abstractmethod
-    def target_preds_to_key_preds(self, target: NDArray[np.floating], int_vars: Dict[str, NDArray[np.uint8]]) -> NDArray[np.floating]:
+    def target_preds_to_key_preds(self, target: NDArray[np.floating], int_vars: Dict[str, NDArray[np.uint8]], byte_idx: Optional[int] = None) -> NDArray[np.floating]:
         pass
 
     @abstractmethod

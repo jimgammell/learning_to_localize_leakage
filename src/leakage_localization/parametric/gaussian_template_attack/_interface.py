@@ -1,8 +1,10 @@
 from typing import Tuple, Optional
 from collections import defaultdict
+from math import ceil
 
 import numpy as np
 from numpy.typing import NDArray
+from scipy.special import logsumexp
 
 from leakage_localization.datasets import Base_NumpyDataset
 from leakage_localization.evaluation.mtd import accumulate_ranks
@@ -25,21 +27,33 @@ class GaussianTemplateAttack:
         self.means = None
         self.Ls = None
     
-    def extract_dataset(self, dataset: Base_NumpyDataset) -> Tuple[NDArray[np.floating], NDArray[np.integer]]:
+    def extract_dataset(self, dataset: Base_NumpyDataset, chunk_size: int = 4096) -> Tuple[NDArray[np.floating], NDArray[np.integer]]:
         datapoint_count = len(dataset)
         feature_count = len(self.points_of_interest)
         traces = np.full((datapoint_count, feature_count), np.nan, dtype=np.float32)
         targets = np.full((datapoint_count,), -1, dtype=np.int64)
         collected_metadata = defaultdict(list)
-        for datapoint_idx, (trace, _, metadata) in dataset:
-            trace = trace.squeeze()
-            trace = trace[self.points_of_interest]
-            target = metadata[self.target_key][self.target_idx]
-            traces[datapoint_idx, :] = trace
-            targets[datapoint_idx] = target
+        start_idx = 0
+        for _ in range(ceil(len(dataset)/chunk_size)):
+            end_idx = min(start_idx + chunk_size, len(dataset))
+            trace, _, metadata = dataset[start_idx:end_idx]
+            if len(trace.shape) > 2:
+                assert trace.shape[1] == 1
+                trace = trace.squeeze(axis=1)
+            trace = trace[:, self.points_of_interest]
+            target = metadata[self.target_key][:, self.target_idx]
+            traces[start_idx:end_idx, :] = trace
+            targets[start_idx:end_idx] = target
             for k, v in metadata.items():
+                assert v.ndim == 2
+                if v.shape[1] > 1:
+                    v = v[:, self.target_idx]
+                else:
+                    v = v[:, 0]
                 collected_metadata[k].append(v)
-        collected_metadata = {k: np.stack(v) for k, v in collected_metadata.items()}
+            start_idx = end_idx
+        assert start_idx == len(dataset)
+        collected_metadata = {k: np.concatenate(v, axis=0) for k, v in collected_metadata.items()}
         return traces, targets, collected_metadata
     
     def has_profiled(self) -> bool:
@@ -79,9 +93,10 @@ class GaussianTemplateAttack:
             assert dataset is None
         log_p_x_mid_y = compute_log_p_x_mid_y(traces, self.means, self.Ls, self.unique_targets)
         logits = log_p_x_mid_y + self.log_p_y
+        logits = logits - logsumexp(logits, axis=-1, keepdims=True) # convert these to log-probs. Probably not necessary.
         return logits
     
-    def attack(self, dataset: Base_NumpyDataset, attack_count: int = 1000, traces_per_attack: Optional[int] = None) -> NDArray[np.floating]:
+    def attack(self, dataset: Base_NumpyDataset, attack_count: int = 1000, traces_per_attack: Optional[int] = None,) -> NDArray[np.floating]:
         assert self.has_profiled()
         traces, _, int_vars = self.extract_dataset(dataset)
         traces = (traces - self.trace_mean)/self.trace_std

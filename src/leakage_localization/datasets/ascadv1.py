@@ -164,9 +164,11 @@ class ASCADv1_NumpyDataset(Base_NumpyDataset):
     @staticmethod
     def target_preds_to_key_preds(
             target_preds: NDArray[np.floating],
-            intermediate_variables: Dict[str, NDArray[np.uint8]]
+            intermediate_variables: Dict[str, NDArray[np.uint8]],
     ) -> NDArray[np.floating]:
         plaintext = intermediate_variables['plaintext']
+        assert len(target_preds.shape) == len(plaintext.shape) + 1
+        assert target_preds.shape[:-1] == plaintext.shape
         key_candidates = np.arange(256, dtype=np.uint8)
         target_indices = aes.SBOX[key_candidates ^ plaintext[..., np.newaxis]]
         key_preds = np.take_along_axis(target_preds, target_indices.astype(np.intp), axis=-1)

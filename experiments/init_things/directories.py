@@ -3,6 +3,7 @@ import argparse
 from typing import Optional, Dict
 
 import yaml
+from leakage_localization.datasets import DATASET
 
 class _DuplicateKeyError(yaml.YAMLError):
     pass
@@ -119,3 +120,9 @@ def init_directories(clargs: Optional[Dict[str, str]] = None, config: Optional[D
         raise RuntimeError(f'Directory DOWNLOADS_CACHE_ROOT is not configured. Please configure it by adding the line downloads-cache-root=/path/to/directory/ to {CONFIG_ROOT}.')
     if OUTPUTS_ROOT is None:
         raise RuntimeError(f'Directory OUTPUTS_ROOT is not configured. Please configure it by adding the line outputs-root=/path/to/directory/ to {CONFIG_ROOT}.')
+
+def dash_to_uscr(x: str):
+    return x.replace('-', '_')
+
+def get_output_dir(dataset_id: DATASET):
+    return OUTPUTS_ROOT / dash_to_uscr(dataset_id)

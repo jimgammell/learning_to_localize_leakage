@@ -1,4 +1,4 @@
-from typing import get_args, Callable
+from typing import get_args
 from pathlib import Path
 import argparse
 import logging

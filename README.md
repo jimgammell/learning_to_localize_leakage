@@ -1,6 +1,6 @@
 # Learning to Localize Leakage of Cryptographic Sensitive Variables
 
-This is the official implementation accompanying the paper "Learning to Localize Leakage of Cryptographic Sensitive Variables" (TMLR 2026) by Jimmy Gammell, Anand Raghunathan, Abolfazl Hashemi, and Kaushik Roy ([link](https://openreview.net/forum?id=9qxCSU8nDO&)).
+This is the official implementation accompanying the paper "Learning to Localize Leakage of Cryptographic Sensitive Variables" (TMLR 2026) by Jimmy Gammell, Anand Raghunathan, Abolfazl Hashemi, and Kaushik Roy ([link](https://arxiv.org/abs/2503.07464)).
 
 ## Installation
 

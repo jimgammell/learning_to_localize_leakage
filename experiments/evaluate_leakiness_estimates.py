@@ -6,10 +6,11 @@ import logging
 import numpy as np
 from numpy.typing import NDArray
 from leakage_localization.datasets import DATASET, PARTITION
-from leakage_localization.evaluation import OracleAgreement, compute_ta_mtd
+from leakage_localization.evaluation import OracleAgreement, compute_ta_mtd, compute_dnn_occlusion_mtd
+from leakage_localization.evaluation.dnn_occlusion import OCCLUSION_ORDER
 
 from init_things import *
-from utils.load_data import load_numpy_dataset
+from utils.load_data import load_numpy_dataset, load_torch_dataset, construct_loaders
 
 METRIC = Literal[
     'oracle-agreement',
@@ -25,16 +26,24 @@ def run_compute_oracle_agreement(leakiness_estimates: NDArray[np.floating], data
     oracle_agreement = get_oracle_agreement(leakiness_estimates)
     return oracle_agreement
 
-def run_compute_fwd_dnno_occl(leakiness_estimates: NDArray[np.floating], dataset_id: DATASET) -> NDArray[np.floating]:
-    assert False
+def _run_compute_dnn_occl(leakiness_estimates: NDArray[np.floating], dataset_id: DATASET, order: OCCLUSION_ORDER) -> NDArray[np.floating]:
+    profiling_set = load_numpy_dataset(dataset_id, 'profile')
+    attack_set = load_torch_dataset(dataset_id, 'attack')
+    attack_loader, = construct_loaders([], [attack_set])
+    ckpt_path = r'/home/jgammell/leakage-localization-publishable/outputs/ascadv1_fixed/reg_sweep/gaussian_noise_0./seed_0/best_val_mtd.ckpt' # FIXME
+    dnno_mtd = compute_dnn_occlusion_mtd(leakiness_estimates, profiling_set, attack_loader, ckpt_path, order, progress_bar=True)
+    return dnno_mtd
 
-def run_compute_rev_dnno_occl(leakiness_estimates: NDArray[np.floating], dataset_id: DATASET) -> NDArray[np.floating]:
-    assert False
+def run_compute_fwd_dnn_occl(leakiness_estimates: NDArray[np.floating], dataset_id: DATASET) -> NDArray[np.floating]:
+    return _run_compute_dnn_occl(leakiness_estimates, dataset_id, 'forward')
+
+def run_compute_rev_dnn_occl(leakiness_estimates: NDArray[np.floating], dataset_id: DATASET) -> NDArray[np.floating]:
+    return _run_compute_dnn_occl(leakiness_estimates, dataset_id, 'reverse')
 
 def run_compute_ta_mtd(leakiness_estimates: NDArray[np.floating], dataset_id: DATASET) -> NDArray[np.floating]:
     profiling_set = load_numpy_dataset(dataset_id, 'profile')
     attack_set = load_numpy_dataset(dataset_id, 'attack')
-    ta_mtd = compute_ta_mtd(leakiness_estimates, profiling_set, attack_set)
+    ta_mtd = compute_ta_mtd(leakiness_estimates, profiling_set, attack_set, progress_bar=True)
     return ta_mtd
 
 def main():
@@ -88,9 +97,9 @@ def main():
             if metric_id == 'oracle-agreement':
                 metric = run_compute_oracle_agreement(leakiness_estimates, dataset_id)
             elif metric_id == 'fwd-dnno-occl':
-                metric = run_compute_fwd_dnno_occl(leakiness_estimates, dataset_id)
+                metric = run_compute_fwd_dnn_occl(leakiness_estimates, dataset_id)
             elif metric_id == 'rev-dnno-occl':
-                metric = run_compute_rev_dnno_occl(leakiness_estimates, dataset_id)
+                metric = run_compute_rev_dnn_occl(leakiness_estimates, dataset_id)
             elif metric_id == 'ta-mtd':
                 metric = run_compute_ta_mtd(leakiness_estimates, dataset_id)
             else:

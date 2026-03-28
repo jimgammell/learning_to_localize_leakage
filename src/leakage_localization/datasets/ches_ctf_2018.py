@@ -86,6 +86,7 @@ class CHESCTF2018_NumpyDataset(Base_NumpyDataset):
         else:
             assert False
         self.timestep_count = 650_000
+        self.byte_count = 16
 
         self.binary_trace_path = self.config.root / f'ches_ctf_2018.{self.config.partition}.dat'
         if not self.binary_trace_path.exists():

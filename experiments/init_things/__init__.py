@@ -7,6 +7,7 @@ from binascii import crc32
 import numpy as np
 from matplotlib import pyplot as plt
 import torch
+import lightning
 
 from .directories import *
 from .mpl_constants import *
@@ -21,6 +22,7 @@ def set_seed(seed: Optional[int] = None):
     random.seed(SEED)
     np.random.seed(SEED)
     torch.manual_seed(SEED)
+    lightning.seed_everything(SEED) # redundant but can't hurt
 
 def str_to_seed(s: str) -> int:
     return (SEED + crc32(s.encode())) & 0xFFFFFFFF

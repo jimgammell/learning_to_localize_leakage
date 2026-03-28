@@ -147,6 +147,7 @@ class ASCADv2_NumpyDataset(Base_NumpyDataset):
         else:
             assert False
         self.timestep_count = 1_000_000
+        self.byte_count = 16
         self.trace_indices = np.arange(self.trace_count)
 
         self.traces = None

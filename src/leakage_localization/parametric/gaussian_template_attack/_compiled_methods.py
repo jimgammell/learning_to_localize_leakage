@@ -12,11 +12,11 @@ def fit_means(traces: NDArray[np.float32], targets: NDArray[np.integer], unique_
         means[target_idx, :] = np.sum(traces_target, axis=0) / len(traces_target)
     return means
 
-@jit(nopython=True, parallel=True)
+@jit(nopython=True)
 def fit_covs(traces: NDArray[np.float32], targets: NDArray[np.float32], means: NDArray[np.float32], unique_targets: NDArray[np.integer]) -> NDArray[np.float32]:
     trace_count, feature_count = traces.shape
     covs = np.full((len(unique_targets), feature_count, feature_count), np.nan, dtype=np.float32)
-    for target_idx in prange(len(unique_targets)):
+    for target_idx in range(len(unique_targets)):
         target = unique_targets[target_idx]
         mean = means[target_idx]
         traces_target = traces[targets == target, :]
@@ -30,11 +30,11 @@ def fit_covs(traces: NDArray[np.float32], targets: NDArray[np.float32], means: N
         covs[target_idx, :, :] = cov
     return covs
 
-@jit(nopython=True, parallel=True)
+@jit(nopython=True)
 def choldecomp_covs(covs: NDArray[np.float32]) -> NDArray[np.float32]:
     target_count, feature_count, _ = covs.shape
     decomps = np.full((target_count, feature_count, feature_count), np.nan, dtype=np.float32)
-    for cov_idx in prange(len(covs)):
+    for cov_idx in range(len(covs)):
         cov = covs[cov_idx, :, :]
         L = np.linalg.cholesky(cov + 1.e-2*np.eye(feature_count, dtype=np.float32))
         decomps[cov_idx, :, :] = L

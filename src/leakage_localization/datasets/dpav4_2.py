@@ -128,6 +128,7 @@ class DPAv4d2_NumpyDataset(Base_NumpyDataset):
         else:
             assert False
         self.timestep_count = 1_700_000 # actually 1_704_046, but I'm going to crop it down so it's divisible by more patch sizes
+        self.byte_count = 16
 
         self.binary_trace_path = self.config.root / f'traces.{self.config.partition}.dat'
         self.metadata_path = self.config.root / f'metadata.{self.config.partition}.npz'

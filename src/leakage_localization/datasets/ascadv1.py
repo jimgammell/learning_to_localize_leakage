@@ -143,6 +143,7 @@ class ASCADv1_NumpyDataset(Base_NumpyDataset):
                 self.trace_count = 10_000
             else:
                 assert False
+        self.byte_count = 16
         if not self.data_path.exists():
             raise RuntimeError(f'Failed to find data file at {self.data_path}. Please follow instructions in README.md to download it.')
         checksum_passed_file = self.config.root / (self.data_path.name.split('.')[0] + '.checksum-passed')

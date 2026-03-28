@@ -1,5 +1,8 @@
+from typing import Optional
+
 import numpy as np
 from numpy.typing import NDArray
+from tqdm import tqdm
 
 from leakage_localization.datasets import Base_NumpyDataset
 from leakage_localization.parametric import GaussianTemplateAttack
@@ -50,13 +53,17 @@ def compute_ta_mtd(
         profiling_set: Base_NumpyDataset,
         attack_set: Base_NumpyDataset,
         bin_count: int = 25,
-        pois_per_bin: int = 4
+        pois_per_bin: int = 4,
+        progress_bar: bool = False
 ) -> NDArray[np.floating]:
     byte_count, feature_count = leakiness_estimates.shape
     assert len(profiling_set.config.target_variable) == 1
     target_key = profiling_set.config.target_variable[0]
     ta_mtd = np.full((byte_count,), np.nan, dtype=np.float32)
-    for byte_idx in range(byte_count):
+    byte_iter = range(byte_count)
+    if progress_bar:
+        byte_iter = tqdm(byte_iter, desc='TA-MTD bytes')
+    for byte_idx in byte_iter:
         pois = _select_pois(leakiness_estimates[byte_idx, :], bin_count, pois_per_bin)
         byte_mtd = _run_template_attack(pois, profiling_set, attack_set, target_key, byte_idx)
         ta_mtd[byte_idx] = byte_mtd

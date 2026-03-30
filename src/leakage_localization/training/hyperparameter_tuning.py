@@ -2,6 +2,7 @@ from typing import Literal, Any, List, Optional, Union, Dict, get_args
 from dataclasses import dataclass
 from pathlib import Path
 
+import lightning
 import optuna
 
 PARAM = Literal[
@@ -12,8 +13,8 @@ PARAM = Literal[
 
 @dataclass
 class CategoricalParamConfig:
-    type: PARAM = 'categorical'
     choices: List[Any]
+    type: PARAM = 'categorical'
 
     def __post_init__(self):
         assert self.type == 'categorical'
@@ -21,11 +22,11 @@ class CategoricalParamConfig:
 
 @dataclass
 class FloatParamConfig:
-    type: PARAM = 'float'
     low: float
     high: float
     step: Optional[float] = None
     log: bool = False
+    type: PARAM = 'float'
 
     def __post_init__(self):
         assert self.type == 'float'
@@ -37,11 +38,11 @@ class FloatParamConfig:
 
 @dataclass
 class IntParamConfig:
-    type: PARAM = 'int'
     low: int
     high: int
     step: Optional[int] = 1
     log: bool = False
+    type: PARAM = 'int'
 
     def __post_init__(self):
         assert self.type == 'int'
@@ -61,6 +62,18 @@ StudyDirection = Literal[
     'minimize',
     'maximize'
 ]
+
+class PruningCallback(lightning.Callback):
+    def __init__(self, trial: optuna.Trial, early_stop_metric: str):
+        super().__init__()
+        self.trial = trial
+        self.early_stop_metric = early_stop_metric
+    
+    def on_validation_epoch_end(self, trainer: lightning.Trainer, pl_module: lightning.LightningModule):
+        tracked_metric = trainer.callback_metrics[self.early_stop_metric].item()
+        self.trial.report(tracked_metric, step=trainer.current_epoch)
+        if self.trial.should_prune():
+            raise optuna.TrialPruned()
 
 def sample_hparams(trial: optuna.Trial, param_configs: Dict[str, ParamConfig]) -> Dict[str, Any]:
     rv = dict()

@@ -4,9 +4,9 @@ import numpy as np
 from numpy.typing import NDArray
 from tqdm import tqdm
 
-from leakage_localization.datasets import Base_NumpyDataset
-from leakage_localization.parametric import GaussianTemplateAttack
-from leakage_localization.evaluation import compute_mtd
+from leakage_localization.datasets.base_dataset import Base_NumpyDataset
+from leakage_localization.parametric.gaussian_template_attack._interface import GaussianTemplateAttack
+from leakage_localization.evaluation.mtd import compute_mtd
 
 def _run_template_attack(
         points_of_interest: NDArray[np.integer],

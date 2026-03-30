@@ -8,8 +8,8 @@ import torch
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 
-from leakage_localization.datasets import Base_NumpyDataset
-from leakage_localization.training import SupervisedModule
+from leakage_localization.datasets.base_dataset import Base_NumpyDataset
+from leakage_localization.training.supervised_lightning_module import SupervisedModule
 from leakage_localization.evaluation.mtd import accumulate_ranks, compute_mtd
 
 OCCLUSION_ORDER = Literal[

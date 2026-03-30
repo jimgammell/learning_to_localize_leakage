@@ -5,7 +5,7 @@ import numpy as np
 from numpy.typing import NDArray
 from scipy.stats import spearmanr
 
-from leakage_localization.datasets import DATASET, PARTITION
+from leakage_localization.datasets.common import DATASET, PARTITION
 
 class OracleAgreement:
     def __init__(

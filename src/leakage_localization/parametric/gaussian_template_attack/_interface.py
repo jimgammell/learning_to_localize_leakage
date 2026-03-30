@@ -6,7 +6,7 @@ import numpy as np
 from numpy.typing import NDArray
 from scipy.special import logsumexp
 
-from leakage_localization.datasets import Base_NumpyDataset
+from leakage_localization.datasets.base_dataset import Base_NumpyDataset
 from leakage_localization.evaluation.mtd import accumulate_ranks
 from ._compiled_methods import *
 

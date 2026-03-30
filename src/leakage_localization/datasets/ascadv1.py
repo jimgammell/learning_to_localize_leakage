@@ -8,7 +8,8 @@ import numpy as np
 from numpy.typing import NDArray
 import torch
 
-from leakage_localization.utils import aes, get_sha256_hash
+from leakage_localization.utils import aes
+from leakage_localization.utils.checksum import get_sha256_hash
 from .common import PARTITION
 from .base_dataset import Base_NumpyDataset, Base_TorchDataset
 from .compute_trace_statistics import compute_trace_statistics

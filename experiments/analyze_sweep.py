@@ -8,6 +8,12 @@ import numpy as np
 from matplotlib import pyplot as plt
 
 from init_things import *
+from utils.visualize_runs import (
+    plot_training_curves,
+    plot_occlusion_test,
+    plot_template_attack_test,
+    plot_white_box_agreement
+)
 
 def compare_attack_localization_performance(sweep: pandas.DataFrame, dest: Path):
     attack_performance = 100*sweep['full_acc']
@@ -25,38 +31,117 @@ def compare_attack_localization_performance(sweep: pandas.DataFrame, dest: Path)
     fig.savefig(dest / 'attack_vs_loc_performance.pdf', dpi=DPI)
     plt.close(fig)
 
-def plot_best_training_curves(sweep: pandas.DataFrame, dest: Path):
+def run_plot_best_training_curves(sweep: pandas.DataFrame, dest: Path):
     best_attack_path, best_loc_path = get_best_model_paths(sweep)
-    ametrics = pandas.read_csv(best_attack_path / 'metrics.csv')
-    a_step = ametrics['step']
-    a_train_loss = ametrics['train/loss']
-    a_val_loss = ametrics['val/loss']
-    a_train_acc = ametrics['train/acc']
-    a_val_acc = ametrics['val/acc']
-    lmetrics = pandas.read_csv(best_loc_path / 'metrics.csv')
-    l_step = lmetrics['step']
-    l_train_loss = lmetrics['train/loss']
-    l_val_loss = lmetrics['val/loss']
-    l_train_acc = lmetrics['train/acc']
-    l_val_acc = lmetrics['val/acc']
     fig, axes = plt.subplots(1, 2, figsize=(2*WIDTH, WIDTH))
-    axes[0].plot(a_step[~a_train_loss.isna()], a_train_loss[~a_train_loss.isna()], color='blue', linestyle=':', label='Best attacker (train)')
-    axes[0].plot(a_step[~a_val_loss.isna()], a_val_loss[~a_val_loss.isna()], color='blue', linestyle='-', label='Best attacker (val)')
-    axes[0].plot(l_step[~l_train_loss.isna()], l_train_loss[~l_train_loss.isna()], color='red', linestyle=':', label='Best localizer (train)')
-    axes[0].plot(l_step[~l_val_loss.isna()], l_val_loss[~l_val_loss.isna()], color='red', linestyle='-', label='Best localizer (val)')
+    plot_training_curves(
+        best_attack_path,
+        axes[0],
+        'loss',
+        color='red',
+        train_plot_kwargs={'label': 'Best attacker (train)'},
+        val_plot_kwargs={'label': 'Best attacker (val)'}
+    )
+    plot_training_curves(
+        best_loc_path,
+        axes[0],
+        'loss',
+        color='blue',
+        train_plot_kwargs={'label': 'Best localizer (train)'},
+        val_plot_kwargs={'label': 'Best localizer (val)'}
+    )
+    plot_training_curves(
+        best_attack_path,
+        axes[1],
+        'acc',
+        color='red',
+        train_plot_kwargs={'label': 'Best attacker (train)'},
+        val_plot_kwargs={'label': 'Best attacker (val)'}
+    )
+    plot_training_curves(
+        best_loc_path,
+        axes[1],
+        'acc',
+        color='blue',
+        train_plot_kwargs={'label': 'Best localizer (train)'},
+        val_plot_kwargs={'label': 'Best localizer (val)'}
+    )
     axes[0].set_xlabel('Step')
     axes[0].set_ylabel('Cross-entropy loss (full key)')
     axes[0].set_yscale('log')
     axes[0].legend(loc='lower left', framealpha=0)
-    axes[1].plot(a_step[~a_train_acc.isna()], a_train_acc[~a_train_acc.isna()], color='blue', linestyle=':', label='Best attacker (train)')
-    axes[1].plot(a_step[~a_val_acc.isna()], a_val_acc[~a_val_acc.isna()], color='blue', linestyle='-', label='Best attacker (val)')
-    axes[1].plot(l_step[~l_train_acc.isna()], l_train_acc[~l_train_acc.isna()], color='red', linestyle=':', label='Best localizer (train)')
-    axes[1].plot(l_step[~l_val_acc.isna()], l_val_acc[~l_val_acc.isna()], color='red', linestyle='-', label='Best localizer (val)')
     axes[1].legend(loc='upper left', framealpha=0)
     axes[1].set_xlabel('Step')
     axes[1].set_ylabel('Accuracy (full key)')
     fig.tight_layout()
     fig.savefig(dest / 'training_curve_comparison.pdf', dpi=DPI)
+    plt.close(fig)
+
+def run_plot_occlusion_test(src: Path, dest: Path):
+    fwd_path = src / 'fwd_dnno_occl.gradvis.npy'
+    rev_path = src / 'rev_dnno_occl.gradvis.npy'
+    fig, ax = plt.subplots(1, 1, figsize=(WIDTH, WIDTH))
+    plot_occlusion_test(
+        fwd_path,
+        ax,
+        color='blue',
+        label='Forward'
+    )
+    plot_occlusion_test(
+        rev_path,
+        ax,
+        color='red',
+        label='Reverse'
+    )
+    ax.set_xlabel('Points occluded')
+    ax.set_ylabel('MTD (full key)')
+    ax.set_title('Visualization of DNN occlusion tests')
+    ax.legend(framealpha=0, loc='upper right')
+    fig.tight_layout()
+    fig.savefig(dest / 'occlusion_test_vis.pdf', dpi=DPI)
+    plt.close(fig)
+
+def run_plot_template_attack_test(src: Path, dest: Path):
+    ta_path = src / 'ta_mtd.gradvis.npz'
+    fig, ax = plt.subplots(1, 1, figsize=(WIDTH, WIDTH))
+    plot_template_attack_test(
+        ta_path,
+        ax,
+    )
+    ax.set_xlabel('Traces seen')
+    ax.set_ylabel('MTD (full key)')
+    ax.set_title('Visualization of template attack performance')
+    ax.set_xscale('log')
+    fig.tight_layout()
+    fig.savefig(dest / 'template_attack_test.pdf', dpi=DPI)
+    plt.close(fig)
+
+def run_plot_white_box_agreement(black_box_src: Path, white_box_src: Path, dest: Path):
+    fig = plt.figure(figsize=(WIDTH, WIDTH/4))
+    gs = fig.add_gridspec(2, 9, width_ratios=[1, 1, 0.2, 1, 1, 0.2, 1, 1, 1], height_ratios=[1, 1], wspace=0.25, hspace=0.25)
+    vars_ax = fig.add_subplot(gs[0:2, 6:9])
+    vars_tax = vars_ax.twinx()
+    oracle_ax = fig.add_subplot(gs[0:2, 0:2])
+    measured_ax = fig.add_subplot(gs[0:2, 3:5])
+    rin_ax = fig.add_subplot(gs[0, 6])
+    srin_ax = fig.add_subplot(gs[0, 7], sharex=rin_ax)
+    r_ax = fig.add_subplot(gs[1, 6], sharex=rin_ax)
+    sr_ax = fig.add_subplot(gs[1, 7], sharex=rin_ax)
+    rout_ax = fig.add_subplot(gs[0, 8], sharex=rin_ax)
+    srout_ax = fig.add_subplot(gs[1, 8], sharex=rin_ax)
+    var_axes = np.array([rin_ax, srin_ax, r_ax, sr_ax, rout_ax, srout_ax])
+
+    plot_white_box_agreement(
+        black_box_src / 'gradvis.npy',
+        white_box_src,
+        oracle_ax,
+        measured_ax,
+        var_axes
+    )
+    oracle_ax.set_xlabel(r'Time $t$')
+    oracle_ax.set_ylabel(r'White-box SNR of $X_t$')
+    oracle_ax.set_yscale('log')
+    fig.savefig(dest / 'white_box_comparison.pdf', dpi=DPI, bbox_inches='tight')
     plt.close(fig)
 
 def get_best_model_paths(sweep: pandas.DataFrame) -> Union[Path, Path]:
@@ -115,7 +200,20 @@ def main():
     sweep = load_sweep(src)
     print(sweep)
     compare_attack_localization_performance(sweep, dest)
-    plot_best_training_curves(sweep, dest)
+    run_plot_best_training_curves(sweep, dest)
+    run_plot_occlusion_test(
+        Path(r'/home/jgammell/leakage-localization-publishable/outputs/ascadv1_fixed/reg_sweep/gaussian_noise_0./seed_0'),
+        dest
+    )
+    run_plot_template_attack_test(
+        Path(r'/home/jgammell/leakage-localization-publishable/outputs/ascadv1_fixed/reg_sweep/gaussian_noise_0./seed_0'),
+        dest
+    )
+    run_plot_white_box_agreement(
+        Path(r'/home/jgammell/leakage-localization-publishable/outputs/ascadv1_fixed/reg_sweep/gaussian_noise_0./seed_0'),
+        Path(r'/home/jgammell/leakage-localization-publishable/outputs/ascadv1_fixed/snr'),
+        dest
+    )
 
 if __name__ == '__main__':
     main()

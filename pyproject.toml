@@ -22,6 +22,7 @@ dependencies = [
     "pandas",
     "trsfile==0.3.2",
     "captum",
+    "pydantic",
 ]
 requires-python = ">=3.11"
 authors = [

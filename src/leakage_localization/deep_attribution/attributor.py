@@ -10,7 +10,8 @@ from leakage_localization.training.supervised_lightning_module import Supervised
 
 ATTRIBUTION_METHOD = Literal[
     'gradvis',
-    'shapley'
+    'shapley',
+    'n-occlusion'
 ]
 
 class Attributor:
@@ -54,6 +55,30 @@ class Attributor:
                 grads[:, head_idx, :] += grad.detach().view(batch_size, feature_count)
         attribution = grads.abs() / smoothing_count
         return attribution
+    
+    @torch.inference_mode()
+    def compute_n_occlusion(
+            self,
+            batch: Tuple[torch.Tensor, torch.Tensor, Dict[str, torch.Tensor]],
+            window_size: int = 1,
+            perturbations_per_eval: int = 1
+    ):
+        trace, target, intermediate_values = self.module.prepare_batch(batch)
+        batch_size, *_, feature_count = trace.shape
+        *_, head_count = target.shape
+        attrs = torch.zeros((batch_size, head_count, feature_count), dtype=trace.dtype, device=trace.device)
+        for head_idx in range(head_count):
+            occludor = captum.attr.Occlusion(
+                partial(self._get_loss, target=target, head_idx=head_idx)
+            )
+            attr = occludor.attribute(
+                trace,
+                sliding_window_shapes=(1, window_size),
+                strides=(1,),
+                perturbations_per_eval=perturbations_per_eval,
+            )
+            attrs[:, head_idx, :] = attr.view(batch_size, feature_count).abs()
+        return attrs
     
     @torch.no_grad()
     def compute_shapley(
@@ -107,6 +132,8 @@ class Attributor:
             attr_fn = partial(self.compute_gradvis, **attr_kwargs)
         elif attr_method == 'shapley':
             attr_fn = partial(self.compute_shapley, **attr_kwargs)
+        elif attr_method == 'n-occlusion':
+            attr_fn = partial(self.compute_n_occlusion, **attr_kwargs)
         else:
             assert False
         attr = self.aggregate_attributions(attr_fn, dataloader, show_progress_bar=show_progress_bar)

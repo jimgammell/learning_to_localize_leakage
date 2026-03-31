@@ -1,58 +1,10 @@
-from typing import Literal, Any, List, Optional, Union, Dict, get_args
-from dataclasses import dataclass
+from typing import Literal, Any, List, Optional, Union, Dict, Annotated, get_args
 from pathlib import Path
 
+from pydantic import BaseModel, Field, StrictBool
 import lightning
 import optuna
 
-PARAM = Literal[
-    'categorical',
-    'float',
-    'int'
-]
-
-@dataclass
-class CategoricalParamConfig:
-    choices: List[Any]
-    type: PARAM = 'categorical'
-
-    def __post_init__(self):
-        assert self.type == 'categorical'
-        assert isinstance(self.choices, list)
-
-@dataclass
-class FloatParamConfig:
-    low: float
-    high: float
-    step: Optional[float] = None
-    log: bool = False
-    type: PARAM = 'float'
-
-    def __post_init__(self):
-        assert self.type == 'float'
-        assert isinstance(self.low, float)
-        assert isinstance(self.high, float)
-        if self.step is not None:
-            assert isinstance(self.step, float) and self.step > 0
-        assert isinstance(self.log, bool)
-
-@dataclass
-class IntParamConfig:
-    low: int
-    high: int
-    step: Optional[int] = 1
-    log: bool = False
-    type: PARAM = 'int'
-
-    def __post_init__(self):
-        assert self.type == 'int'
-        assert isinstance(self.low, int)
-        assert isinstance(self.high, int)
-        if self.step is not None:
-            assert isinstance(self.step, int) and self.step > 0
-        assert isinstance(self.log, bool)
-
-ParamConfig = Union[CategoricalParamConfig, FloatParamConfig, IntParamConfig]
 SamplerType = Literal[
     'tpe',
     'qmc',
@@ -63,19 +15,42 @@ StudyDirection = Literal[
     'maximize'
 ]
 
+class CategoricalParamConfig(BaseModel):
+    type: Literal['categorical'] = 'categorical'
+    choices: List[Any]
+
+class FloatParamConfig(BaseModel):
+    type: Literal['float'] = 'float'
+    low: float
+    high: float
+    step: Optional[Annotated[float, Field(gt=0)]] = None
+    log: StrictBool = False
+
+class IntParamConfig(BaseModel):
+    type: Literal['int'] = 'int'
+    low: int
+    high: int
+    step: Optional[Annotated[int, Field(gt=0)]] = 1
+    log: StrictBool = False
+
+ParamConfig = Annotated[
+    Union[CategoricalParamConfig, FloatParamConfig, IntParamConfig],
+    Field(discriminator='type')
+]
+
 class PruningCallback(lightning.Callback):
     def __init__(self, trial: optuna.Trial, early_stop_metric: str):
         super().__init__()
         self.trial = trial
         self.early_stop_metric = early_stop_metric
-    
+
     def on_validation_epoch_end(self, trainer: lightning.Trainer, pl_module: lightning.LightningModule):
         tracked_metric = trainer.callback_metrics[self.early_stop_metric].item()
         self.trial.report(tracked_metric, step=trainer.current_epoch)
         if self.trial.should_prune():
             raise optuna.TrialPruned()
 
-def sample_hparams(trial: optuna.Trial, param_configs: Dict[str, ParamConfig]) -> Dict[str, Any]:
+def sample_hparams(trial: optuna.Trial, param_configs: Dict[str, Any]) -> Dict[str, Any]:
     rv = dict()
     for param_key, param_config in param_configs.items():
         if param_config.type == 'categorical':

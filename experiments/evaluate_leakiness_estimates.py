@@ -84,7 +84,7 @@ def main():
     assert isinstance(overwrite, bool)
 
     for metric_id in metric_ids:
-        dest_path = dest / f'{dash_to_uscr(metric_id)}.{path_to_eval.stem}.npy'
+        dest_path = dest / (f'{dash_to_uscr(metric_id)}.{path_to_eval.stem}' + ('.npz' if metric_id == 'ta-mtd' else '.npy'))
         should_compute = True
         if dest_path.exists():
             if overwrite:
@@ -96,18 +96,22 @@ def main():
             leakiness_estimates = np.load(path_to_eval)
             if metric_id == 'oracle-agreement':
                 metric = run_compute_oracle_agreement(leakiness_estimates, dataset_id)
+                np.save(dest_path, metric)
             elif metric_id == 'fwd-dnno-occl':
                 metric = run_compute_fwd_dnn_occl(leakiness_estimates, dataset_id)
+                np.save(dest_path, metric)
             elif metric_id == 'rev-dnno-occl':
                 metric = run_compute_rev_dnn_occl(leakiness_estimates, dataset_id)
+                np.save(dest_path, metric)
             elif metric_id == 'ta-mtd':
-                metric = run_compute_ta_mtd(leakiness_estimates, dataset_id)
+                mtd, rank_over_time = run_compute_ta_mtd(leakiness_estimates, dataset_id)
+                metric = {'mtd': mtd, 'rank_over_time': rank_over_time}
+                np.savez(dest_path, **metric)
             else:
                 assert False
-            np.save(dest_path, metric)
             logging.info(f'Stored metric {metric_id} for file `{path_to_eval}` at `{dest_path}`.')
         metric = np.load(dest_path)
-        logging.info(f'Metric {metric_id} for file `{path_to_eval}`: {metric} (mean={metric.mean()}, std={metric.std()})')
+        logging.info(f'Metric {metric_id} for file `{path_to_eval}`: {metric if isinstance(metric, np.ndarray) else [(k, v.shape) for k, v in metric.items()]})')
 
 if __name__ == '__main__':
     main()

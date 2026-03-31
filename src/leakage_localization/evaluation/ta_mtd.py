@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import Tuple
 
 import numpy as np
 from numpy.typing import NDArray
@@ -14,7 +14,7 @@ def _run_template_attack(
         attack_set: Base_NumpyDataset,
         target_key: str,
         target_idx: int
-) -> float:
+) -> Tuple[float, NDArray[np.floating]]:
     template_attack = GaussianTemplateAttack(
         points_of_interest,
         target_key,
@@ -23,7 +23,8 @@ def _run_template_attack(
     template_attack.profile(profiling_set)
     rank_over_time = template_attack.attack(attack_set)
     mtd = compute_mtd(rank_over_time, reduction='mean')
-    return mtd
+    rank_over_time = rank_over_time.mean(axis=(0, 2))
+    return mtd, rank_over_time
 
 def _select_pois(
         leakiness_estimates: NDArray[np.floating],
@@ -55,17 +56,20 @@ def compute_ta_mtd(
         bin_count: int = 25,
         pois_per_bin: int = 4,
         progress_bar: bool = False
-) -> NDArray[np.floating]:
+) -> Tuple[NDArray[np.floating], ...]:
     byte_count, feature_count = leakiness_estimates.shape
     assert len(profiling_set.config.target_variable) == 1
     target_key = profiling_set.config.target_variable[0]
     ta_mtd = np.full((byte_count,), np.nan, dtype=np.float32)
+    rank_over_time = np.full((byte_count, len(attack_set)), np.nan, dtype=np.float32)
     byte_iter = range(byte_count)
     if progress_bar:
         byte_iter = tqdm(byte_iter, desc='TA-MTD bytes')
     for byte_idx in byte_iter:
         pois = _select_pois(leakiness_estimates[byte_idx, :], bin_count, pois_per_bin)
-        byte_mtd = _run_template_attack(pois, profiling_set, attack_set, target_key, byte_idx)
+        byte_mtd, byte_rank_over_time = _run_template_attack(pois, profiling_set, attack_set, target_key, byte_idx)
         ta_mtd[byte_idx] = byte_mtd
+        rank_over_time[byte_idx, :] = byte_rank_over_time
     assert np.isfinite(ta_mtd).all()
-    return ta_mtd
+    assert np.isfinite(rank_over_time).all()
+    return ta_mtd, rank_over_time

@@ -8,8 +8,8 @@ data:
   val_prop: 0.2
 training:
   total_steps: 78200
-  lr_warmup_epochs: 5
-  lr_const_epochs: 0
+  lr_warmup_frac: 0.05
+  lr_const_frac: 0.
   batch_size: 256
   base_lr: 1.0e-3
   lr_decay_multiplier: 1.0e-4

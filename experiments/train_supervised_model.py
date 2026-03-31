@@ -18,7 +18,7 @@ from leakage_localization.models import Model
 
 from init_things import *
 from utils.load_data import load_torch_dataset, construct_loaders
-from utils.training_config import SupervisedTrainingConfig, construct_search_space
+from utils.training_config import SupervisedTrainingConfig
 
 # function by Claude to override particular config arguments from the command line
 def _apply_overrides(config: Dict[str, Any], overrides: list) -> None:
@@ -83,8 +83,9 @@ def construct_module(profiling_set: Base_TorchDataset, config: SupervisedTrainin
             fourier_embed_num_bands=config.model.fourier_embed_num_bands,
             fourier_embed_sigma=config.model.fourier_embed_sigma,
             embedding_dim=config.model.embedding_dim,
+            expansion_factor=config.model.expansion_factor,
             trunk_blocks=config.model.trunk_blocks,
-            head_blocks=config.model.head_count,
+            head_count=config.model.head_count,
             register_tokens=config.model.register_tokens,
             input_dropout_rate=config.model.input_dropout_rate,
             input_droppatch_rate=config.model.input_droppatch_rate,
@@ -154,7 +155,7 @@ def _optuna_objective(
     config.training.seed = trial.number
     for field_key, field_search_space in config.search_space.items():
         new_hparams = sample_hparams(trial, field_search_space)
-        assert hasattr(config, 'field_key')
+        assert hasattr(config, field_key)
         for k, v in new_hparams.items():
             assert hasattr(getattr(config, field_key), k)
             setattr(getattr(config, field_key), k, v)
@@ -211,7 +212,7 @@ def main():
         with open(config_path, 'r') as f:
             existing_config = yaml.safe_load(f)
         existing_hash = existing_config.pop('commit_hash', None)
-        current_hash = config_kw.pop('commit_has', None)
+        current_hash = config_kw.pop('commit_hash', None)
         if existing_hash != current_hash:
             logging.warning(f'Resuming trial with a different commit hash. Current hash: {current_hash}. Existing hash: {existing_hash}.')
         assert config_kw == existing_config

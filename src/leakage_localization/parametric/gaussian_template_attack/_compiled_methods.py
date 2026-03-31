@@ -36,7 +36,7 @@ def choldecomp_covs(covs: NDArray[np.float32]) -> NDArray[np.float32]:
     decomps = np.full((target_count, feature_count, feature_count), np.nan, dtype=np.float32)
     for cov_idx in range(len(covs)):
         cov = covs[cov_idx, :, :]
-        L = np.linalg.cholesky(cov + 1.e-2*np.eye(feature_count, dtype=np.float32))
+        L = np.linalg.cholesky(cov + 1.e-6*np.eye(feature_count, dtype=np.float32))
         decomps[cov_idx, :, :] = L
     return decomps
 

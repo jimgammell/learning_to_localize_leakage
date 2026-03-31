@@ -91,4 +91,5 @@ def compute_dnn_occlusion_mtd(
         ranks = accumulate_ranks(logits, int_vars, profiling_set.target_preds_to_key_preds, attack_count=attack_count)
         mtd = compute_mtd(ranks, reduction='mean')
         dnno_mtd[bin_idx] = mtd
+    assert np.isfinite(dnno_mtd).all()
     return dnno_mtd

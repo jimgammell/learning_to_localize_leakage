@@ -12,7 +12,7 @@
 
 source ~/.bashrc
 micromamba activate leakage-localization
-./bash_scripts/sup_train_and_eval.sh \
+bash ./bash_scripts/sup_train_and_eval.sh \
     ascadv1_fixed \
     ./outputs/ascadv1_fixed/strong_attacker/seed_${SLURM_ARRAY_TASK_ID} \
     "" \

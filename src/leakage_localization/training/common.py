@@ -1,4 +1,6 @@
-from typing import Literal
+from typing import Literal, Tuple, Dict
+
+import torch
 
 LEAKAGE_MODEL = Literal[
     'bit',
@@ -14,3 +16,5 @@ PREPROCESSING = Literal[
     'standardize',
     'normalize'
 ]
+
+BATCH = Tuple[torch.Tensor, torch.Tensor, Dict[str, torch.Tensor]]

@@ -8,7 +8,7 @@ import lightning
 from torchmetrics import MetricCollection
 from torchmetrics.classification import MulticlassAccuracy
 
-from .common import LEAKAGE_MODEL, PHASE, PREPROCESSING
+from .common import LEAKAGE_MODEL, PHASE, PREPROCESSING, BATCH
 from .cosine_decay_lr_scheduler import CosineDecayLRSched
 from ..evaluation.mtd import MinimumTracesToDisclosure
 from ..evaluation.rank import Rank
@@ -148,7 +148,7 @@ class SupervisedModule(lightning.LightningModule):
         )
         return {'optimizer': optimizer, 'lr_scheduler': {'scheduler': lr_scheduler, 'interval': 'step'}}
     
-    def prepare_batch(self, batch: Tuple[torch.Tensor, torch.Tensor, Dict[str, torch.Tensor]]) -> Tuple[torch.Tensor, torch.Tensor, Dict[str, torch.Tensor]]:
+    def prepare_batch(self, batch: BATCH) -> BATCH:
         trace, target, intermediate_variables = batch
         trace = trace.to(self.device)
         target = target.to(self.device)
@@ -212,7 +212,7 @@ class SupervisedModule(lightning.LightningModule):
             assert False
         return per_output_loss
 
-    def _step(self, batch: Tuple[torch.Tensor, torch.Tensor, Dict[str, torch.Tensor]], phase: PHASE) -> torch.Tensor:
+    def _step(self, batch: BATCH, phase: PHASE) -> torch.Tensor:
         trace, target, intermediate_variables = self.prepare_batch(batch)
         batch_size, output_count = target.shape
 
@@ -276,13 +276,13 @@ class SupervisedModule(lightning.LightningModule):
     def on_validation_epoch_end(self):
         self._log_rank_stats('val')
 
-    def training_step(self, batch: Tuple[torch.Tensor, torch.Tensor, Dict[str, torch.Tensor]]) -> torch.Tensor:
+    def training_step(self, batch: BATCH) -> torch.Tensor:
         return self._step(batch, phase='train')
-    def validation_step(self, batch: Tuple[torch.Tensor, torch.Tensor, Dict[str, torch.Tensor]]) -> torch.Tensor:
+    def validation_step(self, batch: BATCH) -> torch.Tensor:
         return self._step(batch, phase='val')
-    def test_step(self, batch: Tuple[torch.Tensor, torch.Tensor, Dict[str, torch.Tensor]]) -> torch.Tensor:
+    def test_step(self, batch: BATCH) -> torch.Tensor:
         return self._step(batch, phase='test')
-    def predict_step(self, batch: Tuple[torch.Tensor, torch.Tensor, Dict[str, torch.Tensor]], batch_idx: int):
+    def predict_step(self, batch: BATCH, batch_idx: int):
         trace, _, intermediate_variables = self.prepare_batch(batch)
         byte_logits = self.logits_to_byte_logits(self.model(trace))
         return byte_logits, intermediate_variables

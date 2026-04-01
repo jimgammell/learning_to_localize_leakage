@@ -10,7 +10,7 @@ import lightning
 from leakage_localization.models.advll_submodules import SelectionMechanism
 from leakage_localization.models.building_blocks.bits_and_bytes import BitLogitsToByteLogits, HwLogitsToByteLogits
 from .cosine_decay_lr_scheduler import CosineDecayLRSched
-from .common import PHASE, LEAKAGE_MODEL, PREPROCESSING
+from .common import PHASE, LEAKAGE_MODEL, PREPROCESSING, BATCH
 
 @dataclass
 class ALLModuleConfig:
@@ -155,3 +155,104 @@ class ALLModule(lightning.LightningModule):
             {'optimizer': model_optimizer, 'lr_scheduler': {'scheduler': model_lr_scheduler, 'interval': 'step'}},
             {'optimizer': sm_optimizer, 'lr_scheduler': {'scheduler': sm_lr_scheduler, 'interval': 'step'}}
         ]
+
+    def prepare_batch(self, batch: BATCH, augment: bool = False) -> BATCH:
+        trace, target, intermediate_variables = batch
+        trace = trace.to(self.device)
+        target = target.to(self.device)
+        trace = trace.float()
+        if self.config.preprocessing == 'standardize':
+            trace = (trace - self.trace_mean) / self.trace_std
+        elif self.config.preprocessing == 'normalize':
+            trace = (trace - self.trace_min) / self.trace_rng
+        else:
+            assert False
+        if augment and self.config.random_roll_scale > 0:
+            shift_sgn = 1 if np.random.randint(2) else -1
+            shift_amt = int(abs(self.config.random_roll_scale * np.random.standard_normal()))
+            if shift_amt > 0:
+                trace = nn.functional.pad(trace, (shift_amt, shift_amt), mode='reflect')
+                if shift_sgn > 0:
+                    trace = trace[..., :-2*shift_amt]
+                else:
+                    trace = trace[..., 2*shift_amt:]
+        if augment and self.config.random_lpf_scale > 0:
+            smooth_radius = int(abs(self.config.random_lpf_scale * np.random.standard_normal()))
+            if smooth_radius > 0:
+                trace = nn.functional.pad(trace, (smooth_radius, smooth_radius), mode='reflect')
+                trace = nn.functional.avg_pool1d(trace, kernel_size=2*smooth_radius + 1, stride=1)
+        if augment and self.config.additive_gaussian_noise > 0:
+            trace = trace + self.config.additive_gaussian_noise*torch.randn_like(trace)
+        trace = trace.to(self.dtype)
+        return trace, target, intermediate_variables
+    
+    # equal to -mutual_information + constant
+    def compute_loss(self, logits: torch.Tensor, _target: torch.Tensor) -> torch.Tensor:
+        batch_size, output_count = _target.shape
+        assert output_count == self.config.num_labels, (
+            f'Target has {output_count} outputs but model expects {self.config.num_labels}. '
+            f'Did you forget to pass target_byte/target_variable when loading the dataset?'
+        )
+        if self.config.leakage_model == 'bit':
+            target = (_target.unsqueeze(-1) >> torch.arange(8, device=_target.device, dtype=torch.long)) & 1
+            target = target.to(logits.dtype)
+            if self.training and self.config.label_smoothing > 0:
+                target = (1 - self.config.label_smoothing)*target + self.config.label_smoothing*0.5
+            per_output_loss = nn.functional.binary_cross_entropy_with_logits(
+                logits, target, reduction='none'
+            ).mean(dim=-1)
+        elif self.config.leakage_model == 'hw':
+            target = ((_target.unsqueeze(-1) >> torch.arange(8, device=_target.device, dtype=torch.long)) & 1).sum(dim=-1)
+            per_output_loss = nn.functional.cross_entropy(
+                logits.reshape(batch_size*output_count, -1),
+                target.reshape(batch_size*output_count),
+                label_smoothing=self.config.label_smoothing if self.training else 0.,
+                reduction='none'
+            ).reshape(batch_size, output_count)
+        elif self.config.leakage_model == 'id':
+            target = _target
+            per_output_loss = nn.functional.cross_entropy(
+                logits.reshape(batch_size*output_count, -1),
+                target.reshape(batch_size*output_count),
+                label_smoothing=self.config.label_smoothing if self.training else 0.,
+                reduction='none'
+            ).reshape(batch_size, output_count)
+        else:
+            assert False
+        return per_output_loss
+
+    def _step(self, batch: BATCH, train_theta: bool = False, train_etat: bool = False) -> torch.Tensor:
+        trace, target, intermediate_variables = self.prepare_batch(batch, augment=train_theta)
+        batch_size, _, feature_count = trace.shape
+        if train_theta:
+            self.model.requires_grad_(True)
+            theta_optimizer, _ = self.optimizers()
+            theta_lr_scheduler, _ = self.lr_schedulers()
+            theta_optimizer.zero_grad()
+        else:
+            self.model.requires_grad_(False)
+        if train_etat:
+            self.selection_mechanism.requires_grad_(True)
+            _, etat_optimizer = self.optimizers()
+            _, etat_lr_scheduler = self.lr_schedulers()
+            etat_optimizer.zero_grad()
+        else:
+            self.selection_mechanism.requires_grad_(False)
+        condition_mask = self.selection_mechanism.concrete_sample(batch_size)
+        masked_trace = condition_mask*trace + (1 - condition_mask)*torch.randn_like(trace)
+        logits = self.model(masked_trace)
+        theta_loss = self.compute_loss(logits, target)
+        etat_loss = -theta_loss
+        if train_theta:
+            assert not train_etat
+            self.manual_backward(theta_loss, inputs=self.model.parameters())
+        if train_etat:
+            assert not train_theta
+            self.manual_backward(etat_loss, inputs=self.selection_mechanism.parameters())
+        if train_theta:
+            theta_optimizer.step()
+            theta_lr_scheduler.step()
+        if train_etat:
+            etat_optimizer.step()
+            etat_lr_scheduler.step()
+        

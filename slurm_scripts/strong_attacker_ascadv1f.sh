@@ -16,5 +16,5 @@ export LD_LIBRARY_PATH=$CONDA_PREFIX/lib:$LD_LIBRARY_PATH
 bash ./bash_scripts/sup_train_and_eval.sh \
     ascadv1_fixed \
     ./outputs/ascadv1_fixed/strong_attacker/seed_${SLURM_ARRAY_TASK_ID} \
-    "" \
+    ./outputs/ascadv1_fixed/strong_attacker/seed_0/best_val_rank.ckpt \
     --training.seed ${SLURM_ARRAY_TASK_ID}

@@ -1,6 +1,7 @@
-from typing import Dict, Any, Tuple, List, get_args
+from typing import Dict, Any, Tuple, List, get_args, Optional
 from copy import copy
 import argparse
+import fcntl
 import subprocess
 from functools import partial
 
@@ -13,7 +14,7 @@ import optuna
 from leakage_localization.datasets import Base_TorchDataset
 from leakage_localization.training import SupervisedModule
 from leakage_localization.training.train_supervised_model import train_supervised_model
-from leakage_localization.training.hyperparameter_tuning import SamplerType, PruningCallback, sample_hparams, get_study
+from leakage_localization.training.hyperparameter_tuning import SamplerType, PruningCallback, sample_hparams, get_study, generate_qmc_trials
 from leakage_localization.models import Model
 
 from init_things import *
@@ -182,6 +183,10 @@ def main():
     parser.add_argument('--optuna-run-count', type=int, default=1)
     parser.add_argument('--optuna-enable-pruning', default=False, action='store_true')
     parser.add_argument('--optuna-sampler', default='random', choices=get_args(SamplerType))
+    parser.add_argument('--optuna-total-trials', type=int, default=None,
+                        help='When using --optuna-sampler qmc, pre-enqueue this many QMC trials '
+                             'before calling study.optimize(). Each parallel worker acquires a '
+                             'file lock so the pre-generation runs in exactly one process.')
     append_directory_clargs(parser)
     args, overrides = parser.parse_known_args()
 
@@ -196,6 +201,7 @@ def main():
     optuna_run_count: int = args.optuna_run_count
     optuna_enable_pruning: bool = args.optuna_enable_pruning
     optuna_sampler_type: SamplerType = args.optuna_sampler
+    optuna_total_trials: Optional[int] = args.optuna_total_trials
     if optuna_study_path is not None:
         assert len(overrides) == 0
         assert isinstance(optuna_study_path, Path)
@@ -231,6 +237,19 @@ def main():
             enable_pruning=optuna_enable_pruning,
             seed=SEED
         )
+        if optuna_sampler_type == 'qmc' and optuna_total_trials is not None:
+            # Enqueue all QMC hyperparameter configurations before any worker starts
+            # sampling, avoiding the race condition in QMCSampler._find_sample_id.
+            # A file lock ensures only one worker runs the (idempotent) enqueue step.
+            lock_path = optuna_study_path.with_suffix('.pregen.lock')
+            with open(lock_path, 'w') as _lock_file:
+                fcntl.flock(_lock_file, fcntl.LOCK_EX)
+                generate_qmc_trials(
+                    study=optuna_study,
+                    search_space=config.search_space,
+                    n_trials=optuna_total_trials,
+                    seed=SEED,
+                )
         optuna_objective = partial(_optuna_objective, dest=dest, config=config, enable_pruning=optuna_enable_pruning, use_trial_subdir=(optuna_run_count > 1))
         optuna_study.optimize(optuna_objective, n_trials=optuna_run_count)
     else:

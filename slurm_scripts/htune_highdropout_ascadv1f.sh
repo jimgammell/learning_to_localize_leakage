@@ -8,7 +8,7 @@
 #SBATCH --time=4:00:00
 #SBATCH --output=./outputs/ascadv1_fixed/htune_highdropout/slurm_%A_%a.out
 #SBATCH --error=./outputs/ascadv1_fixed/htune_highdropout/slurm_%A_%a.out
-#SBATCH --array=0-99%5
+#SBATCH --array=0-127%5
 
 STRONG_ATTACKER_CKPT=./outputs/ascadv1_fixed/strong_attacker/seed_0/best_val_rank.ckpt
 
@@ -21,4 +21,5 @@ bash ./bash_scripts/sup_train_and_eval.sh \
     $STRONG_ATTACKER_CKPT \
     --optuna-study-path ./outputs/ascadv1_fixed/htune_highdropout/study.log \
     --optuna-run-count 1 \
-    --optuna-sampler random
+    --optuna-sampler qmc \
+    --optuna-total-trials 128

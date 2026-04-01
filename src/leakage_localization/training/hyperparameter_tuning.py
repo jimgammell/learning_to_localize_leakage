@@ -1,8 +1,11 @@
 from typing import Literal, Any, List, Optional, Union, Dict, Annotated, get_args
+import math
 from pathlib import Path
 
 from pydantic import BaseModel, Field, StrictBool
+from scipy.stats import qmc as scipy_qmc
 import lightning
+import numpy as np
 import optuna
 
 SamplerType = Literal[
@@ -107,3 +110,100 @@ def get_study(
         load_if_exists=True
     )
     return study
+
+def generate_qmc_trials(
+        study: optuna.Study,
+        search_space: Dict[str, Dict[str, Any]],
+        n_trials: int,
+        seed: Optional[int] = None,
+        qmc_type: str = 'sobol',
+) -> None:
+    """Pre-generate QMC hyperparameter configurations and enqueue them in the study.
+
+    Each configuration is stored as a WAITING trial via study.enqueue_trial(), so
+    parallel workers can call study.optimize(n_trials=1) without any task-ID-to-trial
+    mapping.  Because enqueue_trial() is called sequentially here (single process),
+    there is no race condition in _find_sample_id.
+
+    Categorical parameters are included as extra QMC dimensions (mapped from [0,1]
+    to the discrete choice set) rather than falling back to random sampling.
+
+    Trials that are already WAITING or RUNNING are counted so that re-running this
+    script after a partial failure does not double-enqueue configurations.
+
+    Args:
+        study: An existing Optuna study.
+        search_space: Nested dict matching SupervisedTrainingConfig.search_space,
+            e.g. {'model': {'lr': FloatParamConfig(...)}, 'training': {...}}.
+        n_trials: Total number of trials to ensure are enqueued.
+        seed: Seed for the QMC engine (and for reproducibility).
+        qmc_type: 'sobol' or 'halton'.
+    """
+
+    # Flatten search_space into an ordered list of (flat_key, ParamConfig) pairs.
+    # flat_key is used as the Optuna parameter name, matching what sample_hparams() uses.
+    flat_params: List[tuple[str, Any]] = []
+    for _field_key, field_space in search_space.items():
+        for param_name, param_cfg in field_space.items():
+            flat_params.append((param_name, param_cfg))
+
+    d = len(flat_params)
+    if d == 0:
+        raise ValueError('search_space is empty')
+
+    # Count already-enqueued (WAITING) and in-progress (RUNNING) trials so we
+    # don't duplicate them if this script is re-run after a partial failure.
+    existing = study.trials
+    n_existing = sum(
+        1 for t in existing
+        if t.state in (optuna.trial.TrialState.WAITING, optuna.trial.TrialState.RUNNING)
+    )
+    n_to_add = n_trials - n_existing
+    if n_to_add <= 0:
+        return
+
+    # Build the QMC engine and advance past already-generated points so the
+    # sequence stays consistent on re-runs.
+    scramble = seed is not None
+    if qmc_type == 'sobol':
+        engine = scipy_qmc.Sobol(d=d, scramble=scramble, seed=seed)
+    elif qmc_type == 'halton':
+        engine = scipy_qmc.Halton(d=d, scramble=scramble, seed=seed)
+    else:
+        raise ValueError(f'Unknown qmc_type: {qmc_type!r}')
+
+    if n_existing > 0:
+        engine.fast_forward(n_existing)
+
+    samples = engine.random(n_to_add)  # shape (n_to_add, d)
+
+    for row in samples:
+        params: Dict[str, Any] = {}
+        for dim_idx, (param_name, param_cfg) in enumerate(flat_params):
+            u = float(row[dim_idx])  # uniform sample in [0, 1)
+            if param_cfg.type == 'float':
+                if param_cfg.log:
+                    val = math.exp(math.log(param_cfg.low) + u * (math.log(param_cfg.high) - math.log(param_cfg.low)))
+                else:
+                    val = param_cfg.low + u * (param_cfg.high - param_cfg.low)
+                if param_cfg.step is not None:
+                    val = round((val - param_cfg.low) / param_cfg.step) * param_cfg.step + param_cfg.low
+                    val = float(np.clip(val, param_cfg.low, param_cfg.high))
+            elif param_cfg.type == 'int':
+                if param_cfg.log:
+                    val = math.exp(math.log(param_cfg.low) + u * (math.log(param_cfg.high) - math.log(param_cfg.low)))
+                    val = int(round(val))
+                else:
+                    step = param_cfg.step if param_cfg.step is not None else 1
+                    n_steps = (param_cfg.high - param_cfg.low) // step
+                    val = param_cfg.low + int(math.floor(u * (n_steps + 1))) * step
+                    val = int(np.clip(val, param_cfg.low, param_cfg.high))
+            elif param_cfg.type == 'categorical':
+                choices = param_cfg.choices
+                idx = int(math.floor(u * len(choices)))
+                idx = min(idx, len(choices) - 1)
+                val = choices[idx]
+            else:
+                raise ValueError(f'Unknown param type: {param_cfg.type!r}')
+            params[param_name] = val
+        study.enqueue_trial(params)

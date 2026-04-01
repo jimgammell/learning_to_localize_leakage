@@ -64,3 +64,6 @@ do
             --metrics $eval_metric
     done
 done
+
+# Generate plots
+python experiments/visualize_trained_model.py --run-dir $DEST

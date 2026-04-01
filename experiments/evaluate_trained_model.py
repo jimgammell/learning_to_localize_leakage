@@ -16,12 +16,19 @@ from init_things import *
 from utils.load_things import load_numpy_dataset, load_torch_dataset, construct_loaders, load_trained_model
 from utils.training_config import SupervisedTrainingConfig
 
-def run_compute_oracle_agreement(leakiness_estimates: NDArray[np.floating], dataset_id: DATASET) -> NDArray[np.floating]:
+def run_compute_oracle_agreement(
+        leakiness_estimates: NDArray[np.floating],
+        dataset_id: DATASET,
+        auroc_percentile: float = 0.9999,
+) -> Dict[str, NDArray[np.floating]]:
     snr_dir = get_output_dir(dataset_id) / 'snr'
     assert snr_dir.exists()
-    get_oracle_agreement = OracleAgreement(snr_dir, dataset_id)
-    oracle_agreement = get_oracle_agreement(leakiness_estimates)
-    return oracle_agreement
+    oracle = OracleAgreement(snr_dir, dataset_id)
+    return {
+        'spearman': oracle(leakiness_estimates),
+        'auroc': oracle.get_auroc(leakiness_estimates, partition='attack', percentile=auroc_percentile),
+        'auroc_percentile': np.array(auroc_percentile),
+    }
 
 def _run_compute_dnn_occl(
         leakiness_estimates: NDArray[np.floating],
@@ -161,7 +168,7 @@ def main():
         if metric_id == 'attack-performance':
             dest_path = dest / 'attack_metrics.npz'
         else:
-            dest_path = dest / (f'{dash_to_uscr(metric_id)}.{path_to_eval.stem}' + ('.npz' if metric_id == 'ta-mtd' else '.npy'))
+            dest_path = dest / (f'{dash_to_uscr(metric_id)}.{path_to_eval.stem}' + ('.npz' if metric_id in ('ta-mtd', 'white-box-agreement') else '.npy'))
         should_compute = True
         if dest_path.exists():
             if overwrite:
@@ -178,7 +185,7 @@ def main():
                 leakiness_estimates = np.load(path_to_eval)
                 if metric_id == 'white-box-agreement':
                     metric = run_compute_oracle_agreement(leakiness_estimates, dataset_id)
-                    np.save(dest_path, metric)
+                    np.savez(dest_path, **metric)
                 elif metric_id == 'fwd-dnno-occl':
                     assert strong_attacker_ckpt_path is not None
                     metric = run_compute_fwd_dnn_occl(leakiness_estimates, dataset_id, strong_attacker_ckpt_path)

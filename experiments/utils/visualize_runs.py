@@ -1,6 +1,7 @@
 from pathlib import Path
-from typing import Optional, Dict, Any, get_args
+from typing import Optional, Dict, Any, List, get_args
 
+import colorcet
 import pandas
 from matplotlib import pyplot as plt
 from matplotlib.axes import Axes
@@ -8,6 +9,136 @@ import numpy as np
 from scipy.stats import spearmanr
 
 from leakage_localization.datasets import PARTITION
+
+
+def plot_leakiness_over_time(
+        attr: np.ndarray,
+        ax: Axes,
+        title: Optional[str] = None,
+        per_byte_alpha: float = 0.35,
+        per_byte_lw: float = 0.4,
+        sum_lw: float = 1.2,
+        sum_color: str = 'black',
+        byte_color: str = 'royalblue',
+):
+    """Line plot of attribution values over time.
+
+    Draws one thin faded line per byte and a thicker line for the per-timestep
+    sum across bytes.
+
+    Args:
+        attr: shape (byte_count, feature_count)
+    """
+    byte_count, feature_count = attr.shape
+    timesteps = np.arange(feature_count)
+    for byte_idx in range(byte_count):
+        ax.plot(timesteps, attr[byte_idx], color=byte_color,
+                linewidth=per_byte_lw, alpha=per_byte_alpha, rasterized=True)
+    ax.plot(timesteps, attr.sum(axis=0), color=sum_color,
+            linewidth=sum_lw, label='sum', rasterized=True)
+    ax.set_xlabel('Timestep')
+    ax.set_ylabel('Estimated leakiness')
+    if title is not None:
+        ax.set_title(title)
+
+
+def plot_wb_scatterplots(
+        attr: np.ndarray,
+        oracle: np.ndarray,
+        axes,
+        subsample: int = 5,
+        color: str = 'royalblue',
+):
+    """4×4 grid of per-byte estimated-vs-oracle scatterplots.
+
+    Args:
+        attr:   (byte_count, feature_count) estimated leakiness
+        oracle: (byte_count, feature_count) oracle (white-box) leakiness
+        axes:   array of Axes with shape (4, 4) or flat length >= byte_count
+        subsample: keep every nth point to limit file size
+    """
+    flat_axes = np.array(axes).flatten()
+    byte_count = attr.shape[0]
+    for byte_idx in range(byte_count):
+        ax = flat_axes[byte_idx]
+        x = oracle[byte_idx, ::subsample]
+        y = attr[byte_idx, ::subsample]
+        ax.scatter(x, y, s=0.5, alpha=0.3, color=color, rasterized=True, linewidths=0)
+        ax.set_xscale('log')
+        ax.set_yscale('log')
+        ax.set_title(f'byte {byte_idx}', fontsize=7)
+        ax.set_xlabel('Oracle leakiness', fontsize=6)
+        ax.set_ylabel('Estimated', fontsize=6)
+        ax.tick_params(labelsize=5)
+
+
+def plot_wb_comparison_grid(
+        attr: np.ndarray,
+        oracle: np.ndarray,
+        axes,
+):
+    """2×byte_count grid: top row = estimated per byte, bottom row = oracle per byte.
+
+    Args:
+        attr:   (byte_count, feature_count)
+        oracle: (byte_count, feature_count)
+        axes:   array of Axes with shape (2, byte_count)
+    """
+    byte_count, feature_count = attr.shape
+    timesteps = np.arange(feature_count)
+    for byte_idx in range(byte_count):
+        ax_est = axes[0, byte_idx]
+        ax_ora = axes[1, byte_idx]
+        ax_est.plot(timesteps, attr[byte_idx], color='royalblue',
+                    linewidth=0.4, rasterized=True)
+        ax_est.set_title(f'byte {byte_idx}', fontsize=6)
+        ax_est.tick_params(labelsize=5)
+        if byte_idx == 0:
+            ax_est.set_ylabel('Estimated', fontsize=6)
+        ax_ora.plot(timesteps, oracle[byte_idx], color='darkorange',
+                    linewidth=0.4, rasterized=True)
+        ax_ora.tick_params(labelsize=5)
+        if byte_idx == 0:
+            ax_ora.set_ylabel('Oracle', fontsize=6)
+        ax_ora.set_xlabel('Timestep', fontsize=6)
+
+
+def plot_rank_trajectories(
+        rank_over_time: np.ndarray,
+        ax: Axes,
+        color: str = 'blue',
+        label: Optional[str] = None,
+        per_byte_alpha: float = 0.3,
+        worst_case_alpha: float = 0.9,
+):
+    """Plot per-byte rank trajectories plus the worst-case (max) envelope.
+
+    Args:
+        rank_over_time: shape (byte_count, trace_count)
+    """
+    byte_count, trace_count = rank_over_time.shape
+    traces_seen = np.arange(1, trace_count + 1)
+    for byte_idx in range(byte_count):
+        ax.plot(traces_seen, rank_over_time[byte_idx], color=color,
+                linewidth=0.3, alpha=per_byte_alpha, rasterized=True)
+    ax.plot(traces_seen, rank_over_time.max(axis=0), color=color,
+            linewidth=1.2, alpha=worst_case_alpha, label=label, rasterized=True)
+    ax.set_xlabel('Traces seen')
+    ax.set_ylabel('Rank')
+
+
+def plot_per_byte_bar(
+        values: np.ndarray,
+        ax: Axes,
+        color: str = 'steelblue',
+        label: Optional[str] = None,
+        **bar_kwargs
+):
+    """Bar chart of a (byte_count,) array, one bar per byte."""
+    byte_count = len(values)
+    ax.bar(np.arange(byte_count), values, color=color, label=label, **bar_kwargs)
+    ax.set_xlabel('Byte index')
+    ax.set_xticks(np.arange(byte_count))
 
 def plot_training_curves(
         run_path: Path,

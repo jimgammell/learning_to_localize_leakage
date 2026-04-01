@@ -1,9 +1,10 @@
 from pathlib import Path
-from typing import get_args, Optional
+from typing import Dict, get_args, Optional
 
 import numpy as np
 from numpy.typing import NDArray
-from scipy.stats import spearmanr
+from scipy.stats import spearmanr, f as f_dist
+from sklearn.metrics import roc_auc_score
 
 from leakage_localization.datasets.common import DATASET, PARTITION
 
@@ -22,6 +23,8 @@ class OracleAgreement:
         if self.dataset == 'ascadv1-fixed':
             self.byte_count = 16
             self.feature_count = 100_000
+            self.num_classes = 256
+            self.n_traces = {'attack': 10_000, 'profile': 50_000}
             self.variables={
                 **{idx: ['subbytes'] for idx in range(2)},
                 **{idx: [
@@ -34,6 +37,8 @@ class OracleAgreement:
         elif self.dataset == 'ascadv1-variable':
             self.byte_count = 16
             self.feature_count = 250_000
+            self.num_classes = 256
+            self.n_traces = {'attack': 100_000, 'profile': 200_000}
             self.variables={
                 **{idx: ['subbytes'] for idx in range(2)},
                 **{idx: [
@@ -60,6 +65,53 @@ class OracleAgreement:
                 oracle_leakiness[byte_idx, :] += snr[min(byte_idx, snr_byte_count - 1), :]
         return oracle_leakiness
     
+    def get_binary_labels(
+            self,
+            partition: PARTITION,
+            percentile: float = 0.9999,
+    ) -> NDArray[np.bool_]:
+        """Binary leakage labels via per-variable F-distribution threshold.
+
+        Under H₀ (no leakage), SNR x df₂/df₁ ~ F(df₁, df₂) where
+        df₁ = num_classes-1 and df₂ = N-num_classes.
+
+        A timestep is labelled leaky for byte b if ANY variable relevant to
+        byte b has SNR above the chosen percentile of this null distribution.
+        Note: shared single-byte variables (e.g. r_in, r_out) will contribute
+        the same leaky timesteps to all bytes that use them.
+        """
+        n = self.n_traces[partition]
+        df1 = self.num_classes - 1
+        df2 = n - self.num_classes
+        threshold = float(f_dist.ppf(percentile, df1, df2) * df1 / df2)
+        labels = np.zeros((self.byte_count, self.feature_count), dtype=bool)
+        for byte_idx, var_names in self.variables.items():
+            for var_name in var_names:
+                snr_path = self.snr_dir / f'{var_name}.{partition}.npy'
+                assert snr_path.exists(), f'SNR file not found: {snr_path}'
+                snr = np.load(snr_path)
+                row = min(byte_idx, snr.shape[0] - 1)
+                labels[byte_idx] |= (snr[row] > threshold)
+        return labels
+
+    def get_auroc(
+            self,
+            x: NDArray[np.floating],
+            partition: PARTITION = 'attack',
+            percentile: float = 0.9999,
+    ) -> NDArray[np.floating]:
+        """Per-byte AUROC of x against binary leakage labels."""
+        byte_count, feature_count = x.shape
+        assert byte_count == self.byte_count
+        assert feature_count == self.feature_count
+        labels = self.get_binary_labels(partition, percentile)
+        auroc = np.full(byte_count, np.nan, dtype=np.float64)
+        for b in range(byte_count):
+            pos = labels[b].sum()
+            if 1 < pos < feature_count - 1:
+                auroc[b] = roc_auc_score(labels[b], x[b])
+        return auroc
+
     def __call__(self, x: NDArray[np.floating]) -> NDArray[np.floating]:
         byte_count, feature_count = x.shape
         assert byte_count == self.byte_count

@@ -13,7 +13,7 @@ from leakage_localization.evaluation.mtd import accumulate_ranks, compute_mtd
 from leakage_localization.evaluation.mtd import accumulate_ranks, compute_mtd
 
 from init_things import *
-from experiments.utils.load_things import load_numpy_dataset, load_torch_dataset, construct_loaders, load_trained_model
+from utils.load_things import load_numpy_dataset, load_torch_dataset, construct_loaders, load_trained_model
 from utils.training_config import SupervisedTrainingConfig
 
 def run_compute_oracle_agreement(leakiness_estimates: NDArray[np.floating], dataset_id: DATASET) -> NDArray[np.floating]:

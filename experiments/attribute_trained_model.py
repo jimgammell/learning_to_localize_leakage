@@ -8,7 +8,7 @@ from leakage_localization.deep_attribution.attributor import Attributor, ATTRIBU
 
 from init_things import *
 from utils.training_config import SupervisedTrainingConfig
-from experiments.utils.load_things import load_torch_dataset, construct_loaders, load_trained_model
+from utils.load_things import load_torch_dataset, construct_loaders, load_trained_model
 
 def compute_feature_attribution(
         module: SupervisedModule,

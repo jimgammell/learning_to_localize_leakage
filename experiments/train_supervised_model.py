@@ -17,7 +17,7 @@ from leakage_localization.training.hyperparameter_tuning import SamplerType, Pru
 from leakage_localization.models import Model
 
 from init_things import *
-from experiments.utils.load_things import load_torch_dataset, construct_loaders
+from utils.load_things import load_torch_dataset, construct_loaders
 from utils.training_config import SupervisedTrainingConfig
 
 # function by Claude to override particular config arguments from the command line

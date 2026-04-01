@@ -9,7 +9,7 @@ from leakage_localization.datasets import DATASET, PARTITION
 from leakage_localization.parametric.snr import compute_snr
 
 from init_things import *
-from utils.load_data import load_numpy_dataset
+from experiments.utils.load_things import load_numpy_dataset
 
 def run_compute_snr(
         dataset_id: DATASET,

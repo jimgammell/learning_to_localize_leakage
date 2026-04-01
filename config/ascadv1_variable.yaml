@@ -77,7 +77,7 @@ search_space:
     input_dropout_rate:
       type: float
       low: 0.0
-      high: 0.5
+      high: 1.0
     hidden_dropout_rate:
       type: float
       low: 0.0

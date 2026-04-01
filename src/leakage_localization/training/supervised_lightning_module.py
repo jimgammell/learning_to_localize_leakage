@@ -298,3 +298,7 @@ class SupervisedModule(lightning.LightningModule):
         return self._step(batch, phase='val')
     def test_step(self, batch: Tuple[torch.Tensor, torch.Tensor, Dict[str, torch.Tensor]]) -> torch.Tensor:
         return self._step(batch, phase='test')
+    def predict_step(self, batch: Tuple[torch.Tensor, torch.Tensor, Dict[str, torch.Tensor]], batch_idx: int):
+        trace, _, intermediate_variables = self.prepare_batch(batch)
+        byte_logits = self.logits_to_byte_logits(self.model(trace))
+        return byte_logits, intermediate_variables

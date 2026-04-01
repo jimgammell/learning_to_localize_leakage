@@ -1,5 +1,5 @@
 import random
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, Literal
 import shutil
 import logging
 from binascii import crc32
@@ -13,6 +13,13 @@ from .directories import *
 from .mpl_constants import *
 
 SEED: int = 0
+
+LOC_METRIC = Literal[
+    'white-box-agreement',
+    'fwd-dnno-occl',
+    'rev-dnno-occl',
+    'ta-mtd'
+]
 
 def set_seed(seed: Optional[int] = None):
     global SEED

@@ -17,7 +17,7 @@ from leakage_localization.training.hyperparameter_tuning import SamplerType, Pru
 from leakage_localization.models import Model
 
 from init_things import *
-from utils.load_data import load_torch_dataset, construct_loaders
+from experiments.utils.load_things import load_torch_dataset, construct_loaders
 from utils.training_config import SupervisedTrainingConfig
 
 # function by Claude to override particular config arguments from the command line
@@ -149,9 +149,10 @@ def _optuna_objective(
         trial: optuna.Trial,
         dest: Path,
         config: SupervisedTrainingConfig,
-        enable_pruning: bool = False
+        enable_pruning: bool = False,
+        use_trial_subdir: bool = True
 ) -> float:
-    trial_dest = dest / f'trial_{trial.number}'
+    trial_dest = dest / f'trial_{trial.number}' if use_trial_subdir else dest
     config.training.seed = trial.number
     for field_key, field_search_space in config.search_space.items():
         new_hparams = sample_hparams(trial, field_search_space)
@@ -231,7 +232,7 @@ def main():
             enable_pruning=optuna_enable_pruning,
             seed=SEED
         )
-        optuna_objective = partial(_optuna_objective, dest=dest, config=config, enable_pruning=optuna_enable_pruning)
+        optuna_objective = partial(_optuna_objective, dest=dest, config=config, enable_pruning=optuna_enable_pruning, use_trial_subdir=(optuna_run_count > 1))
         optuna_study.optimize(optuna_objective, n_trials=optuna_run_count)
     else:
         run_train_model(dest, config)

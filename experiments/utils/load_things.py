@@ -4,6 +4,7 @@ from torch.utils.data import DataLoader
 
 from init_things import *
 from leakage_localization.datasets import DATASET, PARTITION, Base_NumpyDataset, Base_TorchDataset
+from leakage_localization.training.supervised_lightning_module import SupervisedModule
 
 def load_numpy_dataset(dataset_id: DATASET, partition_id: PARTITION, **kwargs) -> Base_NumpyDataset:
     if dataset_id == 'ascadv1-fixed':
@@ -114,3 +115,16 @@ def construct_loaders(
         loader = DataLoader(eval_set, shuffle=False, drop_last=False, **common_kwargs)
         loaders.append(loader)
     return loaders
+
+def load_trained_model(
+        ckpt_path: Path,
+        profiling_set: Base_TorchDataset
+) -> SupervisedModule:
+    assert ckpt_path.exists()
+    module = SupervisedModule.load_from_checkpoint(
+        ckpt_path,
+        map_location='cpu',
+        weights_only=False,
+        trace_statistics=profiling_set.get_trace_statistics()
+    )
+    return module

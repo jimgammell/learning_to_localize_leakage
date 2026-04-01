@@ -116,7 +116,6 @@ def construct_module(profiling_set: Base_TorchDataset, config: SupervisedTrainin
         preprocessing=config.data.preprocessing,
         random_roll_scale=config.data.random_roll_scale,
         random_lpf_scale=config.data.random_lpf_scale,
-        compute_val_mtd=False
     )
     if config.training.compile:
         module.model.compile()

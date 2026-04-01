@@ -48,7 +48,6 @@ class SupervisedModuleConfig:
     preprocessing: PREPROCESSING
     random_roll_scale: float
     random_lpf_scale: float
-    compute_val_mtd: bool
 
     def __post_init__(self):
         assert self.leakage_model in get_args(LEAKAGE_MODEL)
@@ -71,7 +70,6 @@ class SupervisedModuleConfig:
         assert self.preprocessing in get_args(PREPROCESSING)
         assert isinstance(self.random_roll_scale, float) and self.random_roll_scale >= 0
         assert isinstance(self.random_lpf_scale, float) and self.random_lpf_scale >= 0
-        assert isinstance(self.compute_val_mtd, bool)
 
 class SupervisedModule(lightning.LightningModule):
     trace_mean: torch.Tensor
@@ -100,7 +98,6 @@ class SupervisedModule(lightning.LightningModule):
             preprocessing: PREPROCESSING,
             random_roll_scale: float,
             random_lpf_scale: float,
-            compute_val_mtd: bool,
     ):
         super().__init__()
         self.save_hyperparameters(ignore=['trace_statistics'])
@@ -136,9 +133,6 @@ class SupervisedModule(lightning.LightningModule):
             }, **{
                 f'{phase}/mtd': MinimumTracesToDisclosure(reduction='max', **self.config.mtd_kwargs)
                 for phase in ['test']
-            }, **{
-                f'{phase}/mtd': MinimumTracesToDisclosure(reduction='mean', **(self.config.mtd_kwargs | dict(attack_count=10)))
-                for phase in (['val'] if self.config.compute_val_mtd else [])
             }
         })
     
@@ -254,7 +248,7 @@ class SupervisedModule(lightning.LightningModule):
         for idx in range(self.config.num_labels):
             self.metrics[f'{phase}/acc/{idx}'].update(byte_logits[:, idx, :], target[:, idx])
             self.metrics[f'{phase}/rank/{idx}'].update(byte_logits[:, idx, :], target[:, idx])
-        if (phase == 'val' and self.config.compute_val_mtd) or (phase == 'test'):
+        if phase == 'test':
             self.metrics[f'{phase}/mtd'].update(byte_logits, intermediate_variables)
 
         self.log(f'{phase}/loss', training_loss, on_epoch=True, on_step=False, prog_bar=False)
@@ -264,7 +258,7 @@ class SupervisedModule(lightning.LightningModule):
             self.log(f'{phase}/loss/{idx}', per_output_loss[idx], on_epoch=True, on_step=False)
             self.log(f'{phase}/acc/{idx}', self.metrics[f'{phase}/acc/{idx}'], on_epoch=True, on_step=False)
             self.log(f'{phase}/rank/{idx}', self.metrics[f'{phase}/rank/{idx}'], on_epoch=True, on_step=False)
-        if (phase == 'val' and self.config.compute_val_mtd) or (phase == 'test'):
+        if phase == 'test':
             self.log(f'{phase}/mtd', self.metrics[f'{phase}/mtd'], on_epoch=True, on_step=False, prog_bar=True)
 
         return training_loss

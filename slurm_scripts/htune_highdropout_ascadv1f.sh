@@ -14,6 +14,7 @@ STRONG_ATTACKER_CKPT=  # TODO: fill in path to canonical best-attacker checkpoin
 
 source ~/.bashrc
 micromamba activate leakage-localization
+export LD_LIBRARY_PATH=$CONDA_PREFIX/lib:$LD_LIBRARY_PATH
 bash ./bash_scripts/sup_train_and_eval.sh \
     ascadv1_fixed \
     ./outputs/ascadv1_fixed/htune_highdropout/trial_${SLURM_ARRAY_TASK_ID} \

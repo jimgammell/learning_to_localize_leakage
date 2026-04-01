@@ -180,6 +180,10 @@ class SupervisedModule(lightning.LightningModule):
     
     def compute_loss(self, logits: torch.Tensor, _target: torch.Tensor) -> torch.Tensor:
         batch_size, output_count = _target.shape
+        assert output_count == self.config.num_labels, (
+            f'Target has {output_count} outputs but model expects {self.config.num_labels}. '
+            f'Did you forget to pass target_byte/target_variable when loading the dataset?'
+        )
         if self.config.leakage_model == 'bit':
             target = (_target.unsqueeze(-1) >> torch.arange(8, device=_target.device, dtype=torch.long)) & 1
             target = target.to(logits.dtype)

@@ -3,20 +3,6 @@ from math import log, log1p
 import torch
 from torch import nn
 
-# Even though mathematically we should be feeding the occlusion mask as an auxiliary input to the model, ablation studies from Gammell et al. 2026
-#   indicate that this isn't super important in practice. For simplicity I'm omitting this, so that we just have a standard classifier.
-class CondMutInfEstimator(nn.Module):
-    def __init__(
-            self,
-            classifier: nn.Module
-    ):
-        super().__init__()
-
-        self.classifier = classifier
-    
-    def get_logits(self, input: torch.Tensor, condition_mask: torch.Tensor) -> torch.Tensor:
-        masked_input = condition_mask*input + (1-condition_mask)*torch.randn_like(input)
-
 class SelectionMechanism(nn.Module):
     log_C: torch.Tensor
 

@@ -1,5 +1,6 @@
 from typing import Tuple, Dict, Callable, Literal, Optional
 from functools import partial
+import logging
 
 import torch
 from tqdm import tqdm
@@ -72,6 +73,7 @@ class Attributor:
             attrs[:, head_idx, :] = (grad * trace).detach().view(batch_size, feature_count).abs()
         return attrs
     
+    # too expensive to run on uncropped datasets
     @torch.inference_mode()
     def compute_n_occlusion(
             self,
@@ -81,6 +83,8 @@ class Attributor:
     ):
         trace, target, intermediate_values = self.module.prepare_batch(batch)
         batch_size, *_, feature_count = trace.shape
+        if feature_count > 10_000:
+            logging.warning(f'This method doesn\'t scale well to long traces. It\'s recommended to use gradient-based methods instead.')
         *_, head_count = target.shape
         attrs = torch.zeros((batch_size, head_count, feature_count), dtype=trace.dtype, device=trace.device)
         for head_idx in range(head_count):
@@ -96,6 +100,7 @@ class Attributor:
             attrs[:, head_idx, :] = attr.view(batch_size, feature_count).abs()
         return attrs
     
+    # too expensive to run on uncropped datasets
     @torch.no_grad()
     def compute_shapley(
             self,
@@ -104,6 +109,8 @@ class Attributor:
     ) -> torch.Tensor:
         trace, target, intermediate_values = self.module.prepare_batch(batch)
         batch_size, *_, feature_count = trace.shape
+        if feature_count > 10_000:
+            logging.warning(f'This method doesn\'t scale well to long traces. It\'s recommended to use gradient-based methods instead.')
         *_, head_count = target.shape
         attrs = torch.empty((batch_size, head_count, feature_count), dtype=trace.dtype, device=trace.device)
         for head_idx in range(head_count):

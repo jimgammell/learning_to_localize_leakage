@@ -57,7 +57,11 @@ def main():
         assert isinstance(batch_size, int) and batch_size > 0
         config.training.batch_size = batch_size
     
-    profiling_set = load_torch_dataset(config.data.id, 'profile')
+    dataset_kwargs = {
+        'target_byte': config.data.target_byte,
+        'target_variable': config.data.target_variable,
+    }
+    profiling_set = load_torch_dataset(config.data.id, 'profile', **dataset_kwargs)
     profiling_loader, = construct_loaders([], [profiling_set], batch_size=config.training.batch_size)
     module = load_trained_model(ckpt_path, profiling_set)
     compute_feature_attribution(module, profiling_loader, dest, attr_methods)

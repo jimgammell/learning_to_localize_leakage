@@ -129,7 +129,7 @@ def run_train_model(
 ):
     set_seed(config.training.seed)
     profiling_set, attack_set, train_set, val_set, test_set = construct_datasets(config)
-    train_loader, val_loader, test_loader = construct_loaders([train_set], [val_set, test_set], config)
+    train_loader, val_loader, test_loader = construct_loaders([train_set], [val_set, test_set], batch_size=config.training.batch_size, num_workers=config.training.num_workers)
     training_module = construct_module(profiling_set, config)
     train_supervised_model(
         dest=dest,

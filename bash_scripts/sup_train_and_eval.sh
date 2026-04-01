@@ -38,7 +38,7 @@ python experiments/evaluate_trained_model.py \
     --metrics attack-performance
 
 # Compute attributions (loop so one crash doesn't block the other)
-for attr_method in gradvis n-occlusion
+for attr_method in gradvis input-x-gradient
 do
     python experiments/attribute_trained_model.py \
         --ckpt-path $DEST/best_*.ckpt \
@@ -46,7 +46,7 @@ do
 done
 
 # Evaluate each attribution with each localization metric
-for attr_method in gradvis n_occlusion
+for attr_method in gradvis input_x_gradient
 do
     for eval_metric in white-box-agreement fwd-dnno-occl rev-dnno-occl ta-mtd
     do

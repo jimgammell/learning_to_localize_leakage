@@ -10,6 +10,7 @@ from leakage_localization.training.supervised_lightning_module import Supervised
 
 ATTRIBUTION_METHOD = Literal[
     'gradvis',
+    'input-x-gradient',
     'shapley',
     'n-occlusion'
 ]
@@ -55,6 +56,21 @@ class Attributor:
                 grads[:, head_idx, :] += grad.detach().view(batch_size, feature_count)
         attribution = grads.abs() / smoothing_count
         return attribution
+
+    def compute_input_x_gradient(
+            self,
+            batch: Tuple[torch.Tensor, torch.Tensor, Dict[str, torch.Tensor]],
+    ) -> torch.Tensor:
+        _trace, target, _ = self.module.prepare_batch(batch)
+        batch_size, *_, feature_count = _trace.shape
+        *_, head_count = target.shape
+        attrs = torch.zeros((batch_size, head_count, feature_count), dtype=_trace.dtype, device=_trace.device)
+        for head_idx in range(head_count):
+            trace = _trace.clone().detach().requires_grad_(True)
+            loss = self._get_loss(trace, target, head_idx=head_idx)
+            grad = torch.autograd.grad(outputs=loss.sum(), inputs=trace)[0]
+            attrs[:, head_idx, :] = (grad * trace).detach().view(batch_size, feature_count).abs()
+        return attrs
     
     @torch.inference_mode()
     def compute_n_occlusion(
@@ -130,6 +146,8 @@ class Attributor:
     ) -> torch.Tensor:
         if attr_method == 'gradvis':
             attr_fn = partial(self.compute_gradvis, **attr_kwargs)
+        elif attr_method == 'input-x-gradient':
+            attr_fn = partial(self.compute_input_x_gradient, **attr_kwargs)
         elif attr_method == 'shapley':
             attr_fn = partial(self.compute_shapley, **attr_kwargs)
         elif attr_method == 'n-occlusion':

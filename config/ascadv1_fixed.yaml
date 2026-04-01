@@ -11,7 +11,7 @@ training:
   lr_warmup_frac: 0.05
   lr_const_frac: 0.
   batch_size: 256
-  base_lr: 2.0e-3
+  base_lr: 1.8e-3
   lr_decay_multiplier: 1.0e-4
   weight_decay: 0.15
   label_smoothing: 0.

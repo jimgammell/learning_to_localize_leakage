@@ -10,7 +10,7 @@
 #SBATCH --error=./outputs/ascadv1_fixed/htune_highdropout/slurm_%A_%a.out
 #SBATCH --array=0-99%5
 
-STRONG_ATTACKER_CKPT=  # TODO: fill in path to canonical best-attacker checkpoint
+STRONG_ATTACKER_CKPT=./outputs/ascadv1_fixed/strong_attacker/seed_0/best_val_rank.ckpt
 
 source ~/.bashrc
 micromamba activate leakage-localization

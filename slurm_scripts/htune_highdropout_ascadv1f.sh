@@ -21,4 +21,4 @@ bash ./bash_scripts/sup_train_and_eval.sh \
     $STRONG_ATTACKER_CKPT \
     --optuna-study-path ./outputs/ascadv1_fixed/htune_highdropout/study.log \
     --optuna-run-count 1 \
-    --optuna-sampler qmc
+    --optuna-sampler random

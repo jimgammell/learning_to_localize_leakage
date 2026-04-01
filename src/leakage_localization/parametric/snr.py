@@ -87,7 +87,6 @@ def compute_snr(
         progress_bar = tqdm(total=total_work, desc="Computing SNR")
 
     snr_vals = dict()
-
     # Process each intermediate variable independently to avoid holding all accumulators in memory
     for int_val_key in int_val_keys:
         byte_count = int_val_byte_counts[int_val_key]

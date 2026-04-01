@@ -61,7 +61,7 @@ class Attributor:
             self,
             batch: Tuple[torch.Tensor, torch.Tensor, Dict[str, torch.Tensor]],
             window_size: int = 1,
-            perturbations_per_eval: int = 1
+            perturbations_per_eval: int = 1024
     ):
         trace, target, intermediate_values = self.module.prepare_batch(batch)
         batch_size, *_, feature_count = trace.shape

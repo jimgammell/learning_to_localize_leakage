@@ -47,9 +47,10 @@ def run_compute_ta_mtd(leakiness_estimates: NDArray[np.floating], dataset_id: DA
     ta_mtd = compute_ta_mtd(leakiness_estimates, profiling_set, attack_set, progress_bar=True)
     return ta_mtd
 
-def run_attack_performance_evalutaion(ckpt_path: Path, dataset_id: DATASET) -> Dict[str, NDArray[np.floating]]:
-    profiling_set = load_numpy_dataset(dataset_id, 'profile')
-    attack_set = load_torch_dataset(dataset_id, 'attack')
+def run_attack_performance_evalutaion(ckpt_path: Path, dataset_id: DATASET, dataset_kwargs: Optional[Dict] = None) -> Dict[str, NDArray[np.floating]]:
+    dataset_kwargs = dataset_kwargs or {}
+    profiling_set = load_numpy_dataset(dataset_id, 'profile', **dataset_kwargs)
+    attack_set = load_torch_dataset(dataset_id, 'attack', **dataset_kwargs)
     attack_loader, = construct_loaders([], [attack_set])
     module = load_trained_model(ckpt_path, profiling_set)
     module.to('cuda')
@@ -120,16 +121,16 @@ def main():
     assert path_to_eval is not None or loc_metrics == set(), \
         '--path-to-eval is required when computing localization metrics'
     dataset_id: Optional[DATASET] = args.dataset
-    if dataset_id is None:
-        config_dir = path_to_eval.parent if path_to_eval is not None else (
-            args.model_ckpt_path.parent if args.model_ckpt_path is not None else None
-        )
-        assert config_dir is not None, 'Cannot auto-detect dataset: provide --dataset or a --path-to-eval / --model-ckpt-path whose parent contains config.yaml'
-        config_path = config_dir / 'config.yaml'
-        assert config_path.exists(), f'Failed to find config file in {config_path}. Please either ensure a config file exists, or pass dataset id explicitly.'
-        with open(config_path, 'r') as f:
+    config_dir = path_to_eval.parent if path_to_eval is not None else (
+        args.model_ckpt_path.parent if args.model_ckpt_path is not None else None
+    )
+    config: Optional[SupervisedTrainingConfig] = None
+    if config_dir is not None and (config_dir / 'config.yaml').exists():
+        with open(config_dir / 'config.yaml', 'r') as f:
             config_kw = safe_load_yaml(f)
         config = SupervisedTrainingConfig(**config_kw)
+    if dataset_id is None:
+        assert config is not None, 'Cannot auto-detect dataset: provide --dataset or a --path-to-eval / --model-ckpt-path whose parent contains config.yaml'
         dataset_id = config.data.id
     dest: Optional[Path] = args.dest
     if dest is None:
@@ -146,6 +147,10 @@ def main():
         assert model_ckpt_path is not None
     else:
         model_ckpt_path = None
+    dataset_kwargs = {
+        'target_byte': config.data.target_byte,
+        'target_variable': config.data.target_variable,
+    } if config is not None else {}
     if 'fwd-dnno-occl' in metric_ids or 'rev-dnno-occl' in metric_ids:
         strong_attacker_ckpt_path: Optional[Path] = args.strong_attacker_ckpt_path
         assert strong_attacker_ckpt_path is not None
@@ -167,7 +172,7 @@ def main():
         if should_compute:
             if metric_id == 'attack-performance':
                 assert model_ckpt_path is not None
-                attack_metrics = run_attack_performance_evalutaion(model_ckpt_path, dataset_id)
+                attack_metrics = run_attack_performance_evalutaion(model_ckpt_path, dataset_id, dataset_kwargs)
                 np.savez(dest_path, **attack_metrics)
             else:
                 leakiness_estimates = np.load(path_to_eval)

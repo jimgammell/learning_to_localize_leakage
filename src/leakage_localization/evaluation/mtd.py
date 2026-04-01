@@ -51,7 +51,8 @@ def accumulate_ranks(
         assert False
     total_trace_count, byte_count, class_count = logits.shape
     assert all(total_trace_count == x.shape[0] for x in int_vars.values())
-    assert all(byte_count == x.shape[1] for x in int_vars.values())
+    # Only require 'key' to match byte_count; other vars (e.g. r_in, r_out) may have fewer bytes
+    assert int_vars['key'].shape == (total_trace_count, byte_count)
     if isinstance(logits, torch.Tensor):
         log_target_probs = torch.log_softmax(logits.double(), dim=-1).cpu().numpy()
     elif isinstance(logits, np.ndarray):

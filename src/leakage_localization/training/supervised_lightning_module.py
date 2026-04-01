@@ -8,26 +8,12 @@ import lightning
 from torchmetrics import MetricCollection
 from torchmetrics.classification import MulticlassAccuracy
 
+from .common import LEAKAGE_MODEL, PHASE, PREPROCESSING
 from .cosine_decay_lr_scheduler import CosineDecayLRSched
 from ..evaluation.mtd import MinimumTracesToDisclosure
 from ..evaluation.rank import Rank
 from ..evaluation.acc import FullKeyAccuracy
 from ..models.building_blocks.bits_and_bytes import BitLogitsToByteLogits, HwLogitsToByteLogits
-
-LEAKAGE_MODEL = Literal[
-    'bit',
-    'id',
-    'hw'
-]
-PHASE = Literal[
-    'train',
-    'val',
-    'test'
-]
-PREPROCESSING = Literal[
-    'standardize',
-    'normalize'
-]
 
 @dataclass
 class SupervisedModuleConfig:

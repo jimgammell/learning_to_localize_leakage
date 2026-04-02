@@ -154,10 +154,7 @@ def generate_qmc_trials(
     # Count already-enqueued (WAITING) and in-progress (RUNNING) trials so we
     # don't duplicate them if this script is re-run after a partial failure.
     existing = study.trials
-    n_existing = sum(
-        1 for t in existing
-        if t.state in (optuna.trial.TrialState.WAITING, optuna.trial.TrialState.RUNNING)
-    )
+    n_existing = len(existing)
     n_to_add = n_trials - n_existing
     if n_to_add <= 0:
         return

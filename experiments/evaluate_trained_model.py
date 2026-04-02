@@ -27,6 +27,8 @@ def run_compute_oracle_agreement(
     return {
         'spearman': oracle(leakiness_estimates),
         'auroc': oracle.get_auroc(leakiness_estimates, partition='attack', percentile=auroc_percentile),
+        'full_spearman': np.array(oracle.get_full_spearman(leakiness_estimates)),
+        'full_auroc': np.array(oracle.get_full_auroc(leakiness_estimates, partition='attack', percentile=auroc_percentile)),
         'auroc_percentile': np.array(auroc_percentile),
     }
 
@@ -35,11 +37,12 @@ def _run_compute_dnn_occl(
         dataset_id: DATASET,
         strong_attacker_path: Path,
         order: OCCLUSION_ORDER,
+        byte_idx: Optional[int] = None,
 ) -> NDArray[np.floating]:
     profiling_set = load_numpy_dataset(dataset_id, 'profile')
     attack_set = load_torch_dataset(dataset_id, 'attack')
     attack_loader, = construct_loaders([], [attack_set])
-    dnno_mtd = compute_dnn_occlusion_mtd(leakiness_estimates, profiling_set, attack_loader, strong_attacker_path, order, progress_bar=True)
+    dnno_mtd = compute_dnn_occlusion_mtd(leakiness_estimates, profiling_set, attack_loader, strong_attacker_path, order, byte_idx=byte_idx, progress_bar=True)
     return dnno_mtd
 
 def run_compute_fwd_dnn_occl(leakiness_estimates: NDArray[np.floating], dataset_id: DATASET, strong_attacker_path: Path) -> NDArray[np.floating]:
@@ -48,11 +51,11 @@ def run_compute_fwd_dnn_occl(leakiness_estimates: NDArray[np.floating], dataset_
 def run_compute_rev_dnn_occl(leakiness_estimates: NDArray[np.floating], dataset_id: DATASET, strong_attacker_path: Path) -> NDArray[np.floating]:
     return _run_compute_dnn_occl(leakiness_estimates, dataset_id, strong_attacker_path, 'reverse')
 
-def run_compute_ta_mtd(leakiness_estimates: NDArray[np.floating], dataset_id: DATASET) -> NDArray[np.floating]:
+def run_compute_ta_mtd(leakiness_estimates: NDArray[np.floating], dataset_id: DATASET):
     profiling_set = load_numpy_dataset(dataset_id, 'profile')
     attack_set = load_numpy_dataset(dataset_id, 'attack')
-    ta_mtd = compute_ta_mtd(leakiness_estimates, profiling_set, attack_set, progress_bar=True)
-    return ta_mtd
+    ta_mtd, rank_over_time, full_key_mtd = compute_ta_mtd(leakiness_estimates, profiling_set, attack_set, progress_bar=True)
+    return ta_mtd, rank_over_time, full_key_mtd
 
 def run_attack_performance_evalutaion(ckpt_path: Path, dataset_id: DATASET, dataset_kwargs: Optional[Dict] = None) -> Dict[str, NDArray[np.floating]]:
     dataset_kwargs = dataset_kwargs or {}
@@ -168,7 +171,7 @@ def main():
         if metric_id == 'attack-performance':
             dest_path = dest / 'attack_metrics.npz'
         else:
-            dest_path = dest / (f'{dash_to_uscr(metric_id)}.{path_to_eval.stem}' + ('.npz' if metric_id in ('ta-mtd', 'white-box-agreement') else '.npy'))
+            dest_path = dest / (f'{dash_to_uscr(metric_id)}.{path_to_eval.stem}' + ('.npz' if metric_id in ('ta-mtd', 'white-box-agreement', 'fwd-dnno-occl', 'rev-dnno-occl') else '.npy'))
         should_compute = True
         if dest_path.exists():
             if overwrite:
@@ -188,15 +191,21 @@ def main():
                     np.savez(dest_path, **metric)
                 elif metric_id == 'fwd-dnno-occl':
                     assert strong_attacker_ckpt_path is not None
-                    metric = run_compute_fwd_dnn_occl(leakiness_estimates, dataset_id, strong_attacker_ckpt_path)
-                    np.save(dest_path, metric)
+                    curve_mean = run_compute_fwd_dnn_occl(leakiness_estimates, dataset_id, strong_attacker_ckpt_path)
+                    curve_b2 = _run_compute_dnn_occl(leakiness_estimates, dataset_id, strong_attacker_ckpt_path, 'forward', byte_idx=2)
+                    np.savez(dest_path, **{'fwd-dnno-occl': curve_mean, 'fwd-dnno-occl/2': curve_b2})
                 elif metric_id == 'rev-dnno-occl':
                     assert strong_attacker_ckpt_path is not None
-                    metric = run_compute_rev_dnn_occl(leakiness_estimates, dataset_id, strong_attacker_ckpt_path)
-                    np.save(dest_path, metric)
+                    curve_mean = run_compute_rev_dnn_occl(leakiness_estimates, dataset_id, strong_attacker_ckpt_path)
+                    curve_b2 = _run_compute_dnn_occl(leakiness_estimates, dataset_id, strong_attacker_ckpt_path, 'reverse', byte_idx=2)
+                    np.savez(dest_path, **{'rev-dnno-occl': curve_mean, 'rev-dnno-occl/2': curve_b2})
                 elif metric_id == 'ta-mtd':
-                    mtd, rank_over_time = run_compute_ta_mtd(leakiness_estimates, dataset_id)
-                    metric = {'mtd': mtd, 'rank_over_time': rank_over_time}
+                    per_byte_mtd, rank_over_time, full_key_mtd = run_compute_ta_mtd(leakiness_estimates, dataset_id)
+                    metric = {
+                        'ta-mtd': np.array(full_key_mtd),
+                        **{f'ta-mtd/{b}': np.array(per_byte_mtd[b]) for b in range(len(per_byte_mtd))},
+                        'rank_over_time': rank_over_time,
+                    }
                     np.savez(dest_path, **metric)
                 else:
                     assert False

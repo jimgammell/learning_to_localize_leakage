@@ -112,6 +112,35 @@ class OracleAgreement:
                 auroc[b] = roc_auc_score(labels[b], x[b])
         return auroc
 
+    def get_full_spearman(self, x: NDArray[np.floating]) -> float:
+        """Spearman correlation of the byte-averaged attribution against the
+        byte-averaged oracle leakiness.  This cannot be derived from per-byte
+        Spearman values because correlation does not commute with averaging."""
+        byte_count, feature_count = x.shape
+        assert byte_count == self.byte_count
+        assert feature_count == self.feature_count
+        return float(spearmanr(x.mean(axis=0), self.oracle_leakiness.mean(axis=0)).statistic)
+
+    def get_full_auroc(
+            self,
+            x: NDArray[np.floating],
+            partition: PARTITION = 'attack',
+            percentile: float = 0.9999,
+    ) -> float:
+        """AUROC of the byte-averaged attribution against union-of-bytes binary
+        leakage labels.  A timestep is considered leaky if it is leaky for any
+        byte; the score is the mean attribution across bytes."""
+        byte_count, feature_count = x.shape
+        assert byte_count == self.byte_count
+        assert feature_count == self.feature_count
+        labels = self.get_binary_labels(partition, percentile)  # (byte_count, feature_count)
+        union_labels = labels.any(axis=0)                        # (feature_count,)
+        x_mean = x.mean(axis=0)                                  # (feature_count,)
+        pos = int(union_labels.sum())
+        if 1 < pos < feature_count - 1:
+            return float(roc_auc_score(union_labels, x_mean))
+        return float('nan')
+
     def __call__(self, x: NDArray[np.floating]) -> NDArray[np.floating]:
         byte_count, feature_count = x.shape
         assert byte_count == self.byte_count

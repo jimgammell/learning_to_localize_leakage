@@ -140,6 +140,34 @@ def plot_per_byte_bar(
     ax.set_xlabel('Byte index')
     ax.set_xticks(np.arange(byte_count))
 
+def plot_mtd(
+        run_path: Path,
+        ax: Axes,
+        worst_byte_kwargs: Optional[Dict[str, Any]] = None,
+        other_byte_kwargs: Optional[Dict[str, Any]] = None,
+        **common_kwargs
+):
+    worst_byte_kwargs = worst_byte_kwargs or dict()
+    other_byte_kwargs = other_byte_kwargs or dict()
+    attack_metrics = np.load(run_path / 'attack_metrics.npz', allow_pickle=True)
+    rank_over_time = attack_metrics['rank_over_time']
+    byte_count = rank_over_time.shape[0]
+    traces_seen = np.arange(1, rank_over_time.shape[1] + 1)
+    _worst_byte_kwargs = dict(
+        linewidth=2,
+    )
+    _worst_byte_kwargs.update(common_kwargs)
+    _worst_byte_kwargs.update(worst_byte_kwargs)
+    _other_byte_kwargs = dict(
+        linewidth=0.5,
+        alpha=0.5
+    )
+    _other_byte_kwargs.update(common_kwargs)
+    _other_byte_kwargs.update(other_byte_kwargs)
+    ax.plot(traces_seen, rank_over_time.max(axis=0), **_worst_byte_kwargs)
+    for byte_idx in range(byte_count):
+        ax.plot(traces_seen, rank_over_time[byte_idx, :], **_other_byte_kwargs)
+
 def plot_training_curves(
         run_path: Path,
         ax: Axes,
@@ -148,6 +176,8 @@ def plot_training_curves(
         val_plot_kwargs: Optional[Dict[str, Any]] = None,
         **common_plot_kwargs
 ):
+    train_plot_kwargs = train_plot_kwargs or dict()
+    val_plot_kwargs = val_plot_kwargs or dict()
     metrics = pandas.read_csv(run_path / 'metrics.csv')
     train_mask = ~metrics['train/loss'].isna()
     val_mask = ~metrics['val/loss'].isna()

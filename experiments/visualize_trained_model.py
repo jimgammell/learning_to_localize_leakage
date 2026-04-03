@@ -319,6 +319,13 @@ def gen_ta_mtd(
         return
 
     d = np.load(npz_path, allow_pickle=True)
+    # Support both new key scheme (ta-mtd/0 … ta-mtd/15) and old ('mtd' array)
+    def _load_per_byte_mtd(npz):
+        if 'ta-mtd/0' in npz:
+            n = sum(1 for k in npz if k.startswith('ta-mtd/'))
+            return np.array([float(npz[f'ta-mtd/{b}']) for b in range(n)])
+        return npz['mtd']
+
     fig, axes = plt.subplots(1, 2, figsize=(11, 3.5))
 
     # Left: rank-over-time
@@ -337,13 +344,14 @@ def gen_ta_mtd(
 
     # Right: per-byte MTD grouped bars (method + baselines)
     ax = axes[1]
-    byte_x = np.arange(len(d['mtd']))
+    per_byte_mtd = _load_per_byte_mtd(d)
+    byte_x = np.arange(len(per_byte_mtd))
     baselines_mtd = {}
     if baseline_dir is not None:
         for bname in BASELINE_STYLES:
             bd = _load_npz(baseline_dir / f'ta_mtd.{bname}.npz')
             if bd is not None:
-                baselines_mtd[bname] = bd['mtd']
+                baselines_mtd[bname] = _load_per_byte_mtd(bd)
 
     n_groups = 1 + len(baselines_mtd)
     bar_w = 0.75 / n_groups
@@ -354,7 +362,7 @@ def gen_ta_mtd(
                    color=bstyle['color'], alpha=0.7, label=bname)
     # Main method last (foreground)
     offset = ((n_groups - 1) - n_groups / 2 + 0.5) * bar_w
-    ax.bar(byte_x + offset, d['mtd'], width=bar_w,
+    ax.bar(byte_x + offset, per_byte_mtd, width=bar_w,
            color='royalblue', alpha=0.9, label=method.replace('_', ' '))
     ax.set_xticks(byte_x)
     ax.set_xlabel('Byte index')

@@ -36,7 +36,7 @@ def _get_logits_and_int_vars(
         end_idx = start_idx + batch_size
         assert end_idx <= trace_count
         trace = trace*mask.unsqueeze(0)
-        logits = module.model(trace)
+        logits = module.logits_to_byte_logits(module.model(trace))
         collected_logits[start_idx:end_idx, :, :] = logits.cpu().numpy()
         for k, v in int_vars.items():
             collected_int_vars[k][start_idx:end_idx, :] = v.cpu().numpy()

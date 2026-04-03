@@ -9,6 +9,11 @@ from leakage_localization.deep_attribution.attributor import Attributor, ATTRIBU
 from init_things import *
 from utils.training_config import SupervisedTrainingConfig
 from utils.load_things import load_torch_dataset, construct_loaders, load_trained_model
+
+# init_things enables cudnn.benchmark globally, but for attribution this causes
+# a 74-minute cuDNN kernel autotuning stall on the first batch (due to the large
+# Conv1d in the patchifier, kernel_size=2*patch_size). Disable it here.
+torch.backends.cudnn.benchmark = False
  
 def compute_feature_attribution(
         module: SupervisedModule,

@@ -9,7 +9,49 @@ import numpy as np
 from scipy.stats import spearmanr
 
 from leakage_localization.datasets import PARTITION
+from leakage_localization.datasets.ascadv1 import repr_target as ascadv1_repr_target
 
+def add_dline(
+        ax: Axes,
+        **kwargs
+):
+    xmin, xmax = ax.get_xlim()
+    ymin, ymax = ax.get_ylim()
+    low = max(xmin, ymin)
+    high = min(xmax, ymax)
+    ax.plot((low, high), (low, high), **kwargs)
+
+def plot_ascadv1_oracle_leakiness(
+        snr_dir: Path,
+        ax: Axes,
+        byte: int = 2
+):
+    int_var_snrs = dict(
+        prin = np.load(snr_dir / 'p__xor__k__xor__r_in.attack.npy')[byte, :],
+        pr = np.load(snr_dir / 'p__xor__k__xor__r.profile.npy')[byte, :],
+        rin = np.load(snr_dir / 'r_in.attack.npy')[0, :],
+        rout = np.load(snr_dir / 'r_out.attack.npy')[0, :],
+        r = np.load(snr_dir / 'r.attack.npy')[byte, :],
+        yrout = np.load(snr_dir / 'subbytes__xor__r_out.attack.npy')[byte, :],
+        yr = np.load(snr_dir / 'subbytes__xor__r.attack.npy')[byte, :],
+    )
+    int_var_kwargs = dict(
+        prin = dict(color = 'red', linestyle='--', label=ascadv1_repr_target('p__xor__k__xor__r_in')),
+        pr = dict(color = 'green', linestyle='--', label=ascadv1_repr_target('p__xor__k__xor__r')),
+        rin = dict(color='red', linestyle='-', label=ascadv1_repr_target('r_in')),
+        rout = dict(color='teal', linestyle='-', label=ascadv1_repr_target('r_out')),
+        r = dict(color='yellow', linestyle='-', label=ascadv1_repr_target('r')),
+        yrout = dict(color = 'blue', linestyle='-', label=ascadv1_repr_target('subbytes__xor__r_out')),
+        yr = dict(color = 'black', linestyle='-', label=ascadv1_repr_target('subbytes__xor__r'))
+    )
+    for int_var_name in int_var_snrs.keys():
+        int_var_snr = int_var_snrs[int_var_name]
+        if int_var_snr is None:
+            continue
+        kwargs = int_var_kwargs[int_var_name]
+        ax.plot(int_var_snr, **kwargs)
+    white_box_composite = np.stack(list(int_var_snrs.values())).mean(axis=0)
+    return white_box_composite
 
 def plot_leakiness_over_time(
         attr: np.ndarray,

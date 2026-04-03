@@ -6,6 +6,7 @@ from math import log
 
 import pandas
 import numpy as np
+from scipy.stats import spearmanr
 from matplotlib import pyplot as plt
 
 from leakage_localization.evaluation.mtd import compute_mtd
@@ -91,6 +92,9 @@ def load_sweep(sweep_dir: Path) -> pandas.DataFrame:
     for attr_method in ['gradvis', 'input_x_gradient']:
         data[f'white_box_spearman/{attr_method}'] = data[[f'white_box_spearman/{attr_method}/{byte_idx}' for byte_idx in range(16)]].mean(axis=1)
         data[f'white_box_auroc/{attr_method}'] = data[[f'white_box_auroc/{attr_method}/{byte_idx}' for byte_idx in range(16)]].mean(axis=1)
+    data['mean_acc'] = data[[f'acc/{byte_idx}' for byte_idx in range(16)]].mean(axis=1)
+    for attr_method in ['gradvis', 'input_x_gradient']:
+        data[f'mean_ta_mtd/{attr_method}'] = data[[f'ta_mtd/{attr_method}/{byte_idx}' for byte_idx in range(16)]].mean(axis=1)
     return data
 
 def get_best_attacker(sweep: pandas.DataFrame) -> Path:
@@ -99,7 +103,7 @@ def get_best_attacker(sweep: pandas.DataFrame) -> Path:
     return best_path
 
 def get_best_localizer(sweep: pandas.DataFrame) -> Path:
-    best_row = sweep.loc[sweep['white_box_spearman/gradvis'].idxmax()]
+    best_row = sweep.loc[sweep['white_box_auroc/input_x_gradient/full'].idxmax()]
     best_path = best_row['path']
     return best_path
 
@@ -126,25 +130,24 @@ def run_plot_training_curves(sweep: pandas.DataFrame, dest: Path):
         val_plot_kwargs={'label': 'Best localizer (val)'}
     )
     plot_training_curves(
-        best_attacker_path, axes[1], 'rank', color='red',
+        best_attacker_path, axes[1], 'acc', color='red',
         train_plot_kwargs={'label': 'Best attacker (train)'},
         val_plot_kwargs={'label': 'Best attacker (val)'}
     )
     plot_training_curves(
-        best_localizer_path, axes[1], 'rank', color='blue',
+        best_localizer_path, axes[1], 'acc', color='blue',
         train_plot_kwargs={'label': 'Best localizer (train)'},
         val_plot_kwargs={'label': 'Best localizer (val)'}
     )
     random_loss = log(256)
     axes[0].set_ylim(0, 1.1*random_loss)
-    random_rank = 0.5*(1 + 256)
-    axes[1].set_ylim(0, 1.1*random_rank)
+    axes[1].set_ylim(0, 1)
     axes[0].set_xlabel('Training step')
     axes[0].set_ylabel(r'Cross-entropy loss $\downarrow$')
     axes[1].set_xlabel('Training step')
-    axes[1].set_ylabel(r'Rank $\downarrow$')
+    axes[1].set_ylabel(r'Accuracy $\uparrow$')
     axes[0].legend(loc='upper right', framealpha=0., fontsize=6)
-    axes[1].legend(loc='upper right', framealpha=0., fontsize=6)
+    axes[1].legend(loc='lower right', framealpha=0., fontsize=6)
     fig.tight_layout()
     fig.savefig(dest, dpi=DPI)
     plt.close(fig)
@@ -166,24 +169,79 @@ def run_plot_mtd(sweep: pandas.DataFrame, dest: Path):
 def run_white_box_agreement(sweep: pandas.DataFrame, dest: Path):
     best_attacker_path = get_best_attacker(sweep)
     best_localizer_path = get_best_localizer(sweep)
+    best_attacker_inputxgrad = np.load(best_attacker_path / 'input_x_gradient.npy')[2, :]
+    best_localizer_inputxgrad = np.load(best_localizer_path / 'input_x_gradient.npy')[2, :]
+    fig, axes = plt.subplots(3, 1, figsize=(WIDTH, WIDTH))
+    axes[0].plot(best_attacker_inputxgrad, color='blue')
+    axes[1].plot(best_localizer_inputxgrad, color='blue')
+    ref = plot_ascadv1_oracle_leakiness(dest.parent.parent / '..' / 'snr', axes[2])
+    best_attacker_agreement = spearmanr(best_attacker_inputxgrad, ref).statistic
+    best_localizer_agreement = spearmanr(best_localizer_inputxgrad, ref).statistic
+    axes[0].text(0.02, 0.98, f'Spearman r = {best_attacker_agreement:.3f}',
+                 transform=axes[0].transAxes, va='top', ha='left')
+    axes[1].text(0.02, 0.98, f'Spearman r = {best_localizer_agreement:.3f}',
+                 transform=axes[1].transAxes, va='top', ha='left')
+    axes[0].set_title('Best attacker input*grad')
+    axes[1].set_title('Best localizer input*grad')
+    axes[2].set_title('White box SNR')
+    axes[0].set_xlabel(r'Time $t$')
+    axes[1].set_xlabel(r'Time $t$')
+    axes[2].set_xlabel(r'Time $t$')
+    axes[0].set_ylabel(r'Estimated leakiness of $X_t$')
+    axes[1].set_ylabel(r'Estimated leakiness of $X_t$')
+    axes[2].set_ylabel(r'Estimated leakiness of $X_t$')
+    fig.tight_layout()
+    fig.savefig(dest, dpi=DPI)
+    plt.close(fig)
 
 def run_plot_gradvis_vs_inputxgrad(sweep: pandas.DataFrame, dest: Path):
-    pass
-
-def run_plot_attack_vs_loc(sweep: pandas.DataFrame, dest: Path):
     with plt.rc_context({'font.size': 6, 'axes.labelsize': 6, 'xtick.labelsize': 5, 'ytick.labelsize': 5}):
         fig, axes = plt.subplots(1, 4, figsize=(WIDTH, WIDTH/4))
         kwargs = dict(
             color='blue',
             marker='.',
             linestyle='none',
-            markersize=5
+            markersize=3
+        )
+        axes[0].plot(sweep['white_box_auroc/gradvis/full'], sweep['white_box_auroc/input_x_gradient/full'], **kwargs)
+        axes[1].plot(sweep['fwd_dnno/gradvis'], sweep['fwd_dnno/input_x_gradient'], **kwargs)
+        axes[2].plot(sweep['rev_dnno/gradvis'], sweep['rev_dnno/input_x_gradient'], **kwargs)
+        axes[3].plot(sweep['ta_mtd/gradvis'], sweep['ta_mtd/input_x_gradient'], **kwargs)
+        add_dline(axes[0], color='grey', linestyle=':')
+        add_dline(axes[1], color='grey', linestyle=':')
+        add_dline(axes[2], color='grey', linestyle=':')
+        add_dline(axes[3], color='grey', linestyle=':')
+        axes[0].set_xlabel('GradVis')
+        axes[0].set_ylabel('Input * Grad')
+        axes[0].set_title(r'White box AUROC $\uparrow$')
+        axes[1].set_xlabel('GradVis')
+        axes[1].set_ylabel('Input * Grad')
+        axes[1].set_title(r'Forward DNN occlusion $\downarrow$')
+        axes[2].set_xlabel('GradVis')
+        axes[2].set_ylabel('Input * Grad')
+        axes[2].set_title(r'Reverse DNN occlusion $\uparrow$')
+        axes[3].set_xlabel('GradVis')
+        axes[3].set_ylabel('Input * Grad')
+        axes[3].set_title(r'Template attack MTD $\downarrow$')
+        for ax in axes:
+            ax.tick_params(axis='both', which='both', pad=2)
+        fig.tight_layout()
+        fig.savefig(dest, dpi=DPI)
+        plt.close(fig)
+
+def run_plot_perbyte_attack_vs_loc(sweep: pandas.DataFrame, dest: Path, byte: int = 2):
+    with plt.rc_context({'font.size': 6, 'axes.labelsize': 6, 'xtick.labelsize': 5, 'ytick.labelsize': 5}):
+        fig, axes = plt.subplots(1, 4, figsize=(WIDTH, WIDTH/4))
+        kwargs = dict(
+            color='blue',
+            marker='.',
+            linestyle='none',
+            markersize=3
         )
         axes[0].plot(sweep['acc/2'], sweep['white_box_auroc/gradvis/2'], **kwargs)
         axes[1].plot(sweep['acc/2'], sweep['fwd_dnno/gradvis'], **kwargs)
         axes[2].plot(sweep['acc/2'], sweep['rev_dnno/gradvis'], **kwargs)
         axes[3].plot(sweep['acc/2'], sweep['ta_mtd/gradvis/2'], **kwargs)
-        axes[3].set_yscale('log')
         axes[0].set_xlabel('Accuracy')
         axes[1].set_xlabel('Accuracy')
         axes[2].set_xlabel('Accuracy')
@@ -192,6 +250,43 @@ def run_plot_attack_vs_loc(sweep: pandas.DataFrame, dest: Path):
         axes[1].set_ylabel('Forward DNN occlusion')
         axes[2].set_ylabel('Reverse DNN occlusion')
         axes[3].set_ylabel('Tempalate attack MTD')
+        axes[0].set_xscale('log')
+        axes[1].set_xscale('log')
+        axes[2].set_xscale('log')
+        axes[3].set_xscale('log')
+        axes[3].set_yscale('log')
+        for ax in axes:
+            ax.tick_params(axis='both', which='both', pad=2)
+        fig.tight_layout()
+        fig.savefig(dest, dpi=DPI)
+        plt.close(fig)
+    
+def run_plot_attack_vs_loc(sweep: pandas.DataFrame, dest: Path):
+    with plt.rc_context({'font.size': 6, 'axes.labelsize': 6, 'xtick.labelsize': 5, 'ytick.labelsize': 5}):
+        fig, axes = plt.subplots(1, 4, figsize=(WIDTH, WIDTH/4))
+        kwargs = dict(
+            color='blue',
+            marker='.',
+            linestyle='none',
+            markersize=3
+        )
+        axes[0].plot(sweep['mean_acc'], sweep['white_box_auroc/gradvis/full'], **kwargs)
+        axes[1].plot(sweep['mean_acc'], sweep['fwd_dnno/gradvis'], **kwargs)
+        axes[2].plot(sweep['mean_acc'], sweep['rev_dnno/gradvis'], **kwargs)
+        axes[3].plot(sweep['mean_acc'], sweep['mean_ta_mtd/gradvis'], **kwargs)
+        axes[0].set_xlabel('Mean per-byte accuracy')
+        axes[1].set_xlabel('Mean per-byte accuracy')
+        axes[2].set_xlabel('Mean per-byte accuracy')
+        axes[3].set_xlabel('Mean per-byte accuracy')
+        axes[0].set_ylabel('White box AUROC')
+        axes[1].set_ylabel('Forward DNN occlusion')
+        axes[2].set_ylabel('Reverse DNN occlusion')
+        axes[3].set_ylabel('Tempalate attack MTD')
+        axes[0].set_xscale('log')
+        axes[1].set_xscale('log')
+        axes[2].set_xscale('log')
+        axes[3].set_xscale('log')
+        axes[3].set_yscale('log')
         for ax in axes:
             ax.tick_params(axis='both', which='both', pad=2)
         fig.tight_layout()
@@ -219,6 +314,9 @@ def main():
     assert isinstance(dest, Path) and dest.exists()
 
     sweep = load_sweep(sweep_dir)
+    print(sweep)
+    for col in sweep.columns:
+        print(f'\t{col}: {sweep[col].isna().sum()/len(sweep[col])}')
     print(f'Best attacker path: {get_best_attacker(sweep)}')
     print(f'Best localizer path: {get_best_localizer(sweep)}')
     
@@ -231,6 +329,7 @@ def main():
     run_plot_mtd(sweep, dest / 'mtd.pdf')
 
     # leakiness over time visualizations for oracle, best attacker, best localizer
+    run_white_box_agreement(sweep, dest / 'white_box_agreement.pdf')
 
     # visualizations of the DNN occlusion tests for the oracle, random, best attacker, best localizer
 
@@ -238,8 +337,10 @@ def main():
 
     # scatterplots showing relationship between the different attack/localization performance metrics
     run_plot_attack_vs_loc(sweep, dest / 'attack_vs_loc.pdf')
+    run_plot_perbyte_attack_vs_loc(sweep, dest / 'perbyte_attack_vs_loc.pdf')
 
     # scatterplots showing relationship between GradVis and input x grad
+    run_plot_gradvis_vs_inputxgrad(sweep, dest / 'gradvis_vs_inpxgrad.pdf')
 
 if __name__ == '__main__':
     main()

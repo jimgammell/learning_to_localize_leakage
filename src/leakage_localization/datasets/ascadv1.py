@@ -24,6 +24,8 @@ TARGET_VARIABLE = Literal[
     'r',
     'r_out',
     'p__xor__k__xor__r_in',
+    'p__xor__k__xor__r',
+    'p__xor__k__xor__r__xor__r_in',
     'subbytes__xor__r',
     'subbytes__xor__r_out',
     'key',
@@ -50,6 +52,10 @@ def repr_target(variable: TARGET_VARIABLE, byte: Optional[TARGET_BYTE] = None) -
         rv = f'${r_out_repr}$'
     elif variable == 'p__xor__k__xor__r_in':
         rv = f'${w_repr} \\oplus {k_repr} \\oplus {r_in_repr}$'
+    elif variable == 'p__xor__k__xor__r':
+        rv = f'${w_repr} \\oplus {k_repr} \\oplus {r_repr}$'
+    elif variable == 'p__xor__k__xor__r__xor__r_in':
+        rv = f'${w_repr} \\oplus {k_repr} \\oplus {r_repr} \\oplus {r_in_repr}$'
     elif variable == 'subbytes__xor__r':
         rv = f'${sbox_repr}({w_repr} \\oplus {k_repr}) \\oplus {r_repr}$'
     elif variable == 'subbytes__xor__r_out':
@@ -263,6 +269,8 @@ class ASCADv1_NumpyDataset(Base_NumpyDataset):
         r_out = masks[..., -1, np.newaxis]
         subbytes = aes.SBOX[key ^ plaintext]
         p__xor__k__xor__r_in = plaintext ^ key ^ r_in
+        p__xor__k__xor__r = plaintext ^ key ^ r
+        p__xor__k__xor__r__xor__r_in = plaintext ^ key ^ r ^ r_in
         subbytes__xor__r = aes.SBOX[key ^ plaintext] ^ r
         subbytes__xor__r_out = aes.SBOX[key ^ plaintext] ^ r_out
         intermediate_variables = {
@@ -273,6 +281,8 @@ class ASCADv1_NumpyDataset(Base_NumpyDataset):
             'r_out': r_out,
             'subbytes': subbytes,
             'p__xor__k__xor__r_in': p__xor__k__xor__r_in,
+            'p__xor__k__xor__r': p__xor__k__xor__r,
+            'p__xor__k__xor__r__xor__r_in': p__xor__k__xor__r__xor__r_in,
             'subbytes__xor__r': subbytes__xor__r,
             'subbytes__xor__r_out': subbytes__xor__r_out
         }

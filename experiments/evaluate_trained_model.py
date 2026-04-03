@@ -7,7 +7,8 @@ import numpy as np
 from numpy.typing import NDArray
 from lightning import Trainer
 from leakage_localization.datasets import DATASET, PARTITION
-from leakage_localization.evaluation import OracleAgreement, compute_ta_mtd
+from leakage_localization.evaluation import OracleAgreement
+from leakage_localization.evaluation.ta_mtd import compute_ta_mtd
 from leakage_localization.evaluation.dnn_occlusion import compute_dnn_occlusion_mtd, OCCLUSION_ORDER
 from leakage_localization.evaluation.mtd import accumulate_ranks, compute_mtd
 from leakage_localization.evaluation.mtd import accumulate_ranks, compute_mtd

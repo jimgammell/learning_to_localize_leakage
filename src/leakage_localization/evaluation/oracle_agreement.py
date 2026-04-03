@@ -20,33 +20,28 @@ class OracleAgreement:
         assert isinstance(self.snr_dir, Path) and self.snr_dir.exists()
         assert self.dataset in get_args(DATASET)
 
+        _masked_vars = [
+            'r', 'r_in', 'r_out',
+            'subbytes__xor__r', 'subbytes__xor__r_out',
+            'p__xor__k__xor__r_in', 'p__xor__k__xor__r',
+        ]
         if self.dataset == 'ascadv1-fixed':
             self.byte_count = 16
             self.feature_count = 100_000
             self.num_classes = 256
             self.n_traces = {'attack': 10_000, 'profile': 50_000}
-            self.variables={
+            self.variables = {
                 **{idx: ['subbytes'] for idx in range(2)},
-                **{idx: [
-                    'p__xor__k__xor__r_in', 'r_in',
-                    'subbytes__xor__r', 'r',
-                    'subbytes__xor__r_out', 'r_out'
-                    ] for idx in range(2, 16)
-                }
+                **{idx: _masked_vars for idx in range(2, 16)},
             }
         elif self.dataset == 'ascadv1-variable':
             self.byte_count = 16
             self.feature_count = 250_000
             self.num_classes = 256
             self.n_traces = {'attack': 100_000, 'profile': 200_000}
-            self.variables={
+            self.variables = {
                 **{idx: ['subbytes'] for idx in range(2)},
-                **{idx: [
-                    'p__xor__k__xor__r_in', 'r_in',
-                    'subbytes__xor__r', 'r',
-                    'subbytes__xor__r_out', 'r_out'
-                    ] for idx in range(2, 16)
-                }
+                **{idx: _masked_vars for idx in range(2, 16)},
             }
         else:
             raise NotImplementedError(f'No implementation for key {dataset}')

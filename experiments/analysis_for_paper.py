@@ -105,6 +105,61 @@ def run_plot_mtd_curves(dest: Path):
         fig.savefig(dest, dpi=DPI)
         plt.close(fig)
 
+def run_plot_cost_scaling(dest: Path):
+    fig, axes = plt.subplots(1, 4, figsize=(WIDTH, WIDTH/4))
+    benchmark_path = OUTPUTS_ROOT / 'compute_benchmark' / 'results.npz'
+    benchmark = np.load(benchmark_path, allow_pickle=True)
+
+    sweep_var     = benchmark['sweep_var']
+    param_count   = benchmark['param_count']
+    flops         = benchmark['flops']
+    wall_time_ms  = benchmark['wall_time_ms']    # (n_configs, N_SEEDS)
+    vram_gb       = benchmark['vram_mb'] / 1024  # (n_configs, N_SEEDS)
+
+    # Each sweep's x-values are the raw parameter values for that sweep's rows,
+    # normalised to the middle entry (the base configuration).
+    sweep_cfgs = {
+        'embedding_dim': ('Hidden dim (base=256)',    benchmark['embedding_dim']),
+        'layer_count':   ('Layer count (base=4)',   benchmark['layer_count']),
+        'patch_count':   ('Patch count (base=32)',   benchmark['patch_count']),
+    }
+    colors  = ['red', 'blue', 'green']
+
+    # (metric_data, ylabel, has_seeds) — seeded metrics get a min/max band
+    panel_specs = [
+        (param_count,  r'Parameters',           False),
+        (flops,        r'FLOPs/step',            False),
+        (vram_gb,      r'VRAM [GB]',            True),
+        (wall_time_ms, r'Time/step [A6000-ms]', True),
+    ]
+
+    for ax, (metric_data, ylabel, has_seeds) in zip(axes, panel_specs):
+        for color, (sv_key, (sv_label, sv_raw)) in zip(colors, sweep_cfgs.items()):
+            mask = sweep_var == sv_key
+            if not mask.any():
+                continue
+            x = sv_raw[mask].astype(float)
+            x = x / x[len(x) // 2]   # normalise: base → 1, neighbours → 0.5/2, …
+
+            if has_seeds:
+                y = metric_data[mask]                      # (n_pts, N_SEEDS)
+                ax.plot(x, np.mean(y, axis=1), color=color, marker='.',
+                        linewidth=0.5, markersize=3, label=sv_label, rasterized=True)
+            else:
+                ax.plot(x, metric_data[mask], color=color, marker='.',
+                        linewidth=0.5, markersize=3, label=sv_label, rasterized=True)
+
+        ax.set_xlabel('Hyperparameter/base')
+        ax.set_ylabel(ylabel)
+
+    handles, labels = axes[0].get_legend_handles_labels()
+    fig.legend(handles, labels, loc='upper center', ncol=len(sweep_cfgs),
+               framealpha=0, bbox_to_anchor=(0.5, 1.04))
+    fig.tight_layout()
+    fig.savefig(dest, dpi=DPI, bbox_inches='tight')
+    plt.close(fig)
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument(
@@ -117,6 +172,9 @@ def main():
         '--format-attack-performance', default=False, action='store_true'
     )
     parser.add_argument(
+        '--plot-cost-scaling', default=False, action='store_true'
+    )
+    parser.add_argument(
         '--dest', default=None, type=Path
     )
     args = parser.parse_args()
@@ -127,6 +185,8 @@ def main():
     assert isinstance(plot_mtd_curves, bool)
     format_attack_performance: bool = args.format_attack_performance
     assert isinstance(format_attack_performance, bool)
+    plot_cost_scaling: bool = args.plot_cost_scaling
+    assert isinstance(plot_cost_scaling, bool)
     dest: Optional[Path] = args.dest
     if dest is None:
         dest = OUTPUTS_ROOT / 'plots_for_paper'
@@ -137,6 +197,8 @@ def main():
         run_plot_training_curves(dest / 'training_curves.pdf')
     if plot_mtd_curves:
         run_plot_mtd_curves(dest / 'mtd_curves.pdf')
+    if plot_cost_scaling:
+        run_plot_cost_scaling(dest / 'cost_scaling.pdf')
 
 if __name__ == '__main__':
     main()

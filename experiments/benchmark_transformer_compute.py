@@ -32,7 +32,6 @@ OUTPUT_DIM       = 256
 EXPANSION_FACTOR = 4
 N_WARMUP         = 3
 N_ITERS          = 10
-N_SEEDS          = 5       # independent repeats for error bars on timing/VRAM
 
 # ── Base config ───────────────────────────────────────────────────────────────
 BASE_PATCH_COUNT   = 32
@@ -40,9 +39,9 @@ BASE_LAYER_COUNT   = 4
 BASE_EMBEDDING_DIM = 256
 
 # ── Sweeps (factors of 2 around base) ────────────────────────────────────────
-PATCH_COUNTS   = [8, 16, 32, 64, 128]
-LAYER_COUNTS   = [1, 2, 4, 8, 16]
-EMBEDDING_DIMS = [64, 128, 256, 512, 1024]
+PATCH_COUNTS   = [8, 16, 32, 64, 128, 256]
+LAYER_COUNTS   = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]
+EMBEDDING_DIMS = [64, 128, 192, 256, 320, 384, 448, 512, 576, 640, 704, 768, 832, 896, 960, 1024]
 
 
 # ── Model helpers ─────────────────────────────────────────────────────────────
@@ -139,22 +138,9 @@ def measure_wall_time_ms(model: Model, x: torch.Tensor) -> float:
     return float(np.median(times) * 1000)
 
 
-def _run_seed(model: Model, patch_count: int, seed: int) -> tuple[float, float]:
-    """Return (wall_time_ms, vram_mb) for one seed. Input is re-generated each time."""
-    torch.manual_seed(seed)
-    x = make_input(patch_count)
-    wall_ms = measure_wall_time_ms(model, x)
-    vram_mb = measure_vram_mb(model, x)
-    return wall_ms, vram_mb
-
-
 # ── Per-config orchestration ──────────────────────────────────────────────────
 
 def benchmark_config(patch_count: int, layer_count: int, embedding_dim: int) -> dict:
-    """
-    Returns scalar metrics (params, flops) measured once, and per-seed arrays
-    (wall_time_ms, vram_mb) of length N_SEEDS for error bars.
-    """
     patch_size = FIXED_INPUT_LEN // patch_count
     base = {
         'patch_count':   patch_count,
@@ -168,12 +154,8 @@ def benchmark_config(patch_count: int, layer_count: int, embedding_dim: int) -> 
         x      = make_input(patch_count)
         params = count_params(model)
         flops  = measure_flops(model, x)
-
-        wall_times, vrams = [], []
-        for seed in range(N_SEEDS):
-            wall_ms, vram_mb = _run_seed(model, patch_count, seed)
-            wall_times.append(wall_ms)
-            vrams.append(vram_mb)
+        wall_ms = measure_wall_time_ms(model, x)
+        vram_mb = measure_vram_mb(model, x)
 
         del model, x
         torch.cuda.empty_cache()
@@ -181,8 +163,8 @@ def benchmark_config(patch_count: int, layer_count: int, embedding_dim: int) -> 
         return {**base,
                 'param_count':  params,
                 'flops':        flops,
-                'wall_time_ms': wall_times,   # list of length N_SEEDS
-                'vram_mb':      vrams,         # list of length N_SEEDS
+                'wall_time_ms': wall_ms,
+                'vram_mb':      vram_mb,
                 'oom':          False}
 
     except torch.cuda.OutOfMemoryError:
@@ -190,21 +172,19 @@ def benchmark_config(patch_count: int, layer_count: int, embedding_dim: int) -> 
         return {**base,
                 'param_count':  None,
                 'flops':        None,
-                'wall_time_ms': [float('nan')] * N_SEEDS,
-                'vram_mb':      [float('nan')] * N_SEEDS,
+                'wall_time_ms': float('nan'),
+                'vram_mb':      float('nan'),
                 'oom':          True}
 
 
 def _fmt(r: dict) -> str:
     if r['oom']:
         return 'OOM'
-    t = np.array(r['wall_time_ms'])
-    v = np.array(r['vram_mb'])
     return (
         f"params={r['param_count']:>12,}  "
         f"flops={r['flops']:.3e}  "
-        f"vram={v.mean():>8.1f}±{v.std():>5.1f} MB  "
-        f"time={t.mean():>7.1f}±{t.std():>5.1f} ms"
+        f"vram={r['vram_mb']:>8.1f} MB  "
+        f"time={r['wall_time_ms']:>7.1f} ms"
     )
 
 
@@ -280,8 +260,8 @@ def main():
         patch_size  = _arr('patch_size',    np.int64),
         param_count = _arr('param_count',   np.float64),  # float to allow NaN on OOM
         flops       = _arr('flops',         np.float64),
-        wall_time_ms = _arr('wall_time_ms', np.float64),  # shape (n_configs, N_SEEDS)
-        vram_mb     = _arr('vram_mb',       np.float64),  # shape (n_configs, N_SEEDS)
+        wall_time_ms = _arr('wall_time_ms', np.float64),
+        vram_mb     = _arr('vram_mb',       np.float64),
         oom         = _arr('oom',           bool),
     )
     print(f'\nResults saved to {out_path}')

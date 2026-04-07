@@ -110,44 +110,37 @@ def run_plot_cost_scaling(dest: Path):
     benchmark_path = OUTPUTS_ROOT / 'compute_benchmark' / 'results.npz'
     benchmark = np.load(benchmark_path, allow_pickle=True)
 
-    sweep_var     = benchmark['sweep_var']
-    param_count   = benchmark['param_count']
-    flops         = benchmark['flops']
-    wall_time_ms  = benchmark['wall_time_ms']    # (n_configs, N_SEEDS)
-    vram_gb       = benchmark['vram_mb'] / 1024  # (n_configs, N_SEEDS)
+    sweep_var    = benchmark['sweep_var']
+    param_count  = benchmark['param_count']
+    flops        = benchmark['flops']
+    wall_time_ms = benchmark['wall_time_ms']
+    vram_gb      = benchmark['vram_mb'] / 1024
 
-    # Each sweep's x-values are the raw parameter values for that sweep's rows,
-    # normalised to the middle entry (the base configuration).
+    # Base values used when a parameter is held fixed — x is normalised to these.
+    base_vals = {'patch_count': 64, 'layer_count': 8, 'embedding_dim': 512}
+
     sweep_cfgs = {
-        'embedding_dim': ('Hidden dim (base=256)',    benchmark['embedding_dim']),
-        'layer_count':   ('Layer count (base=4)',   benchmark['layer_count']),
-        'patch_count':   ('Patch count (base=32)',   benchmark['patch_count']),
+        'embedding_dim': ('Hidden dim (base=512)',  benchmark['embedding_dim']),
+        'layer_count':   ('Layer count (base=8)',   benchmark['layer_count']),
+        'patch_count':   ('Patch count (base=64)',  benchmark['patch_count']),
     }
-    colors  = ['red', 'blue', 'green']
+    colors = ['red', 'blue', 'green']
 
-    # (metric_data, ylabel, has_seeds) — seeded metrics get a min/max band
     panel_specs = [
-        (param_count,  r'Parameters',           False),
-        (flops,        r'FLOPs/step',            False),
-        (vram_gb,      r'VRAM [GB]',            True),
-        (wall_time_ms, r'Time/step [A6000-ms]', True),
+        (param_count,  r'Parameters'),
+        (flops,        r'FLOPs/step'),
+        (vram_gb,      r'VRAM [GB]'),
+        (wall_time_ms, r'Time/step [A6000-ms]'),
     ]
 
-    for ax, (metric_data, ylabel, has_seeds) in zip(axes, panel_specs):
+    for ax, (metric_data, ylabel) in zip(axes, panel_specs):
         for color, (sv_key, (sv_label, sv_raw)) in zip(colors, sweep_cfgs.items()):
             mask = sweep_var == sv_key
             if not mask.any():
                 continue
-            x = sv_raw[mask].astype(float)
-            x = x / x[len(x) // 2]   # normalise: base → 1, neighbours → 0.5/2, …
-
-            if has_seeds:
-                y = metric_data[mask]                      # (n_pts, N_SEEDS)
-                ax.plot(x, np.mean(y, axis=1), color=color, marker='.',
-                        linewidth=0.5, markersize=3, label=sv_label, rasterized=True)
-            else:
-                ax.plot(x, metric_data[mask], color=color, marker='.',
-                        linewidth=0.5, markersize=3, label=sv_label, rasterized=True)
+            x = sv_raw[mask].astype(float) / base_vals[sv_key]
+            ax.plot(x, metric_data[mask], color=color, marker='none',
+                    linewidth=.75, label=sv_label, rasterized=True)
 
         ax.set_xlabel('Hyperparameter/base')
         ax.set_ylabel(ylabel)

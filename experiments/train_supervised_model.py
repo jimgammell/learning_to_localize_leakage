@@ -2,6 +2,7 @@ from typing import Dict, Any, Tuple, List, get_args, Optional
 from copy import copy
 import argparse
 import fcntl
+import logging
 import subprocess
 from functools import partial
 
@@ -251,7 +252,11 @@ def main():
                     seed=SEED,
                 )
         optuna_objective = partial(_optuna_objective, dest=dest, config=config, enable_pruning=optuna_enable_pruning, use_trial_subdir=(optuna_run_count > 1))
-        optuna_study.optimize(optuna_objective, n_trials=optuna_run_count)
+        n_complete = sum(1 for t in optuna_study.trials if t.state == optuna.trial.TrialState.COMPLETE)
+        if optuna_total_trials is not None and n_complete >= optuna_total_trials:
+            logging.info(f'Study already has {n_complete} complete trials (>= {optuna_total_trials}). Skipping training.')
+        else:
+            optuna_study.optimize(optuna_objective, n_trials=optuna_run_count)
     else:
         run_train_model(dest, config)
 

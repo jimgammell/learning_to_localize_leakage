@@ -43,7 +43,8 @@ def train_supervised_model(
                 dirpath=dest,
                 filename=best_ckpt_name,
                 verbose=True,
-                enable_version_counter=False
+                enable_version_counter=False,
+                save_on_train_epoch_end=True
             )
             callbacks.append(early_stop_callback)
         final_checkpoint_callback = ModelCheckpoint(

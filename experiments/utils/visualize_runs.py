@@ -40,7 +40,7 @@ def plot_ascadv1_oracle_leakiness(
         pr = dict(color = 'green', linestyle='--', label=ascadv1_repr_target('p__xor__k__xor__r')),
         rin = dict(color='red', linestyle='-', label=ascadv1_repr_target('r_in')),
         rout = dict(color='teal', linestyle='-', label=ascadv1_repr_target('r_out')),
-        r = dict(color='yellow', linestyle='-', label=ascadv1_repr_target('r')),
+        r = dict(color='orange', linestyle='-', label=ascadv1_repr_target('r')),
         yrout = dict(color = 'blue', linestyle='-', label=ascadv1_repr_target('subbytes__xor__r_out')),
         yr = dict(color = 'black', linestyle='-', label=ascadv1_repr_target('subbytes__xor__r'))
     )

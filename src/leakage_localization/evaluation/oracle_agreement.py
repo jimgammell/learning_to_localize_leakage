@@ -60,10 +60,26 @@ class OracleAgreement:
                 oracle_leakiness[byte_idx, :] += snr[min(byte_idx, snr_byte_count - 1), :]
         return oracle_leakiness
     
+    def get_threshold(
+            self,
+            partition: PARTITION,
+            percentile: float = 0.9999,
+            snr_threshold: Optional[float] = None,
+    ) -> float:
+        """Return the SNR threshold, either from a direct value or derived from
+        the F-distribution null at the given percentile."""
+        if snr_threshold is not None:
+            return snr_threshold
+        n = self.n_traces[partition]
+        df1 = self.num_classes - 1
+        df2 = n - self.num_classes
+        return float(f_dist.ppf(percentile, df1, df2) * df1 / df2)
+
     def get_binary_labels(
             self,
             partition: PARTITION,
             percentile: float = 0.9999,
+            snr_threshold: Optional[float] = None,
     ) -> NDArray[np.bool_]:
         """Binary leakage labels via per-variable F-distribution threshold.
 
@@ -74,11 +90,12 @@ class OracleAgreement:
         byte b has SNR above the chosen percentile of this null distribution.
         Note: shared single-byte variables (e.g. r_in, r_out) will contribute
         the same leaky timesteps to all bytes that use them.
+
+        Pass snr_threshold to override the percentile-derived threshold with a
+        fixed SNR cutoff, which is useful when the F-null assumption is violated
+        for some variables (e.g. elevated SNR floors).
         """
-        n = self.n_traces[partition]
-        df1 = self.num_classes - 1
-        df2 = n - self.num_classes
-        threshold = float(f_dist.ppf(percentile, df1, df2) * df1 / df2)
+        threshold = self.get_threshold(partition, percentile, snr_threshold)
         labels = np.zeros((self.byte_count, self.feature_count), dtype=bool)
         for byte_idx, var_names in self.variables.items():
             for var_name in var_names:
@@ -94,12 +111,13 @@ class OracleAgreement:
             x: NDArray[np.floating],
             partition: PARTITION = 'attack',
             percentile: float = 0.9999,
+            snr_threshold: Optional[float] = None,
     ) -> NDArray[np.floating]:
         """Per-byte AUROC of x against binary leakage labels."""
         byte_count, feature_count = x.shape
         assert byte_count == self.byte_count
         assert feature_count == self.feature_count
-        labels = self.get_binary_labels(partition, percentile)
+        labels = self.get_binary_labels(partition, percentile, snr_threshold)
         auroc = np.full(byte_count, np.nan, dtype=np.float64)
         for b in range(byte_count):
             pos = labels[b].sum()
@@ -121,6 +139,7 @@ class OracleAgreement:
             x: NDArray[np.floating],
             partition: PARTITION = 'attack',
             percentile: float = 0.9999,
+            snr_threshold: Optional[float] = None,
     ) -> float:
         """AUROC of the byte-averaged attribution against union-of-bytes binary
         leakage labels.  A timestep is considered leaky if it is leaky for any
@@ -128,7 +147,7 @@ class OracleAgreement:
         byte_count, feature_count = x.shape
         assert byte_count == self.byte_count
         assert feature_count == self.feature_count
-        labels = self.get_binary_labels(partition, percentile)  # (byte_count, feature_count)
+        labels = self.get_binary_labels(partition, percentile, snr_threshold)  # (byte_count, feature_count)
         union_labels = labels.any(axis=0)                        # (feature_count,)
         x_mean = x.mean(axis=0)                                  # (feature_count,)
         pos = int(union_labels.sum())

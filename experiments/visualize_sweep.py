@@ -10,6 +10,8 @@ from scipy.stats import spearmanr
 from matplotlib import pyplot as plt
 
 from leakage_localization.evaluation.mtd import compute_mtd
+from leakage_localization.evaluation.oracle_agreement import OracleAgreement
+from leakage_localization.datasets import DATASET
 
 from init_things import *
 from utils.visualize_runs import *
@@ -103,7 +105,7 @@ def get_best_attacker(sweep: pandas.DataFrame) -> Path:
     return best_path
 
 def get_best_localizer(sweep: pandas.DataFrame) -> Path:
-    best_row = sweep.loc[sweep['white_box_auroc/input_x_gradient/full'].idxmax()]
+    best_row = sweep.loc[sweep['white_box_auroc/input_x_gradient'].idxmax()]
     best_path = best_row['path']
     return best_path
 
@@ -194,6 +196,208 @@ def run_white_box_agreement(sweep: pandas.DataFrame, dest: Path):
     fig.savefig(dest, dpi=DPI)
     plt.close(fig)
 
+def run_minimal_white_box_agreement(sweep: pandas.DataFrame, dest: Path):
+    best_localizer_path = get_best_localizer(sweep)
+    best_localizer_inputxgrad = np.load(best_localizer_path / 'input_x_gradient.npy')[2, :]
+    fig, axes = plt.subplots(2, 1, figsize=(WIDTH, WIDTH))
+    axes[0].plot(best_localizer_inputxgrad, color='blue')
+    plot_ascadv1_oracle_leakiness(dest.parent.parent / '..' / 'snr', axes[1])
+    axes[0].set_title('Black box (ours)')
+    axes[1].set_title('White box (ground truth)')
+    axes[0].set_xlabel(r'Time $t$')
+    axes[1].set_xlabel(r'Time $t$')
+    axes[0].set_ylabel(r'Estimated leakiness of $X_t$')
+    axes[1].set_ylabel(r'Estimated leakiness of $X_t$')
+    axes[1].legend(loc='upper right', ncol=3, framealpha=0, fontsize=6, title='Leaky intermediate variables', title_fontsize=8)
+    fig.tight_layout()
+    fig.savefig(dest, dpi=DPI)
+    plt.close(fig)
+
+def run_white_box_agreement_all_bytes(
+        sweep: pandas.DataFrame,
+        dest: Path,
+        dataset: DATASET = 'ascadv1-fixed',
+        auroc_percentile: float = 0.9999,
+        snr_threshold: Optional[float] = None,
+):
+    best_attacker_path = get_best_attacker(sweep)
+    best_localizer_path = get_best_localizer(sweep)
+
+    best_attacker_inputxgrad = np.load(best_attacker_path / 'input_x_gradient.npy')  # [16, T]
+    best_localizer_inputxgrad = np.load(best_localizer_path / 'input_x_gradient.npy')  # [16, T]
+
+    attacker_wb = np.load(best_attacker_path / 'white_box_agreement.input_x_gradient.npz', allow_pickle=True)
+    localizer_wb = np.load(best_localizer_path / 'white_box_agreement.input_x_gradient.npz', allow_pickle=True)
+
+    snr_dir = dest.parent.parent / '..' / 'snr'
+    oracle = OracleAgreement(snr_dir, dataset)
+    # oracle_leakiness[b] uses the correct per-byte variable set (e.g. only 'subbytes'
+    # for bytes 0-1 in ASCADv1, all masked vars for bytes 2-15).
+    oracle_leakiness = oracle.oracle_leakiness          # [16, T]
+    binary_labels = oracle.get_binary_labels('attack', auroc_percentile, snr_threshold)  # [16, T] bool
+
+    # Diagnostic: per-variable label counts, to identify which variable drives dense labels
+    _threshold = oracle.get_threshold('attack', auroc_percentile, snr_threshold)
+    print(f'\nBinary label threshold (SNR): {_threshold:.4f}')
+    print(f'{"byte":>4}  {"variable":<30}  {"n_leaky":>8}  {"frac":>6}')
+    for byte_idx, var_names in oracle.variables.items():
+        for var_name in var_names:
+            snr = np.load(snr_dir / f'{var_name}.attack.npy')
+            row = min(byte_idx, snr.shape[0] - 1)
+            n_leaky = int((snr[row] > _threshold).sum())
+            frac = n_leaky / snr.shape[1]
+            if n_leaky > 0:
+                print(f'{byte_idx:>4}  {var_name:<30}  {n_leaky:>8}  {frac:>6.3f}')
+
+    t = oracle_leakiness.shape[1]
+    xs = np.arange(t)
+
+    with plt.rc_context({'font.size': 5, 'axes.labelsize': 5, 'xtick.labelsize': 4, 'ytick.labelsize': 4, 'axes.titlesize': 4}):
+        fig, axes = plt.subplots(3, 16, figsize=(WIDTH * 4, WIDTH * 3 / 4))
+
+        for byte_idx in range(16):
+            attacker_spearman  = attacker_wb['spearman'][byte_idx]
+            attacker_auroc     = attacker_wb['auroc'][byte_idx]
+            localizer_spearman = localizer_wb['spearman'][byte_idx]
+            localizer_auroc    = localizer_wb['auroc'][byte_idx]
+            labels = binary_labels[byte_idx]
+
+            axes[0, byte_idx].plot(best_attacker_inputxgrad[byte_idx], color='blue', lw=0.5)
+            axes[1, byte_idx].plot(best_localizer_inputxgrad[byte_idx], color='blue', lw=0.5)
+            axes[2, byte_idx].plot(oracle_leakiness[byte_idx], color='black', lw=0.5)
+
+            # Shade leaky timesteps (binary AUROC labels) on all three rows
+            for row in range(3):
+                axes[row, byte_idx].fill_between(
+                    xs, 0, 1,
+                    where=labels,
+                    transform=axes[row, byte_idx].get_xaxis_transform(),
+                    color='red', alpha=0.25, linewidth=0,
+                )
+
+            axes[0, byte_idx].set_title(
+                f'Byte {byte_idx}\n$\\rho$={attacker_spearman:.2f}, AUC={attacker_auroc:.2f}'
+            )
+            axes[1, byte_idx].set_title(
+                f'$\\rho$={localizer_spearman:.2f}, AUC={localizer_auroc:.2f}'
+            )
+            axes[2, byte_idx].set_title(
+                f'n_leaky={labels.sum()}'
+            )
+
+            for row in range(3):
+                axes[row, byte_idx].set_xticks([])
+                axes[row, byte_idx].set_yticks([])
+
+        axes[0, 0].set_ylabel('Attacker\nInput×Grad')
+        axes[1, 0].set_ylabel('Localizer\nInput×Grad')
+        axes[2, 0].set_ylabel('Oracle SNR\n(composite)')
+
+        fig.tight_layout()
+        fig.savefig(dest, dpi=DPI, bbox_inches='tight')
+        plt.close(fig)
+
+def run_plot_oracle_snr_histograms(
+        dest: Path,
+        dataset: DATASET = 'ascadv1-fixed',
+        auroc_percentile: float = 0.9999,
+        snr_threshold: Optional[float] = None,
+        n_bins: int = 100,
+):
+    snr_dir = dest.parent.parent / '..' / 'snr'
+    oracle = OracleAgreement(snr_dir, dataset)
+    threshold = oracle.get_threshold('attack', auroc_percentile, snr_threshold)
+    null_mean = (oracle.num_classes - 1) / (oracle.n_traces['attack'] - oracle.num_classes)
+
+    # Compute max SNR across variables per timestep per byte.
+    # This is the quantity that directly determines binary labeling:
+    # a timestep is leaky iff max_var(SNR) > threshold.
+    feature_count = oracle.feature_count
+    max_snr = np.zeros((oracle.byte_count, feature_count), dtype=np.float32)
+    for byte_idx, var_names in oracle.variables.items():
+        for var_name in var_names:
+            snr = np.load(snr_dir / f'{var_name}.attack.npy')
+            row = min(byte_idx, snr.shape[0] - 1)
+            max_snr[byte_idx] = np.maximum(max_snr[byte_idx], snr[row])
+
+    all_pos = max_snr[max_snr > 0]
+    bins = np.logspace(np.log10(float(all_pos.min())), np.log10(float(max_snr.max())), n_bins + 1)
+
+    threshold_label = f'threshold={threshold:.4f}' + ('' if snr_threshold is not None else f' (F-null p={auroc_percentile})')
+    with plt.rc_context({'font.size': 6, 'axes.labelsize': 6, 'xtick.labelsize': 5, 'ytick.labelsize': 5, 'axes.titlesize': 6}):
+        fig, axes = plt.subplots(4, 4, figsize=(WIDTH, WIDTH))
+        for byte_idx, ax in enumerate(axes.flat):
+            snr = max_snr[byte_idx]
+            ax.hist(snr[snr > 0], bins=bins, color='steelblue', edgecolor='none')
+            ax.axvline(threshold, color='red',    lw=1.0, linestyle='--', label=threshold_label)
+            ax.axvline(null_mean,  color='orange', lw=0.8, linestyle=':',  label='Null mean')
+            ax.set_xscale('log')
+            ax.set_yscale('log')
+            n_leaky = int((snr > threshold).sum())
+            ax.set_title(f'Byte {byte_idx}  (n_leaky={n_leaky})')
+            ax.set_xlabel('Max SNR across variables')
+            ax.set_ylabel('Count')
+        axes.flat[0].legend(fontsize=4, loc='upper right')
+        fig.tight_layout()
+        fig.savefig(dest, dpi=DPI, bbox_inches='tight')
+        plt.close(fig)
+
+def run_plot_perbyte_pervariable_snr_histograms(
+        dest: Path,
+        dataset: DATASET = 'ascadv1-fixed',
+        auroc_percentile: float = 0.9999,
+        snr_threshold: Optional[float] = None,
+        n_bins: int = 100,
+):
+    """One column per byte, one row per variable, showing raw SNR histograms."""
+    snr_dir = dest.parent.parent / '..' / 'snr'
+    oracle = OracleAgreement(snr_dir, dataset)
+    threshold = oracle.get_threshold('attack', auroc_percentile, snr_threshold)
+
+    # Collect variable names across all bytes (preserve order)
+    all_vars = []
+    for var_names in oracle.variables.values():
+        for v in var_names:
+            if v not in all_vars:
+                all_vars.append(v)
+
+    # Compute shared log-spaced bins across all SNR files
+    all_snr_vals = []
+    for var_name in all_vars:
+        snr_file = np.load(snr_dir / f'{var_name}.attack.npy')
+        all_snr_vals.append(snr_file[snr_file > 0].ravel())
+    all_snr_cat = np.concatenate(all_snr_vals)
+    bins = np.logspace(np.log10(float(all_snr_cat.min())), np.log10(float(all_snr_cat.max())), n_bins + 1)
+
+    n_vars = len(all_vars)
+    with plt.rc_context({'font.size': 4, 'axes.labelsize': 4, 'xtick.labelsize': 3, 'ytick.labelsize': 3, 'axes.titlesize': 4}):
+        fig, axes = plt.subplots(n_vars, 16, figsize=(WIDTH * 4, WIDTH * n_vars / 4))
+        for row_idx, var_name in enumerate(all_vars):
+            snr_path = snr_dir / f'{var_name}.attack.npy'
+            snr_file = np.load(snr_path)
+            for byte_idx in range(16):
+                ax = axes[row_idx, byte_idx]
+                var_names_for_byte = oracle.variables.get(byte_idx, [])
+                if var_name not in var_names_for_byte:
+                    ax.set_visible(False)
+                    continue
+                row = min(byte_idx, snr_file.shape[0] - 1)
+                snr = snr_file[row]
+                ax.hist(snr[snr > 0], bins=bins, color='steelblue', edgecolor='none')
+                ax.axvline(threshold, color='red', lw=0.8, linestyle='--')
+                ax.set_xscale('log')
+                ax.set_yscale('log')
+                n_leaky = int((snr > threshold).sum())
+                if row_idx == 0:
+                    ax.set_title(f'B{byte_idx}')
+                if byte_idx == 0:
+                    ax.set_ylabel(var_name.replace('__xor__', '⊕') + f'\nn={n_leaky}', fontsize=3)
+                else:
+                    ax.set_title(f'n={n_leaky}', fontsize=3)
+        fig.tight_layout()
+        fig.savefig(dest, dpi=DPI, bbox_inches='tight')
+        plt.close(fig)
+
 def run_plot_gradvis_vs_inputxgrad(sweep: pandas.DataFrame, dest: Path):
     with plt.rc_context({'font.size': 6, 'axes.labelsize': 6, 'xtick.labelsize': 5, 'ytick.labelsize': 5}):
         fig, axes = plt.subplots(1, 4, figsize=(WIDTH, WIDTH/4))
@@ -238,10 +442,10 @@ def run_plot_perbyte_attack_vs_loc(sweep: pandas.DataFrame, dest: Path, byte: in
             linestyle='none',
             markersize=3
         )
-        axes[0].plot(sweep['acc/2'], sweep['white_box_auroc/gradvis/2'], **kwargs)
-        axes[1].plot(sweep['acc/2'], sweep['fwd_dnno/gradvis'], **kwargs)
-        axes[2].plot(sweep['acc/2'], sweep['rev_dnno/gradvis'], **kwargs)
-        axes[3].plot(sweep['acc/2'], sweep['ta_mtd/gradvis/2'], **kwargs)
+        axes[0].plot(sweep[f'acc/{byte}'], sweep[f'white_box_auroc/gradvis/{byte}'], **kwargs)
+        axes[1].plot(sweep[f'acc/{byte}'], sweep[f'fwd_dnno/gradvis'], **kwargs)
+        axes[2].plot(sweep[f'acc/{byte}'], sweep[f'rev_dnno/gradvis'], **kwargs)
+        axes[3].plot(sweep[f'acc/{byte}'], sweep[f'ta_mtd/gradvis/{byte}'], **kwargs)
         axes[0].set_xlabel('Accuracy')
         axes[1].set_xlabel('Accuracy')
         axes[2].set_xlabel('Accuracy')
@@ -255,6 +459,8 @@ def run_plot_perbyte_attack_vs_loc(sweep: pandas.DataFrame, dest: Path, byte: in
         axes[2].set_xscale('log')
         axes[3].set_xscale('log')
         axes[3].set_yscale('log')
+        for byte_idx in range(16):
+            print(f'Best white box AUROC (byte {byte_idx}): {sweep[f"white_box_auroc/gradvis/{byte_idx}"].max()}')
         for ax in axes:
             ax.tick_params(axis='both', which='both', pad=2)
         fig.tight_layout()
@@ -303,6 +509,10 @@ def main():
         '--dest', type=Path, default=None,
         help='Directory in which to save figures. Defaults to a directory called `plots` in the sweep directory.'
     )
+    parser.add_argument(
+        '--snr-threshold', type=float, default=None,
+        help='Override the F-null SNR threshold with a fixed value for binary leakage labels.'
+    )
     args = parser.parse_args()
 
     sweep_dir: Path = args.sweep_dir
@@ -312,6 +522,7 @@ def main():
         dest = sweep_dir / 'plots'
         dest.mkdir(exist_ok=True)
     assert isinstance(dest, Path) and dest.exists()
+    snr_threshold: Optional[float] = args.snr_threshold
 
     sweep = load_sweep(sweep_dir)
     print(sweep)
@@ -319,7 +530,7 @@ def main():
         print(f'\t{col}: {sweep[col].isna().sum()/len(sweep[col])}')
     print(f'Best attacker path: {get_best_attacker(sweep)}')
     print(f'Best localizer path: {get_best_localizer(sweep)}')
-    
+
     # table listing performance of the best attacker and localizer models
 
     # training curves for the best attacker and best localizer
@@ -330,6 +541,12 @@ def main():
 
     # leakiness over time visualizations for oracle, best attacker, best localizer
     run_white_box_agreement(sweep, dest / 'white_box_agreement.pdf')
+    run_white_box_agreement_all_bytes(sweep, dest / 'white_box_agreement_all_bytes.pdf', snr_threshold=snr_threshold)
+    run_minimal_white_box_agreement(sweep, dest / 'minimal_white_box_agreement.pdf')
+
+    # oracle SNR histograms (composite per byte, and per-variable breakdown)
+    run_plot_oracle_snr_histograms(dest / 'oracle_snr_histograms.pdf', snr_threshold=snr_threshold)
+    run_plot_perbyte_pervariable_snr_histograms(dest / 'oracle_snr_histograms_per_variable.pdf', snr_threshold=snr_threshold)
 
     # visualizations of the DNN occlusion tests for the oracle, random, best attacker, best localizer
 

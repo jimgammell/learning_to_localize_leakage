@@ -8,7 +8,7 @@
 #SBATCH --time=8:00:00
 #SBATCH --output=./outputs/ascadv1_variable/htune_highdropout/slurm_%A_%a.out
 #SBATCH --error=./outputs/ascadv1_variable/htune_highdropout/slurm_%A_%a.out
-#SBATCH --array=0-127%8
+#SBATCH --array=0-127%6
 
 STRONG_ATTACKER_CKPT=./outputs/ascadv1_variable/strong_attacker/seed_0/best_val_rank.ckpt
 

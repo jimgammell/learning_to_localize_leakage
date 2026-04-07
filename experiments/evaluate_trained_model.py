@@ -44,7 +44,7 @@ def _run_compute_dnn_occl(
     profiling_set = load_numpy_dataset(dataset_id, 'profile')
     attack_set = load_torch_dataset(dataset_id, 'attack')
     attack_loader, = construct_loaders([], [attack_set])
-    dnno_mtd = compute_dnn_occlusion_mtd(leakiness_estimates, profiling_set, attack_loader, strong_attacker_path, order, byte_idx=byte_idx, progress_bar=True)
+    dnno_mtd = compute_dnn_occlusion_mtd(leakiness_estimates, profiling_set, attack_loader, strong_attacker_path, order, byte_idx=byte_idx, progress_bar=True, max_traces=10_000)
     return dnno_mtd
 
 def run_compute_fwd_dnn_occl(leakiness_estimates: NDArray[np.floating], dataset_id: DATASET, strong_attacker_path: Path) -> NDArray[np.floating]:

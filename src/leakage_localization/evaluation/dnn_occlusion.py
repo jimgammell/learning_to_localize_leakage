@@ -23,24 +23,28 @@ def _get_logits_and_int_vars(
         attack_loader: DataLoader,
         mask: torch.Tensor,
         byte_count: int,
-        class_count: int
+        class_count: int,
+        max_traces: Optional[int] = None,
 ) -> Tuple[NDArray[np.floating], Dict[str, np.integer]]:
     assert torch.cuda.is_available()
     trace_count = len(attack_loader.dataset)
+    if max_traces is not None:
+        trace_count = min(trace_count, max_traces)
     collected_logits = np.full((trace_count, byte_count, class_count), np.nan, dtype=np.float32)
     collected_int_vars = defaultdict(lambda: np.full((trace_count, byte_count), -1, dtype=int))
     start_idx = 0
     for batch in attack_loader:
         trace, _, int_vars = module.prepare_batch(batch)
-        batch_size = len(trace)
+        batch_size = min(len(trace), trace_count - start_idx)
         end_idx = start_idx + batch_size
-        assert end_idx <= trace_count
-        trace = trace*mask.unsqueeze(0)
+        trace = trace[:batch_size] * mask.unsqueeze(0)
         logits = module.logits_to_byte_logits(module.model(trace))
         collected_logits[start_idx:end_idx, :, :] = logits.cpu().numpy()
         for k, v in int_vars.items():
-            collected_int_vars[k][start_idx:end_idx, :] = v.cpu().numpy()
+            collected_int_vars[k][start_idx:end_idx, :] = v[:batch_size].cpu().numpy()
         start_idx = end_idx
+        if start_idx >= trace_count:
+            break
     assert start_idx == trace_count
     assert np.isfinite(collected_logits).all()
     assert all((x >= 0).all() for x in collected_int_vars.values())
@@ -57,6 +61,7 @@ def compute_dnn_occlusion_mtd(
         byte_idx: Optional[int] = None,
         attack_count: int = 100,
         progress_bar: bool = False,
+        max_traces: Optional[int] = None,
 ) -> NDArray[np.floating]:
     module = SupervisedModule.load_from_checkpoint(ckpt_path, trace_statistics=profiling_set.get_trace_statistics(), weights_only=False)
     module.cuda()
@@ -84,7 +89,7 @@ def compute_dnn_occlusion_mtd(
         bin_iter = tqdm(bin_iter, total=bin_count, desc=f'DNN-occl ({order})')
     for bin_idx, bin_features_to_include in bin_iter:
         current_mask[:, bin_features_to_include] = 1.
-        logits, int_vars = _get_logits_and_int_vars(module, attack_loader, current_mask, profiling_set.byte_count, profiling_set.config.num_classes)
+        logits, int_vars = _get_logits_and_int_vars(module, attack_loader, current_mask, profiling_set.byte_count, profiling_set.config.num_classes, max_traces=max_traces)
         if byte_idx is not None:
             logits = logits[:, byte_idx, :]
             int_vars = {k: v[:, byte_idx] for k, v in int_vars.items()}

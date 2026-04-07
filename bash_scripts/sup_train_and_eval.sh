@@ -22,7 +22,28 @@
 CONFIG_FILE=$1
 DEST=$2
 STRONG_ATTACKER_CKPT=$3
-EXTRA_ARGS="${@:4}"
+shift 3
+
+# Parse --ascadv1-variable-root from remaining args; pass everything else to train_supervised_model.py
+ASCADV1_VARIABLE_ROOT=""
+EXTRA_ARGS_LIST=()
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --ascadv1-variable-root)
+            ASCADV1_VARIABLE_ROOT="$2"
+            shift 2
+            ;;
+        *)
+            EXTRA_ARGS_LIST+=("$1")
+            shift
+            ;;
+    esac
+done
+
+DATASET_ROOT_ARGS=""
+if [ -n "$ASCADV1_VARIABLE_ROOT" ]; then
+    DATASET_ROOT_ARGS="--ascadv1-variable-root $ASCADV1_VARIABLE_ROOT"
+fi
 
 source ~/.bashrc
 micromamba activate leakage-localization
@@ -30,19 +51,22 @@ micromamba activate leakage-localization
 python experiments/train_supervised_model.py \
     --config-file $CONFIG_FILE \
     --dest $DEST \
-    $EXTRA_ARGS
+    $DATASET_ROOT_ARGS \
+    "${EXTRA_ARGS_LIST[@]}"
 
 # Compute attack performance for this run's model
 python experiments/evaluate_trained_model.py \
     --model-ckpt-path $DEST/best_*.ckpt \
-    --metrics attack-performance
+    --metrics attack-performance \
+    $DATASET_ROOT_ARGS
 
 # Compute attributions (loop so one crash doesn't block the other)
 for attr_method in gradvis input-x-gradient
 do
     python experiments/attribute_trained_model.py \
         --ckpt-path $DEST/best_*.ckpt \
-        --attr-methods $attr_method
+        --attr-methods $attr_method \
+        $DATASET_ROOT_ARGS
 done
 
 # Evaluate each attribution with each localization metric
@@ -61,7 +85,8 @@ do
         python experiments/evaluate_trained_model.py \
             --path-to-eval $DEST/$attr_method.npy \
             $ATTACKER_ARG \
-            --metrics $eval_metric
+            --metrics $eval_metric \
+            $DATASET_ROOT_ARGS
     done
 done
 

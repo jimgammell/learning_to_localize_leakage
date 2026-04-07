@@ -190,6 +190,7 @@ def main():
                              'file lock so the pre-generation runs in exactly one process.')
     append_directory_clargs(parser)
     args, overrides = parser.parse_known_args()
+    init_directories(vars(args), load_directory_config())
 
     dest: Path = args.dest
     assert isinstance(dest, Path)

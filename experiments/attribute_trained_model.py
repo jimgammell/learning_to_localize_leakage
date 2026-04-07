@@ -41,6 +41,7 @@ def main():
     parser.add_argument('--batch-size', type=int, default=None)
     append_directory_clargs(parser)
     args = parser.parse_args()
+    init_directories(vars(args), load_directory_config())
 
     ckpt_path: Path = args.ckpt_path
     assert ckpt_path.exists()

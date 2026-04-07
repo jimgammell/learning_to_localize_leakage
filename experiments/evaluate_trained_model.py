@@ -14,6 +14,7 @@ from leakage_localization.evaluation.mtd import accumulate_ranks, compute_mtd
 from leakage_localization.evaluation.mtd import accumulate_ranks, compute_mtd
 
 from init_things import *
+from init_things.directories import append_directory_clargs, init_directories, load_directory_config
 from utils.load_things import load_numpy_dataset, load_torch_dataset, construct_loaders, load_trained_model
 from utils.training_config import SupervisedTrainingConfig
 
@@ -121,7 +122,9 @@ def main():
         '--overwrite', default=False, action='store_true',
         help='If this argument is passed, already-cached leakiness estimates will be overwritten. Else, we will skip computation of these.'
     )
+    append_directory_clargs(parser)
     args = parser.parse_args()
+    init_directories(vars(args), load_directory_config())
 
     path_to_eval: Optional[Path] = args.path_to_eval
     if path_to_eval is not None:

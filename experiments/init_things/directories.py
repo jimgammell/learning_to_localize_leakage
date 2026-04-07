@@ -100,6 +100,9 @@ def init_directories(clargs: Optional[Dict[str, str]] = None, config: Optional[D
         else:
             raise RuntimeError(f'Unrecognized directory configured in {DIRECTORY_CONFIG}: {dirkey}')
     for dirkey, dirpath in clargs.items():
+        if dirpath is None:
+            continue
+        dirkey = dash_to_uscr(dirkey)
         if dirkey == 'ascadv1-fixed-root':
             ASCADV1_FIXED_ROOT = Path(dirpath)
         elif dirkey == 'ascadv1-variable-root':

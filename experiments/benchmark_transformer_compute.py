@@ -34,9 +34,9 @@ N_WARMUP         = 3
 N_ITERS          = 10
 
 # ── Base config ───────────────────────────────────────────────────────────────
-BASE_PATCH_COUNT   = 32
-BASE_LAYER_COUNT   = 4
-BASE_EMBEDDING_DIM = 256
+BASE_PATCH_COUNT   = 64
+BASE_LAYER_COUNT   = 8
+BASE_EMBEDDING_DIM = 512
 
 # ── Sweeps (factors of 2 around base) ────────────────────────────────────────
 PATCH_COUNTS   = [8, 16, 32, 64, 128, 256]

@@ -1,4 +1,4 @@
-from typing import Tuple
+from typing import Tuple, Optional
 
 import numpy as np
 from numpy.typing import NDArray
@@ -13,7 +13,8 @@ def _run_template_attack(
         profiling_set: Base_NumpyDataset,
         attack_set: Base_NumpyDataset,
         target_key: str,
-        target_idx: int
+        target_idx: int,
+        max_traces: Optional[int] = None,
 ) -> Tuple[float, NDArray[np.floating], NDArray[np.floating]]:
     template_attack = GaussianTemplateAttack(
         points_of_interest,
@@ -21,7 +22,7 @@ def _run_template_attack(
         target_idx
     )
     template_attack.profile(profiling_set)
-    rank_over_time = template_attack.attack(attack_set)   # (attack_count, trace_count, 1)
+    rank_over_time = template_attack.attack(attack_set, max_traces=max_traces)   # (attack_count, trace_count, 1)
     # per_attack_mtd: shape (attack_count,) — MTD for each individual simulated attack.
     # accumulate_ranks seeds each attack by index, so the same attack_idx uses the
     # same trace ordering across all bytes; stacking and taking max(axis=1) gives the
@@ -60,20 +61,22 @@ def compute_ta_mtd(
         attack_set: Base_NumpyDataset,
         bin_count: int = 25,
         pois_per_bin: int = 4,
-        progress_bar: bool = False
+        progress_bar: bool = False,
+        max_traces: Optional[int] = None,
 ) -> Tuple[NDArray[np.floating], ...]:
     byte_count, feature_count = leakiness_estimates.shape
     assert len(profiling_set.config.target_variable) == 1
     target_key = profiling_set.config.target_variable[0]
     ta_mtd = np.full((byte_count,), np.nan, dtype=np.float32)
-    rank_over_time = np.full((byte_count, len(attack_set)), np.nan, dtype=np.float32)
+    trace_count = len(attack_set) if max_traces is None else min(len(attack_set), max_traces)
+    rank_over_time = np.full((byte_count, trace_count), np.nan, dtype=np.float32)
     per_attack_mtds = []
     byte_iter = range(byte_count)
     if progress_bar:
         byte_iter = tqdm(byte_iter, desc='TA-MTD bytes')
     for byte_idx in byte_iter:
         pois = _select_pois(leakiness_estimates[byte_idx, :], bin_count, pois_per_bin)
-        byte_mtd, byte_rank_over_time, byte_per_attack_mtd = _run_template_attack(pois, profiling_set, attack_set, target_key, byte_idx)
+        byte_mtd, byte_rank_over_time, byte_per_attack_mtd = _run_template_attack(pois, profiling_set, attack_set, target_key, byte_idx, max_traces=max_traces)
         ta_mtd[byte_idx] = byte_mtd
         rank_over_time[byte_idx, :] = byte_rank_over_time
         per_attack_mtds.append(byte_per_attack_mtd)

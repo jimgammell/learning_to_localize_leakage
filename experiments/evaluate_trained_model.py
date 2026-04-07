@@ -56,7 +56,7 @@ def run_compute_rev_dnn_occl(leakiness_estimates: NDArray[np.floating], dataset_
 def run_compute_ta_mtd(leakiness_estimates: NDArray[np.floating], dataset_id: DATASET):
     profiling_set = load_numpy_dataset(dataset_id, 'profile')
     attack_set = load_numpy_dataset(dataset_id, 'attack')
-    ta_mtd, rank_over_time, full_key_mtd = compute_ta_mtd(leakiness_estimates, profiling_set, attack_set, progress_bar=True)
+    ta_mtd, rank_over_time, full_key_mtd = compute_ta_mtd(leakiness_estimates, profiling_set, attack_set, progress_bar=True, max_traces=10_000)
     return ta_mtd, rank_over_time, full_key_mtd
 
 def run_attack_performance_evalutaion(ckpt_path: Path, dataset_id: DATASET, dataset_kwargs: Optional[Dict] = None) -> Dict[str, NDArray[np.floating]]:

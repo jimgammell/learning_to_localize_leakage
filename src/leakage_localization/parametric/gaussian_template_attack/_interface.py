@@ -27,8 +27,10 @@ class GaussianTemplateAttack:
         self.means = None
         self.Ls = None
     
-    def extract_dataset(self, dataset: Base_NumpyDataset, chunk_size: int = 4096) -> Tuple[NDArray[np.floating], NDArray[np.integer]]:
+    def extract_dataset(self, dataset: Base_NumpyDataset, chunk_size: int = 4096, max_traces: Optional[int] = None) -> Tuple[NDArray[np.floating], NDArray[np.integer]]:
         datapoint_count = len(dataset)
+        if max_traces is not None:
+            datapoint_count = min(datapoint_count, max_traces)
         feature_count = len(self.points_of_interest)
         traces = np.full((datapoint_count, feature_count), np.nan, dtype=np.float32)
         targets = np.full((datapoint_count,), -1, dtype=np.int64)
@@ -52,7 +54,7 @@ class GaussianTemplateAttack:
                     v = v[:, 0]
                 collected_metadata[k].append(v)
             start_idx = end_idx
-        assert start_idx == len(dataset)
+        assert start_idx == datapoint_count
         collected_metadata = {k: np.concatenate(v, axis=0) for k, v in collected_metadata.items()}
         return traces, targets, collected_metadata
     
@@ -96,9 +98,9 @@ class GaussianTemplateAttack:
         logits = logits - logsumexp(logits, axis=-1, keepdims=True) # convert these to log-probs. Probably not necessary.
         return logits
     
-    def attack(self, dataset: Base_NumpyDataset, attack_count: int = 1000, traces_per_attack: Optional[int] = None,) -> NDArray[np.floating]:
+    def attack(self, dataset: Base_NumpyDataset, attack_count: int = 1000, traces_per_attack: Optional[int] = None, max_traces: Optional[int] = None) -> NDArray[np.floating]:
         assert self.has_profiled()
-        traces, _, int_vars = self.extract_dataset(dataset)
+        traces, _, int_vars = self.extract_dataset(dataset, max_traces=max_traces)
         traces = (traces - self.trace_mean)/self.trace_std
         logits = self.get_logits(traces=traces)
         rank_over_time = accumulate_ranks(

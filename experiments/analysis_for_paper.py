@@ -1,10 +1,21 @@
 import argparse
 from pathlib import Path
-from typing import Optional, get_args
+from typing import Optional, Literal, get_args
+from collections import defaultdict
 
+import numpy as np
+from matplotlib import pyplot as plt
+from matplotlib.ticker import FuncFormatter, MultipleLocator
 from leakage_localization.datasets import DATASET, PARTITION
+from leakage_localization.training.parse_metrics import parse_metrics
 
 from init_things import *
+
+def format_k(x: np.number, pos: Any) -> str:
+    if x >= 1000:
+        return f'{x/1000:.1f}'.rstrip('0').rstrip('.') + 'k'
+    else:
+        return f'{x:.0f}'
 
 def output_path(dataset_id: DATASET) -> Path:
     return OUTPUTS_ROOT / dash_to_uscr(dataset_id)
@@ -19,10 +30,80 @@ def fmt_dataset_name(dataset_id: DATASET) -> str:
     else:
         assert False
 
+def fmt_metric_name(metric_id: Literal['acc', 'rank']) -> str:
+    if metric_id == 'acc':
+        return r'Accuracy (full key) $\uparrow$'
+    elif metric_id == 'rank':
+        return r'Rank (full key) $\downarrow$'
+    else:
+        assert False
+
 def run_plot_training_curves(dest: Path):
     fig, axes = plt.subplots(1, 3, figsize=(WIDTH, WIDTH/3))
-    for ax, dataset in zip(axes, get_args(DATASET)):
-        attacker_path = None
+    for ax, dataset_id, metric_id in zip(axes, ['ascadv1-fixed', 'ascadv1-variable', 'ches-ctf-2018'], ['acc', 'acc', 'rank']):
+        attack_runs_path = output_path(dataset_id) / 'strong_attacker'
+        train_metrics, val_metrics = defaultdict(list), defaultdict(list)
+        for seed in [0, 1, 2, 3, 4]:
+            _train_metrics, _val_metrics = parse_metrics(attack_runs_path / f'seed_{seed}' / 'metrics.csv')
+            for k, v in _train_metrics.items():
+                train_metrics[k].append(v)
+            for k, v in _val_metrics.items():
+                val_metrics[k].append(v)
+        train_metrics = {k: np.stack(v) for k, v in train_metrics.items()}
+        val_metrics = {k: np.stack(v) for k, v in val_metrics.items()}
+        train_steps = train_metrics['step']
+        val_steps = val_metrics['step']
+        train_steps = train_steps[0, :]
+        val_steps = val_steps[0, :]
+        ax.set_xlabel('Training step')
+        ax.set_ylabel(f'{fmt_metric_name(metric_id)}')
+        ax.set_title(f'{fmt_dataset_name(dataset_id)}')
+        ax.fill_between(
+            train_steps, train_metrics[metric_id].min(axis=0), train_metrics[metric_id].max(axis=0),
+            color='grey', alpha=0.25, rasterized=True
+        )
+        ax.plot(train_steps, np.median(train_metrics[metric_id], axis=0), color='grey', label='train', rasterized=True)
+        ax.fill_between(
+            val_steps, val_metrics[metric_id].min(axis=0), val_metrics[metric_id].max(axis=0),
+            color='blue', alpha=0.25, rasterized=True
+        )
+        ax.plot(val_steps, np.median(val_metrics[metric_id], axis=0), color='blue', label='val', rasterized=True)
+        ax.legend(framealpha=0)
+        ax.xaxis.set_major_formatter(FuncFormatter(format_k))
+        if dataset_id == 'ascadv1-fixed':
+            ax.xaxis.set_major_locator(MultipleLocator(10_000))
+        elif dataset_id == 'ascadv1-variable':
+            ax.xaxis.set_major_locator(MultipleLocator(25_000))
+        elif dataset_id == 'ches-ctf-2018':
+            ax.xaxis.set_major_locator(MultipleLocator(2_500))
+        fig.tight_layout()
+        fig.savefig(dest, dpi=DPI)
+        plt.close(fig)
+
+def run_plot_mtd_curves(dest: Path):
+    fig, axes = plt.subplots(1, 3, figsize=(WIDTH, WIDTH/3))
+    for ax, dataset_id in zip(axes, ['ascadv1-fixed', 'ascadv1-variable', 'ches-ctf-2018']):
+        attack_runs_path = output_path(dataset_id) / 'strong_attacker'
+        mtd_curves = np.full((5, 16, 1000), np.nan, dtype=float)
+        for seed in [0, 1, 2, 3, 4]:
+            attack_metrics_path = attack_runs_path / f'seed_{seed}' / 'attack_metrics.npz'
+            attack_metrics = np.load(attack_metrics_path, allow_pickle=True)
+            mtd_curve = attack_metrics['rank_over_time']
+            mtd_curves[seed, :, :] = mtd_curve
+        ax.set_xlabel('Traces seen')
+        ax.set_ylabel(r'Rank (per-byte) $\downarrow$')
+        ax.set_title(f'{fmt_dataset_name(dataset_id)}')
+        mtd_curves = mtd_curves.reshape(-1, 1000)
+        traces_seen = np.arange(1, 1001)
+        ax.fill_between(
+            traces_seen, mtd_curves.min(axis=0), mtd_curves.max(axis=0),
+            color='blue', alpha=0.25, rasterized=True
+        )
+        ax.plot(traces_seen, np.median(mtd_curves, axis=0), color='blue', rasterized=True)
+        ax.set_xscale('log')
+        fig.tight_layout()
+        fig.savefig(dest, dpi=DPI)
+        plt.close(fig)
 
 def main():
     parser = argparse.ArgumentParser()
@@ -54,6 +135,8 @@ def main():
 
     if plot_training_curves:
         run_plot_training_curves(dest / 'training_curves.pdf')
+    if plot_mtd_curves:
+        run_plot_mtd_curves(dest / 'mtd_curves.pdf')
 
 if __name__ == '__main__':
     main()

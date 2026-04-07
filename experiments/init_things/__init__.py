@@ -40,7 +40,13 @@ def init(clargs: Optional[Dict[str, Any]] = None):
     if not latex_available:
         logging.warning('Latex installation not found. Falling back to non-Latex plotting, which might look ugly.')
     plt.rcParams.update({
-        'font.size': 10,
+        'font.size': 8,
+        'axes.titlesize': 8,
+        'axes.labelsize': 7,
+        'xtick.labelsize': 6,
+        'ytick.labelsize': 6,
+        'legend.fontsize': 6,
+        'figure.titlesize': 8,
         'font.family': 'serif',
         'text.usetex': latex_available,
         **(

@@ -14,7 +14,6 @@ Usage:
 
 from typing import Optional
 import argparse
-import json
 import time
 from pathlib import Path
 
@@ -33,6 +32,7 @@ OUTPUT_DIM       = 256
 EXPANSION_FACTOR = 4
 N_WARMUP         = 3
 N_ITERS          = 10
+N_SEEDS          = 5       # independent repeats for error bars on timing/VRAM
 
 # ── Base config ───────────────────────────────────────────────────────────────
 BASE_PATCH_COUNT   = 32
@@ -139,9 +139,22 @@ def measure_wall_time_ms(model: Model, x: torch.Tensor) -> float:
     return float(np.median(times) * 1000)
 
 
+def _run_seed(model: Model, patch_count: int, seed: int) -> tuple[float, float]:
+    """Return (wall_time_ms, vram_mb) for one seed. Input is re-generated each time."""
+    torch.manual_seed(seed)
+    x = make_input(patch_count)
+    wall_ms = measure_wall_time_ms(model, x)
+    vram_mb = measure_vram_mb(model, x)
+    return wall_ms, vram_mb
+
+
 # ── Per-config orchestration ──────────────────────────────────────────────────
 
 def benchmark_config(patch_count: int, layer_count: int, embedding_dim: int) -> dict:
+    """
+    Returns scalar metrics (params, flops) measured once, and per-seed arrays
+    (wall_time_ms, vram_mb) of length N_SEEDS for error bars.
+    """
     patch_size = FIXED_INPUT_LEN // patch_count
     base = {
         'patch_count':   patch_count,
@@ -150,13 +163,17 @@ def benchmark_config(patch_count: int, layer_count: int, embedding_dim: int) -> 
         'patch_size':    patch_size,
     }
     try:
-        model = build_model(patch_count, layer_count, embedding_dim)
-        x     = make_input(patch_count)
+        torch.manual_seed(0)
+        model  = build_model(patch_count, layer_count, embedding_dim)
+        x      = make_input(patch_count)
+        params = count_params(model)
+        flops  = measure_flops(model, x)
 
-        params     = count_params(model)
-        flops      = measure_flops(model, x)
-        vram_mb    = measure_vram_mb(model, x)
-        wall_ms    = measure_wall_time_ms(model, x)
+        wall_times, vrams = [], []
+        for seed in range(N_SEEDS):
+            wall_ms, vram_mb = _run_seed(model, patch_count, seed)
+            wall_times.append(wall_ms)
+            vrams.append(vram_mb)
 
         del model, x
         torch.cuda.empty_cache()
@@ -164,8 +181,8 @@ def benchmark_config(patch_count: int, layer_count: int, embedding_dim: int) -> 
         return {**base,
                 'param_count':  params,
                 'flops':        flops,
-                'vram_mb':      vram_mb,
-                'wall_time_ms': wall_ms,
+                'wall_time_ms': wall_times,   # list of length N_SEEDS
+                'vram_mb':      vrams,         # list of length N_SEEDS
                 'oom':          False}
 
     except torch.cuda.OutOfMemoryError:
@@ -173,19 +190,21 @@ def benchmark_config(patch_count: int, layer_count: int, embedding_dim: int) -> 
         return {**base,
                 'param_count':  None,
                 'flops':        None,
-                'vram_mb':      None,
-                'wall_time_ms': None,
+                'wall_time_ms': [float('nan')] * N_SEEDS,
+                'vram_mb':      [float('nan')] * N_SEEDS,
                 'oom':          True}
 
 
 def _fmt(r: dict) -> str:
     if r['oom']:
         return 'OOM'
+    t = np.array(r['wall_time_ms'])
+    v = np.array(r['vram_mb'])
     return (
         f"params={r['param_count']:>12,}  "
         f"flops={r['flops']:.3e}  "
-        f"vram={r['vram_mb']:>8.1f} MB  "
-        f"time={r['wall_time_ms']:>7.1f} ms"
+        f"vram={v.mean():>8.1f}±{v.std():>5.1f} MB  "
+        f"time={t.mean():>7.1f}±{t.std():>5.1f} ms"
     )
 
 
@@ -246,9 +265,25 @@ def main():
         results.append(r)
         print(_fmt(r))
 
-    out_path = args.output_dir / 'results.json'
-    with open(out_path, 'w') as f:
-        json.dump(results, f, indent=2)
+    # ── Pack results into arrays and save as .npz ─────────────────────────────
+    def _arr(key, dtype=None):
+        vals = [r[key] for r in results]
+        return np.array(vals, dtype=dtype)
+
+    out_path = output_dir / 'results.npz'
+    np.savez(
+        out_path,
+        sweep_var   = _arr('sweep_var'),
+        patch_count = _arr('patch_count',   np.int64),
+        layer_count = _arr('layer_count',   np.int64),
+        embedding_dim = _arr('embedding_dim', np.int64),
+        patch_size  = _arr('patch_size',    np.int64),
+        param_count = _arr('param_count',   np.float64),  # float to allow NaN on OOM
+        flops       = _arr('flops',         np.float64),
+        wall_time_ms = _arr('wall_time_ms', np.float64),  # shape (n_configs, N_SEEDS)
+        vram_mb     = _arr('vram_mb',       np.float64),  # shape (n_configs, N_SEEDS)
+        oom         = _arr('oom',           bool),
+    )
     print(f'\nResults saved to {out_path}')
 
 

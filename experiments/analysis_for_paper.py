@@ -1,15 +1,19 @@
 import argparse
 from pathlib import Path
-from typing import Optional, Literal, get_args
+from typing import Optional, Literal, List, get_args
 from collections import defaultdict
+from tqdm import tqdm
 
+import pandas
 import numpy as np
 from matplotlib import pyplot as plt
 from matplotlib.ticker import FuncFormatter, MultipleLocator
 from leakage_localization.datasets import DATASET, PARTITION
 from leakage_localization.training.parse_metrics import parse_metrics
+from leakage_localization.evaluation import OracleAgreement
 
 from init_things import *
+from utils.visualize_runs import *
 
 def format_k(x: np.number, pos: Any) -> str:
     if x >= 1000:
@@ -127,13 +131,13 @@ def run_plot_cost_scaling(dest: Path):
     colors = ['red', 'blue', 'green']
 
     panel_specs = [
-        (param_count,  r'Parameters'),
-        (flops,        r'FLOPs/step'),
-        (vram_gb,      r'VRAM [GB]'),
-        (wall_time_ms, r'Time/step [A6000-ms]'),
+        (param_count / 1e6,  r'Parameters (M)',   FuncFormatter(lambda v, _: f'{v:.0f}M')),
+        (flops / 1e12,       r'TFLOPs/step',      FuncFormatter(lambda v, _: f'{v:.0f}T')),
+        (vram_gb,            r'VRAM [GB]',         None),
+        (wall_time_ms,       r'Time/step [ms]',   None),
     ]
 
-    for ax, (metric_data, ylabel) in zip(axes, panel_specs):
+    for ax, (metric_data, ylabel, yfmt) in zip(axes, panel_specs):
         for color, (sv_key, (sv_label, sv_raw)) in zip(colors, sweep_cfgs.items()):
             mask = sweep_var == sv_key
             if not mask.any():
@@ -142,7 +146,9 @@ def run_plot_cost_scaling(dest: Path):
             ax.plot(x, metric_data[mask], color=color, marker='none',
                     linewidth=.75, label=sv_label, rasterized=True)
 
-        ax.set_xlabel('Hyperparameter/base')
+        if yfmt is not None:
+            ax.yaxis.set_major_formatter(yfmt)
+        ax.set_xlabel('Fraction of base')
         ax.set_ylabel(ylabel)
 
     handles, labels = axes[0].get_legend_handles_labels()
@@ -152,6 +158,171 @@ def run_plot_cost_scaling(dest: Path):
     fig.savefig(dest, dpi=DPI, bbox_inches='tight')
     plt.close(fig)
 
+def load_sweep(sweep_dir: Path, dataset_id: DATASET) -> pandas.DataFrame:
+    if not (sweep_dir / 'sweep_summary.csv').exists():
+        trial_dirs: List[Path] = []
+        for x in sweep_dir.iterdir():
+            if not x.is_dir():
+                continue
+            if not 'trial_' in x.name:
+                continue
+            if not (x / 'metrics.csv').exists():
+                continue
+            trial_dirs.append(x)
+        trial_dirs.sort(key=lambda x: x.name)
+
+        data = defaultdict(list)
+        for trial_dir in tqdm(trial_dirs):
+            data['path'].append(trial_dir)
+            attack_metrics_path = trial_dir / 'attack_metrics.npz'
+            assert attack_metrics_path.exists(), attack_metrics_path
+            attack_metrics = np.load(attack_metrics_path, allow_pickle=True)
+            for metric in ['loss', 'rank', 'acc']:
+                data[metric].append(attack_metrics[f'test/{metric}'].item())
+                for byte_idx in range(16):
+                    data[f'{metric}/{byte_idx}'].append(attack_metrics[f'test/{metric}/{byte_idx}'].item())
+            data['mtd'].append(attack_metrics['test/mtd'].item())
+            for byte_idx in range(16):
+                data[f'mtd/{byte_idx}'].append(attack_metrics['per_byte_mtd'][byte_idx])
+            for attr_method in ['gradvis', 'input_x_gradient']:
+                # fwd DNN occlusion — new format is .npz, old format is .npy
+                fwd_dnno_npz = trial_dir / f'fwd_dnno_occl.{attr_method}.npz'
+                fwd_dnno_npy = trial_dir / f'fwd_dnno_occl.{attr_method}.npy'
+                assert fwd_dnno_npz.exists() or fwd_dnno_npy.exists(), fwd_dnno_npz
+                if fwd_dnno_npz.exists():
+                    fwd_dnno_data = np.load(fwd_dnno_npz, allow_pickle=True)
+                    data[f'fwd_dnno/{attr_method}'].append(fwd_dnno_data['fwd-dnno-occl'].mean())
+                    b2_key = 'fwd-dnno-occl/2'
+                    data[f'fwd_dnno/{attr_method}/2'].append(fwd_dnno_data[b2_key].mean() if b2_key in fwd_dnno_data else np.nan)
+                else:
+                    fwd_dnno = np.load(fwd_dnno_npy)
+                    data[f'fwd_dnno/{attr_method}'].append(fwd_dnno.mean())
+                    data[f'fwd_dnno/{attr_method}/2'].append(np.nan)
+                # rev DNN occlusion
+                rev_dnno_npz = trial_dir / f'rev_dnno_occl.{attr_method}.npz'
+                rev_dnno_npy = trial_dir / f'rev_dnno_occl.{attr_method}.npy'
+                assert rev_dnno_npz.exists() or rev_dnno_npy.exists(), rev_dnno_npz
+                if rev_dnno_npz.exists():
+                    rev_dnno_data = np.load(rev_dnno_npz, allow_pickle=True)
+                    data[f'rev_dnno/{attr_method}'].append(rev_dnno_data['rev-dnno-occl'].mean())
+                    b2_key = 'rev-dnno-occl/2'
+                    data[f'rev_dnno/{attr_method}/2'].append(rev_dnno_data[b2_key].mean() if b2_key in rev_dnno_data else np.nan)
+                else:
+                    rev_dnno = np.load(rev_dnno_npy)
+                    data[f'rev_dnno/{attr_method}'].append(rev_dnno.mean())
+                    data[f'rev_dnno/{attr_method}/2'].append(np.nan)
+                # TA MTD — new format has 'ta-mtd' (full-key) and 'ta-mtd/{b}' (per-byte)
+                ta_mtd_path = trial_dir / f'ta_mtd.{attr_method}.npz'
+                assert ta_mtd_path.exists(), ta_mtd_path
+                ta_mtd_data = np.load(ta_mtd_path, allow_pickle=True)
+                if 'ta-mtd' in ta_mtd_data:
+                    data[f'ta_mtd/{attr_method}'].append(float(ta_mtd_data['ta-mtd']))
+                    for byte_idx in range(16):
+                        data[f'ta_mtd/{attr_method}/{byte_idx}'].append(float(ta_mtd_data[f'ta-mtd/{byte_idx}']))
+                else:
+                    # old format: 'mtd' is the per-byte array; no full-key MTD saved
+                    data[f'ta_mtd/{attr_method}'].append(np.nan)
+                    for byte_idx in range(16):
+                        data[f'ta_mtd/{attr_method}/{byte_idx}'].append(ta_mtd_data['mtd'][byte_idx])
+                # white-box agreement
+                oracle_agreement = OracleAgreement(
+                    get_output_dir(dataset_id) / 'snr', dataset_id
+                )
+                leakiness_estimates = np.load(trial_dir / f'{attr_method}.npy')
+                data[f'white_box_spearman/{attr_method}'].append(oracle_agreement.get_full_spearman(leakiness_estimates))
+                data[f'white_box_auroc/{attr_method}'].append(oracle_agreement.get_full_auroc(leakiness_estimates))
+                per_byte_spearman = oracle_agreement(leakiness_estimates)
+                per_byte_auroc = oracle_agreement.get_auroc(leakiness_estimates)
+                for byte_idx in range(16):
+                    data[f'white_box_spearman/{attr_method}/{byte_idx}'].append(per_byte_spearman[byte_idx])
+                    data[f'white_box_auroc/{attr_method}/{byte_idx}'].append(per_byte_auroc[byte_idx])
+        data = pandas.DataFrame(data)
+        data['mean_acc'] = data[[f'acc/{byte_idx}' for byte_idx in range(16)]].mean(axis=1)
+        for attr_method in ['gradvis', 'input_x_gradient']:
+            data[f'mean_ta_mtd/{attr_method}'] = data[[f'ta_mtd/{attr_method}/{byte_idx}' for byte_idx in range(16)]].mean(axis=1)
+        data.to_csv(sweep_dir / 'sweep_summary.csv')
+    data = pandas.read_csv(sweep_dir / 'sweep_summary.csv')
+    return data
+
+def run_plot_oracle_agreement(dest: Path, dataset_id: Literal['ascadv1-fixed', 'ascadv1-variable'] = 'ascadv1-fixed'):
+    sweep_path = get_output_dir(dataset_id) / 'htune_highdropout'
+    sweep = load_sweep(sweep_path, dataset_id)
+    best_attack_idx = sweep['acc'].idxmax()
+    best_attack_auroc = sweep.loc[best_attack_idx]['white_box_auroc/input_x_gradient/2']
+    best_attack_path = Path(sweep.loc[best_attack_idx]['path'])
+    best_attack_inputxgrad = np.load(best_attack_path / 'input_x_gradient.npy')[2, :]
+    best_loc_idx = sweep['white_box_auroc/input_x_gradient'].idxmax()
+    best_loc_path = Path(sweep.loc[best_loc_idx]['path'])
+    best_loc_auroc = sweep.loc[best_loc_idx]['white_box_auroc/input_x_gradient/2']
+    best_loc_inputxgrad = np.load(best_loc_path / 'input_x_gradient.npy')[2, :]
+    title_pad = 3
+    h_pad = 1/72  # inches; default is 4/72
+    fig = plt.figure(figsize=(WIDTH, WIDTH/2), constrained_layout=True)
+    fig.get_layout_engine().set(h_pad=h_pad)
+    time_fig, scatter_fig = fig.subfigures(1, 2, wspace=0.05)
+    time_axes = time_fig.subplots(3, 1, sharex=True)
+    scatter_axes = scatter_fig.subplot_mosaic(
+        [['comp',    'r_in',   'r2'   ],
+         ['r_out',   'S2xr2',  'Srout'],
+         ['k2w2rin', 'k2w2r2', '.'   ]],
+        sharex=True, sharey=True,
+    )
+    time_axes[2].set_xlabel(r'Time $t$')
+    time_axes[1].set_ylabel(r'Leakiness of $X_t$')
+    time_axes[0].set_title(r'Input $*$ Grad (best attacker)', fontsize=7, pad=title_pad)
+    time_axes[1].set_title(r'Input $*$ Grad (best localizer)', fontsize=7, pad=title_pad)
+    time_axes[2].set_title(r'White-box SNR', fontsize=7, pad=title_pad)
+    time_axes[0].plot(best_attack_inputxgrad, rasterized=True, linewidth=0.1, marker='.', markersize=1, color='red')
+    time_axes[1].plot(best_loc_inputxgrad, rasterized=True, linewidth=0.1, marker='.', markersize=1, color='blue')
+    white_box_snrs = plot_ascadv1_oracle_leakiness(get_output_dir(dataset_id) / 'snr', time_axes[2])
+    best_attacker_spearman = spearmanr(white_box_snrs['composite'], best_attack_inputxgrad).statistic
+    best_localizer_spearman = spearmanr(white_box_snrs['composite'], best_loc_inputxgrad).statistic
+    time_axes[0].text(
+        0.01, 0.95, r"Spearman's $\rho$ w/ white-box SNR: " + f"{best_attacker_spearman:.3f}",
+        transform=time_axes[0].transAxes, ha='left', va='top', fontsize=4,
+    )
+    time_axes[0].text(
+        0.01, 0.85, r"AUROC w/ white-box SNR: " + f"{best_attack_auroc:.3f}",
+        transform=time_axes[0].transAxes, ha='left', va='top', fontsize=4,
+    )
+    time_axes[1].text(
+        0.99, 0.95, r"Spearman's $\rho$ w/ white-box SNR: " + f"{best_localizer_spearman:.3f}",
+        transform=time_axes[1].transAxes, ha='right', va='top', fontsize=4,
+    )
+    time_axes[1].text(
+        0.99, 0.85, r"AUROC w/ white-box SNR: " + f"{best_loc_auroc:.3f}",
+        transform=time_axes[1].transAxes, ha='right', va='top', fontsize=4,
+    )
+    white_box_snrs['pr'] -= white_box_snrs['pr'].min()
+    white_box_snrs['pr'] += white_box_snrs['prin'].min()
+    time_axes[2].legend(loc='upper right', ncol=3, framealpha=0, fontsize=4, labelspacing=0.2, columnspacing=2.0, handlelength=1.0)
+    for ax in time_axes:
+        ax.ticklabel_format(style='sci', axis='x', scilimits=(-2, 2), useMathText=True)
+        ax.ticklabel_format(style='sci', axis='y', scilimits=(-2, 2), useMathText=True)
+    for ax in scatter_axes.values():
+        ax.set_xscale('log')
+        ax.set_yscale('log')
+    scatter_axes['k2w2r2'].set_xlabel(r'White box SNR')
+    scatter_axes['r_out'].set_ylabel(r'Input $*$ Grad (best localizer)')
+    scatter_axes['comp'].set_title(r'Avg. of all', fontsize=7, pad=title_pad)
+    scatter_axes['r_in'].set_title(r'$r_{\mathrm{in}}$', fontsize=7, pad=title_pad)
+    scatter_axes['r2'].set_title(r'$r_2$', fontsize=7, pad=title_pad)
+    scatter_axes['r_out'].set_title(r'$r_{\mathrm{out}}$', fontsize=7, pad=title_pad)
+    scatter_axes['S2xr2'].set_title(r'$S_2 \oplus r_2$', fontsize=7, pad=title_pad)
+    scatter_axes['Srout'].set_title(r'$S_r \oplus r_{\mathrm{out}}$', fontsize=7, pad=title_pad)
+    scatter_axes['k2w2rin'].set_title(r'$k_2 \oplus w_2 \oplus r_{\mathrm{in}}$', fontsize=7, pad=title_pad)
+    scatter_axes['k2w2r2'].set_title(r'$k_2 \oplus w_2 \oplus r_2$', fontsize=7, pad=title_pad)
+    scatter_kwargs = dict(color='blue', linestyle='none', marker='.', markersize=1, alpha=0.2, rasterized=True)
+    scatter_axes['comp'].plot(white_box_snrs['composite'], best_loc_inputxgrad, **scatter_kwargs)
+    scatter_axes['r_in'].plot(white_box_snrs['rin'], best_loc_inputxgrad, **scatter_kwargs)
+    scatter_axes['r2'].plot(white_box_snrs['r'], best_loc_inputxgrad, **scatter_kwargs)
+    scatter_axes['r_out'].plot(white_box_snrs['rout'], best_loc_inputxgrad, **scatter_kwargs)
+    scatter_axes['S2xr2'].plot(white_box_snrs['yr'], best_loc_inputxgrad, **scatter_kwargs)
+    scatter_axes['Srout'].plot(white_box_snrs['yrout'], best_loc_inputxgrad, **scatter_kwargs)
+    scatter_axes['k2w2rin'].plot(white_box_snrs['prin'], best_loc_inputxgrad, **scatter_kwargs)
+    scatter_axes['k2w2r2'].plot(white_box_snrs['pr'], best_loc_inputxgrad, **scatter_kwargs)
+    fig.savefig(dest, dpi=DPI)
+    plt.close(fig)
 
 def main():
     parser = argparse.ArgumentParser()
@@ -168,6 +339,9 @@ def main():
         '--plot-cost-scaling', default=False, action='store_true'
     )
     parser.add_argument(
+        '--plot-oracle-agreement', default=False, action='store_true'
+    )
+    parser.add_argument(
         '--dest', default=None, type=Path
     )
     args = parser.parse_args()
@@ -180,6 +354,8 @@ def main():
     assert isinstance(format_attack_performance, bool)
     plot_cost_scaling: bool = args.plot_cost_scaling
     assert isinstance(plot_cost_scaling, bool)
+    plot_oracle_agreement: bool = args.plot_oracle_agreement
+    assert isinstance(plot_oracle_agreement, bool)
     dest: Optional[Path] = args.dest
     if dest is None:
         dest = OUTPUTS_ROOT / 'plots_for_paper'
@@ -192,6 +368,8 @@ def main():
         run_plot_mtd_curves(dest / 'mtd_curves.pdf')
     if plot_cost_scaling:
         run_plot_cost_scaling(dest / 'cost_scaling.pdf')
+    if plot_oracle_agreement:
+        run_plot_oracle_agreement(dest / 'oracle_agreement.pdf')
 
 if __name__ == '__main__':
     main()

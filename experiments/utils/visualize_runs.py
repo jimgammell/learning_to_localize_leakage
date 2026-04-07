@@ -36,22 +36,22 @@ def plot_ascadv1_oracle_leakiness(
         yr = np.load(snr_dir / 'subbytes__xor__r.attack.npy')[byte, :],
     )
     int_var_kwargs = dict(
-        prin = dict(color = 'red', linestyle='--', label=ascadv1_repr_target('p__xor__k__xor__r_in')),
-        pr = dict(color = 'green', linestyle='--', label=ascadv1_repr_target('p__xor__k__xor__r')),
-        rin = dict(color='red', linestyle='-', label=ascadv1_repr_target('r_in')),
-        rout = dict(color='teal', linestyle='-', label=ascadv1_repr_target('r_out')),
-        r = dict(color='orange', linestyle='-', label=ascadv1_repr_target('r')),
-        yrout = dict(color = 'blue', linestyle='-', label=ascadv1_repr_target('subbytes__xor__r_out')),
-        yr = dict(color = 'black', linestyle='-', label=ascadv1_repr_target('subbytes__xor__r'))
+        prin = dict(color = 'red', linestyle='--', label=ascadv1_repr_target('p__xor__k__xor__r_in', byte=byte)),
+        pr = dict(color = 'green', linestyle='--', label=ascadv1_repr_target('p__xor__k__xor__r', byte=byte)),
+        rin = dict(color='red', linestyle='-', label=ascadv1_repr_target('r_in', byte=byte)),
+        rout = dict(color='teal', linestyle='-', label=ascadv1_repr_target('r_out', byte=byte)),
+        r = dict(color='orange', linestyle='-', label=ascadv1_repr_target('r', byte=byte)),
+        yrout = dict(color = 'blue', linestyle='-', label=ascadv1_repr_target('subbytes__xor__r_out', byte=byte)),
+        yr = dict(color = 'black', linestyle='-', label=ascadv1_repr_target('subbytes__xor__r', byte=byte))
     )
     for int_var_name in int_var_snrs.keys():
         int_var_snr = int_var_snrs[int_var_name]
         if int_var_snr is None:
             continue
         kwargs = int_var_kwargs[int_var_name]
-        ax.plot(int_var_snr, **kwargs)
+        ax.plot(int_var_snr, rasterized=True, linewidth=0.1, marker='.', markersize=1, **kwargs)
     white_box_composite = np.stack(list(int_var_snrs.values())).mean(axis=0)
-    return white_box_composite
+    return dict(composite=white_box_composite, **int_var_snrs)
 
 def plot_leakiness_over_time(
         attr: np.ndarray,

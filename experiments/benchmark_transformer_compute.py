@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """
 Benchmark transformer compute cost vs. key hyperparameters.
 
@@ -13,6 +12,7 @@ Usage:
     python experiments/benchmark_transformer_compute.py [--output-dir PATH]
 """
 
+from typing import Optional
 import argparse
 import json
 import time
@@ -23,6 +23,7 @@ import torch
 from torch.profiler import ProfilerActivity, profile
 
 from leakage_localization.models.model import Model
+from init_things import *
 
 # ── Fixed benchmark parameters ────────────────────────────────────────────────
 BATCH_SIZE       = 256
@@ -34,14 +35,14 @@ N_WARMUP         = 3
 N_ITERS          = 10
 
 # ── Base config ───────────────────────────────────────────────────────────────
-BASE_PATCH_COUNT   = 128
+BASE_PATCH_COUNT   = 32
 BASE_LAYER_COUNT   = 4
-BASE_EMBEDDING_DIM = 512
+BASE_EMBEDDING_DIM = 256
 
 # ── Sweeps (factors of 2 around base) ────────────────────────────────────────
-PATCH_COUNTS   = [32, 64, 128, 256, 512]
+PATCH_COUNTS   = [8, 16, 32, 64, 128]
 LAYER_COUNTS   = [1, 2, 4, 8, 16]
-EMBEDDING_DIMS = [128, 256, 512, 1024, 2048]
+EMBEDDING_DIMS = [64, 128, 256, 512, 1024]
 
 
 # ── Model helpers ─────────────────────────────────────────────────────────────
@@ -193,11 +194,15 @@ def _fmt(r: dict) -> str:
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
-        '--output-dir', type=Path,
-        default=Path(__file__).parent / 'results' / 'benchmark_transformer_compute',
+        '--output-dir', type=Path, default=None
     )
     args = parser.parse_args()
-    args.output_dir.mkdir(parents=True, exist_ok=True)
+
+    output_dir: Optional[Path] = args.output_dir
+    if output_dir is None:
+        output_dir = OUTPUTS_ROOT / 'compute_benchmark'
+    assert isinstance(output_dir, Path)
+    output_dir.mkdir(exist_ok=True, parents=True)
 
     torch.backends.cudnn.benchmark = True
     torch.set_float32_matmul_precision('high')

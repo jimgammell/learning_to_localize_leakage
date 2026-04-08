@@ -6,6 +6,7 @@ from tqdm import tqdm
 
 import pandas
 import numpy as np
+from scipy.stats import gaussian_kde
 from matplotlib import pyplot as plt
 from matplotlib.ticker import FuncFormatter, MultipleLocator
 from leakage_localization.datasets import DATASET, PARTITION
@@ -262,9 +263,9 @@ def run_plot_oracle_agreement(dest: Path, dataset_id: Literal['ascadv1-fixed', '
     time_fig, scatter_fig = fig.subfigures(1, 2, wspace=0.05)
     time_axes = time_fig.subplots(3, 1, sharex=True)
     scatter_axes = scatter_fig.subplot_mosaic(
-        [['comp',    'r_in',   'r2'   ],
-         ['r_out',   'S2xr2',  'Srout'],
-         ['k2w2rin', 'k2w2r2', '.'   ]],
+        [['comp',       'r_in',   'r2'   ],
+         ['r_out',      'S2xr2',  'Srout'],
+         ['k2w2rin', 'k2w2r2', 'marginals']],
         sharex=True, sharey=True,
     )
     time_axes[2].set_xlabel(r'Time $t$')
@@ -321,6 +322,28 @@ def run_plot_oracle_agreement(dest: Path, dataset_id: Literal['ascadv1-fixed', '
     scatter_axes['Srout'].plot(white_box_snrs['yrout'], best_loc_inputxgrad, **scatter_kwargs)
     scatter_axes['k2w2rin'].plot(white_box_snrs['prin'], best_loc_inputxgrad, **scatter_kwargs)
     scatter_axes['k2w2r2'].plot(white_box_snrs['pr'], best_loc_inputxgrad, **scatter_kwargs)
+    snr_color = 'green'
+    ixg_color = 'orange'
+    marg_ax = scatter_axes['marginals']
+    marg_ax.spines['left'].set_color(ixg_color)
+    marg_ax.spines['bottom'].set_color(snr_color)
+    marg_ax.tick_params(axis='y', colors=ixg_color)
+    marg_ax.tick_params(axis='x', which='both', color=snr_color, labelcolor='black')
+    snr_vals = white_box_snrs['composite']
+    ixg_vals = best_loc_inputxgrad
+    snr_log = np.log10(snr_vals[snr_vals > 0])
+    ixg_log = np.log10(ixg_vals[ixg_vals > 0])
+    snr_grid = np.linspace(snr_log.min(), snr_log.max(), 300)
+    ixg_grid = np.linspace(ixg_log.min(), ixg_log.max(), 300)
+    snr_density = gaussian_kde(snr_log)(snr_grid)
+    ixg_density = gaussian_kde(ixg_log)(ixg_grid)
+    # Scale density to the range of the other axis so shared limits are not expanded
+    snr_density_scaled = 10 ** (ixg_log.min() + (snr_density / snr_density.max()) * (ixg_log.max() - ixg_log.min()))
+    ixg_density_scaled = 10 ** (snr_log.min() + (ixg_density / ixg_density.max()) * (snr_log.max() - snr_log.min()))
+    marg_ax.plot(10**snr_grid, snr_density_scaled, color=snr_color, linewidth=0.5, label=r'White-box SNR')
+    marg_ax.plot(ixg_density_scaled, 10**ixg_grid, color=ixg_color, linewidth=0.5, label=r'Input $*$ Grad')
+    marg_ax.legend(loc='upper right', fontsize=4, labelspacing=0.2, columnspacing=2.0, handlelength=1.0, framealpha=0)
+    marg_ax.set_title(r'Densities', fontsize=7, pad=title_pad)
     fig.savefig(dest, dpi=DPI)
     plt.close(fig)
 

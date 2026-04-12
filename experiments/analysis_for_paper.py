@@ -1,6 +1,6 @@
 import argparse
 from pathlib import Path
-from typing import Optional, Literal, List, get_args
+from typing import Optional, Literal, List, Tuple, get_args
 from collections import defaultdict
 from tqdm import tqdm
 
@@ -15,6 +15,12 @@ from leakage_localization.evaluation import OracleAgreement
 
 from init_things import *
 from utils.visualize_runs import *
+
+FEATURE_COUNTS = {
+    'ascadv1-fixed': 100_000,
+    'ascadv1-variable': 250_000,
+    'ches-ctf-2018': 650_000
+}
 
 def format_k(x: np.number, pos: Any) -> str:
     if x >= 1000:
@@ -42,73 +48,6 @@ def fmt_metric_name(metric_id: Literal['acc', 'rank']) -> str:
         return r'Rank (full key) $\downarrow$'
     else:
         assert False
-
-def run_plot_training_curves(dest: Path):
-    fig, axes = plt.subplots(1, 3, figsize=(WIDTH, WIDTH/3))
-    for ax, dataset_id, metric_id in zip(axes, ['ascadv1-fixed', 'ascadv1-variable', 'ches-ctf-2018'], ['acc', 'acc', 'rank']):
-        attack_runs_path = output_path(dataset_id) / 'strong_attacker'
-        train_metrics, val_metrics = defaultdict(list), defaultdict(list)
-        for seed in [0, 1, 2, 3, 4]:
-            _train_metrics, _val_metrics = parse_metrics(attack_runs_path / f'seed_{seed}' / 'metrics.csv')
-            for k, v in _train_metrics.items():
-                train_metrics[k].append(v)
-            for k, v in _val_metrics.items():
-                val_metrics[k].append(v)
-        train_metrics = {k: np.stack(v) for k, v in train_metrics.items()}
-        val_metrics = {k: np.stack(v) for k, v in val_metrics.items()}
-        train_steps = train_metrics['step']
-        val_steps = val_metrics['step']
-        train_steps = train_steps[0, :]
-        val_steps = val_steps[0, :]
-        ax.set_xlabel('Training step')
-        ax.set_ylabel(f'{fmt_metric_name(metric_id)}')
-        ax.set_title(f'{fmt_dataset_name(dataset_id)}')
-        ax.fill_between(
-            train_steps, train_metrics[metric_id].min(axis=0), train_metrics[metric_id].max(axis=0),
-            color='grey', alpha=0.25, rasterized=True
-        )
-        ax.plot(train_steps, np.median(train_metrics[metric_id], axis=0), color='grey', label='train', rasterized=True)
-        ax.fill_between(
-            val_steps, val_metrics[metric_id].min(axis=0), val_metrics[metric_id].max(axis=0),
-            color='blue', alpha=0.25, rasterized=True
-        )
-        ax.plot(val_steps, np.median(val_metrics[metric_id], axis=0), color='blue', label='val', rasterized=True)
-        ax.legend(framealpha=0)
-        ax.xaxis.set_major_formatter(FuncFormatter(format_k))
-        if dataset_id == 'ascadv1-fixed':
-            ax.xaxis.set_major_locator(MultipleLocator(10_000))
-        elif dataset_id == 'ascadv1-variable':
-            ax.xaxis.set_major_locator(MultipleLocator(25_000))
-        elif dataset_id == 'ches-ctf-2018':
-            ax.xaxis.set_major_locator(MultipleLocator(2_500))
-        fig.tight_layout()
-        fig.savefig(dest, dpi=DPI)
-        plt.close(fig)
-
-def run_plot_mtd_curves(dest: Path):
-    fig, axes = plt.subplots(1, 3, figsize=(WIDTH, WIDTH/3))
-    for ax, dataset_id in zip(axes, ['ascadv1-fixed', 'ascadv1-variable', 'ches-ctf-2018']):
-        attack_runs_path = output_path(dataset_id) / 'strong_attacker'
-        mtd_curves = np.full((5, 16, 1000), np.nan, dtype=float)
-        for seed in [0, 1, 2, 3, 4]:
-            attack_metrics_path = attack_runs_path / f'seed_{seed}' / 'attack_metrics.npz'
-            attack_metrics = np.load(attack_metrics_path, allow_pickle=True)
-            mtd_curve = attack_metrics['rank_over_time']
-            mtd_curves[seed, :, :] = mtd_curve
-        ax.set_xlabel('Traces seen')
-        ax.set_ylabel(r'Rank (per-byte) $\downarrow$')
-        ax.set_title(f'{fmt_dataset_name(dataset_id)}')
-        mtd_curves = mtd_curves.reshape(-1, 1000)
-        traces_seen = np.arange(1, 1001)
-        ax.fill_between(
-            traces_seen, mtd_curves.min(axis=0), mtd_curves.max(axis=0),
-            color='blue', alpha=0.25, rasterized=True
-        )
-        ax.plot(traces_seen, np.median(mtd_curves, axis=0), color='blue', rasterized=True)
-        ax.set_xscale('log')
-        fig.tight_layout()
-        fig.savefig(dest, dpi=DPI)
-        plt.close(fig)
 
 def run_plot_cost_scaling(dest: Path):
     fig, axes = plt.subplots(1, 4, figsize=(WIDTH, WIDTH/4))
@@ -214,17 +153,21 @@ def load_sweep(sweep_dir: Path, dataset_id: DATASET) -> pandas.DataFrame:
                     data[f'rev_dnno/{attr_method}/2'].append(np.nan)
                 # TA MTD — new format has 'ta-mtd' (full-key) and 'ta-mtd/{b}' (per-byte)
                 ta_mtd_path = trial_dir / f'ta_mtd.{attr_method}.npz'
-                assert ta_mtd_path.exists(), ta_mtd_path
-                ta_mtd_data = np.load(ta_mtd_path, allow_pickle=True)
-                if 'ta-mtd' in ta_mtd_data:
-                    data[f'ta_mtd/{attr_method}'].append(float(ta_mtd_data['ta-mtd']))
-                    for byte_idx in range(16):
-                        data[f'ta_mtd/{attr_method}/{byte_idx}'].append(float(ta_mtd_data[f'ta-mtd/{byte_idx}']))
+                if ta_mtd_path.exists():
+                    ta_mtd_data = np.load(ta_mtd_path, allow_pickle=True)
+                    if 'ta-mtd' in ta_mtd_data:
+                        data[f'ta_mtd/{attr_method}'].append(float(ta_mtd_data['ta-mtd']))
+                        for byte_idx in range(16):
+                            data[f'ta_mtd/{attr_method}/{byte_idx}'].append(float(ta_mtd_data[f'ta-mtd/{byte_idx}']))
+                    else:
+                        # old format: 'mtd' is the per-byte array; no full-key MTD saved
+                        data[f'ta_mtd/{attr_method}'].append(np.nan)
+                        for byte_idx in range(16):
+                            data[f'ta_mtd/{attr_method}/{byte_idx}'].append(ta_mtd_data['mtd'][byte_idx])
                 else:
-                    # old format: 'mtd' is the per-byte array; no full-key MTD saved
-                    data[f'ta_mtd/{attr_method}'].append(np.nan)
+                    data[f'ta_mtd/{attr_method}'].append(float('nan'))
                     for byte_idx in range(16):
-                        data[f'ta_mtd/{attr_method}/{byte_idx}'].append(ta_mtd_data['mtd'][byte_idx])
+                        data[f'ta_mtd/{attr_method}/{byte_idx}'].append(float('nan'))
                 # white-box agreement
                 oracle_agreement = OracleAgreement(
                     get_output_dir(dataset_id) / 'snr', dataset_id
@@ -245,16 +188,192 @@ def load_sweep(sweep_dir: Path, dataset_id: DATASET) -> pandas.DataFrame:
     data = pandas.read_csv(sweep_dir / 'sweep_summary.csv')
     return data
 
-def run_plot_oracle_agreement(dest: Path, dataset_id: Literal['ascadv1-fixed', 'ascadv1-variable'] = 'ascadv1-fixed'):
+def get_best_runs(dataset_id: DATASET) -> Tuple[pandas.Series, ...]:
     sweep_path = get_output_dir(dataset_id) / 'htune_highdropout'
     sweep = load_sweep(sweep_path, dataset_id)
-    best_attack_idx = sweep['acc'].idxmax()
-    best_attack_auroc = sweep.loc[best_attack_idx]['white_box_auroc/input_x_gradient/2']
-    best_attack_path = Path(sweep.loc[best_attack_idx]['path'])
+    acc = sweep['mean_acc']
+    loc_metric = sweep[[f'white_box_auroc/input_x_gradient/{byte_idx}' for byte_idx in range(16)]].mean(axis=1)
+    best_attack_idx = acc.idxmax()
+    best_attack = sweep.loc[best_attack_idx]
+    best_loc_idx = loc_metric.idxmax()
+    best_loc = sweep.loc[best_loc_idx]
+    return best_attack, best_loc
+
+def run_plot_training_curves(dest: Path):
+    fig, axes = plt.subplots(1, 3, figsize=(WIDTH, WIDTH/3), layout='constrained')
+    for ax, dataset_id, metric_id in zip(axes, ['ascadv1-fixed', 'ascadv1-variable'], ['acc', 'acc']):
+        best_attack_rv, best_loc_rv = get_best_runs(dataset_id)
+        best_attack_path = Path(best_attack_rv['path'])
+        best_loc_path = Path(best_loc_rv['path'])
+        attack_train_metrics, attack_val_metrics = parse_metrics(best_attack_path / 'metrics.csv')
+        ax.plot(attack_train_metrics['step'], attack_train_metrics[metric_id], color='red', linestyle=':', label='Best attacker (train)', rasterized=True)
+        ax.plot(attack_val_metrics['step'], attack_val_metrics[metric_id], color='red', linestyle='-', label='Best attacker (val)', rasterized=True)
+        loc_train_metrics, loc_val_metrics = parse_metrics(best_loc_path / 'metrics.csv')
+        ax.plot(loc_train_metrics['step'], loc_train_metrics[metric_id], color='blue', linestyle=':', label='Best localizer (train)', rasterized=True)
+        ax.plot(loc_val_metrics['step'], loc_val_metrics[metric_id], color='blue', linestyle='-', label='Best localizer (val)', rasterized=True)
+        ax.set_xlabel('Training step')
+        ax.set_ylabel(f'{fmt_metric_name(metric_id)}')
+        ax.set_title(f'{fmt_dataset_name(dataset_id)}')
+        ax.legend(framealpha=0)
+        ax.ticklabel_format(style='sci', axis='x', scilimits=(-2, 2), useMathText=True)
+    fig.savefig(dest, dpi=DPI)
+    plt.close(fig)
+
+def run_plot_mtd_curves(dest: Path):
+    fig, axes = plt.subplots(1, 3, figsize=(WIDTH, WIDTH/3), layout='constrained')
+    for ax, dataset_id in zip(axes, ['ascadv1-fixed', 'ascadv1-variable']):
+        best_attack_rv, best_loc_rv = get_best_runs(dataset_id)
+        best_attack_path = Path(best_attack_rv['path'])
+        best_loc_path = Path(best_loc_rv['path'])
+        attack_mtd = np.load(best_attack_path / 'attack_metrics.npz', allow_pickle=True)['rank_over_time']
+        loc_mtd = np.load(best_loc_path / 'attack_metrics.npz', allow_pickle=True)['rank_over_time']
+        traces_seen = np.arange(1, 1001)
+        ax.fill_between(traces_seen, attack_mtd.min(axis=0), attack_mtd.max(axis=0), color='red', alpha=0.25)
+        ax.plot(traces_seen, np.median(attack_mtd, axis=0), color='red')
+        ax.fill_between(traces_seen, loc_mtd.min(axis=0), loc_mtd.max(axis=0), color='blue', alpha=0.25)
+        ax.plot(traces_seen, np.median(loc_mtd, axis=0), color='blue')
+        ax.set_xlabel('Traces seen')
+        ax.set_ylabel('Rank (per-byte) $\downarrow$')
+        ax.set_xscale('log')
+    fig.savefig(dest, dpi=DPI)
+    plt.close(fig)
+
+def run_plot_sweep(dest: Path):
+    fig, axes = plt.subplots(3, 5, sharex='row', layout='constrained', figsize=(WIDTH, 3*WIDTH/5))
+    markersize = 2
+    for dataset_id, axes_r in zip(['ascadv1-fixed', 'ascadv1-variable'], axes):
+        sweep = load_sweep(get_output_dir(dataset_id) / 'htune_highdropout', dataset_id)
+        best_attack_rv, best_loc_rv = get_best_runs(dataset_id)
+        for metric, ax in zip([
+            'white_box_spearman/input_x_gradient', 'white_box_auroc/input_x_gradient', 'fwd_dnno/input_x_gradient',
+            'rev_dnno/input_x_gradient', 'ta_mtd/input_x_gradient'
+        ], axes_r):
+            acc = sweep['mean_acc']
+            if not('dnno' in metric):
+                loc_metric = sweep[[f'{metric}/{byte_idx}' for byte_idx in range(16)]].mean(axis=1)
+                best_attack_loc_metric = best_attack_rv[[f'{metric}/{byte_idx}' for byte_idx in range(16)]].mean()
+                best_loc_loc_metric = best_loc_rv[[f'{metric}/{byte_idx}' for byte_idx in range(16)]].mean()
+            else:
+                loc_metric = sweep[metric]
+                best_attack_loc_metric = best_attack_rv[metric]
+                best_loc_loc_metric = best_loc_rv[metric]
+            ax.plot(acc, loc_metric, marker='.', linestyle='none', markersize=markersize/2, color='purple', alpha=0.8)
+            #if not('dnno' in metric):
+            #    acc_0 = sweep['acc/0']
+            #    acc_2 = sweep['acc/2']
+            #    loc_0 = sweep[f'{metric}/0']
+            #    loc_2 = sweep[f'{metric}/2']
+            #    ax.plot(acc_0, loc_0, marker='.', linestyle='none', markersize=markersize, color='green', alpha=0.8)
+            #    ax.plot(acc_2, loc_2, marker='.', linestyle='none', markersize=markersize, color='orange', alpha=0.8)
+            ax.plot(
+                [best_attack_rv['mean_acc']],
+                [best_attack_loc_metric],
+                color='red', marker='*', markersize=3
+            )
+            ax.plot(
+                [best_loc_rv['mean_acc']],
+                [best_loc_loc_metric],
+                color='blue', marker='*', markersize=3
+            )
+    fig.savefig(dest, dpi=DPI)
+    plt.close(fig)
+
+def run_plot_ta_mtd(dest: Path):
+    fig, axes = plt.subplots(1, 3, figsize=(WIDTH, WIDTH/2.5))
+    linewidth = 0.75
+    for dataset_id, ax in zip(['ascadv1-fixed', 'ascadv1-variable', 'ches-ctf-2018'], axes):
+        try:
+            best_attack_rv, best_loc_rv = get_best_runs(dataset_id)
+            best_attack_path = Path(best_attack_rv['path'])
+            best_loc_path = Path(best_loc_rv['path'])
+            traces_seen = np.arange(1, 10001)
+            best_attack_ta_mtd = np.load(best_attack_path / 'ta_mtd.input_x_gradient.npz', allow_pickle=True)['rank_over_time']
+            best_loc_ta_mtd = np.load(best_loc_path / 'ta_mtd.input_x_gradient.npz', allow_pickle=True)['rank_over_time']
+            random_ta_mtd = np.load(get_output_dir(dataset_id) / 'baselines' / 'ta_mtd.random.npz', allow_pickle=True)['rank_over_time']
+            oracle_ta_mtd = np.load(get_output_dir(dataset_id) / 'baselines' / 'ta_mtd.oracle.npz', allow_pickle=True)['rank_over_time']
+            ax.plot(traces_seen, np.mean(random_ta_mtd, axis=0), color='grey', linestyle='-', linewidth=linewidth, label='Random')
+            ax.plot(traces_seen, np.mean(oracle_ta_mtd, axis=0), color='green', linestyle='-', linewidth=linewidth, label='White-box SNR')
+            ax.plot(traces_seen, np.mean(best_attack_ta_mtd, axis=0), color='red', linestyle='-', linewidth=linewidth, label='Best attacker')
+            ax.plot(traces_seen, np.mean(best_loc_ta_mtd, axis=0), color='blue', linestyle='-', linewidth=linewidth, label='Best localizer')
+        except:
+            ax.plot([], [], color='grey', linestyle='-', linewidth=linewidth, label='Random')
+            ax.plot([], [], color='green', linestyle='-', linewidth=linewidth, label='White-box SNR')
+            ax.plot([], [], color='red', linestyle='-', linewidth=linewidth, label='Best attacker')
+            ax.plot([], [], color='blue', linestyle='-', linewidth=linewidth, label='Best localizer')
+        ax.set_xlabel('Traces seen')
+        ax.set_ylabel('Rank (mean over bytes)')
+        ax.set_title(fmt_dataset_name(dataset_id))
+        ax.set_xscale('log')
+    handles, labels = axes[1].get_legend_handles_labels()
+    fig.legend(handles, labels, loc='lower center', ncols=4, framealpha=0, bbox_to_anchor=(0.5, 0))
+    fig.tight_layout()
+    fig.subplots_adjust(bottom=0.3)
+    fig.savefig(dest, dpi=DPI)
+    plt.close(fig)
+
+def run_plot_dnn_occlusion(dest: Path):
+    fig, axes = plt.subplots(1, 3, figsize=(WIDTH, WIDTH/2.5))
+    for dataset_id, ax in zip(['ascadv1-fixed', 'ascadv1-variable', 'ches-ctf-2018'], axes):
+        try:
+            best_attack_rv, best_loc_rv = get_best_runs(dataset_id)
+            best_attack_path = Path(best_attack_rv['path'])
+            best_loc_path = Path(best_loc_rv['path'])
+            feature_count = FEATURE_COUNTS[dataset_id]
+            random_fwd = np.load(get_output_dir(dataset_id) / 'baselines' / 'fwd_dnno_occl.random.npy')
+            random_rev = np.load(get_output_dir(dataset_id) / 'baselines' / 'rev_dnno_occl.random.npy')
+            oracle_fwd = np.load(get_output_dir(dataset_id) / 'baselines' / 'fwd_dnno_occl.oracle.npy')
+            oracle_rev = np.load(get_output_dir(dataset_id) / 'baselines' / 'rev_dnno_occl.oracle.npy')
+            best_attack_fwd = np.load(best_attack_path / 'fwd_dnno_occl.input_x_gradient.npy')
+            best_attack_rev = np.load(best_attack_path / 'rev_dnno_occl.input_x_gradient.npy')
+            best_loc_fwd = np.load(best_loc_path / 'fwd_dnno_occl.input_x_gradient.npy')
+            best_loc_rev = np.load(best_loc_path / 'rev_dnno_occl.input_x_gradient.npy')
+            present_features = np.linspace(0, feature_count, 101)[:-1]
+            linewidth = 0.75
+            ax.plot(present_features, random_fwd, color='grey', linestyle=':', linewidth=linewidth, label='Random (forward)')
+            ax.plot(present_features, random_rev, color='grey', linestyle='--', linewidth=linewidth, label='Random (reverse)')
+            ax.plot(present_features, best_attack_fwd, color='red', linestyle=':', linewidth=linewidth, label='Best attacker (forward)')
+            ax.plot(present_features, best_attack_rev, color='red', linestyle='--', linewidth=linewidth, label='Best attacker (reverse)')
+            ax.plot(present_features, best_loc_fwd, color='blue', linestyle=':', linewidth=linewidth, label='Best localizer (forward)')
+            ax.plot(present_features, best_loc_rev, color='blue', linestyle='--', linewidth=linewidth, label='Best localizer (reverse)')
+            ax.plot(present_features, oracle_fwd, color='green', linestyle=':', linewidth=linewidth, label='White-box SNR (forward)')
+            ax.plot(present_features, oracle_rev, color='green', linestyle='--', linewidth=linewidth, label='White-box SNR (reverse)')
+            #ax.text(
+            #    0.01, 0.95, rf'Fwd AUC $\downarrow$: {int(best_attack_fwd.mean())}, Rev AUC $\uparrow$: {int(best_attack_rev.mean())}',
+            #    transform=ax.transAxes, ha='left', va='top', fontsize=4, color='red'
+            #)
+            #ax.text(
+            #    0.01, 0.85, rf'Fwd AUC $\downarrow$: {int(best_loc_fwd.mean())}, Rev AUC $\uparrow$: {int(best_loc_rev.mean())}',
+            #    transform=ax.transAxes, ha='left', va='top', fontsize=4, color='blue'
+            #)
+        except:
+            ax.plot([], [], color='grey', linestyle=':', linewidth=linewidth, label='Random (forward)')
+            ax.plot([], [], color='grey', linestyle='--', linewidth=linewidth, label='Random (reverse)')
+            ax.plot([], [], color='red', linestyle=':', linewidth=linewidth, label='Best attacker (forward)')
+            ax.plot([], [], color='red', linestyle='--', linewidth=linewidth, label='Best attacker (reverse)')
+            ax.plot([], [], color='blue', linestyle=':', linewidth=linewidth, label='Best localizer (forward)')
+            ax.plot([], [], color='blue', linestyle='--', linewidth=linewidth, label='Best localizer (reverse)')
+            ax.plot([], [], color='green', linestyle=':', linewidth=linewidth, label='White-box SNR (forward)')
+            ax.plot([], [], color='green', linestyle='--', linewidth=linewidth, label='White-box SNR (reverse)')
+        ax.set_xlabel('Included features')
+        ax.set_ylabel('MTD of attacker')
+        ax.set_title(fmt_dataset_name(dataset_id))
+        ax.ticklabel_format(style='sci', axis='x', scilimits=(-2, 2), useMathText=True)
+        #ax.ticklabel_format(style='sci', axis='y', scilimits=(-2, 2), useMathText=True)
+        ax.set_yscale('log')
+    handles, labels = axes[1].get_legend_handles_labels()
+    fig.legend(handles, labels, loc='lower center', ncols=4, framealpha=0, bbox_to_anchor=(0.5, 0))
+    fig.tight_layout()
+    fig.subplots_adjust(bottom=0.3)
+    fig.savefig(dest, dpi=DPI)
+    plt.close(fig)
+
+def run_plot_oracle_agreement(dest: Path, dataset_id: Literal['ascadv1-fixed', 'ascadv1-variable'] = 'ascadv1-fixed'):
+    best_attack_rv, best_loc_rv = get_best_runs(dataset_id)
+    best_attack_path = Path(best_attack_rv['path'])
+    best_attack_auroc = best_attack_rv['white_box_auroc/input_x_gradient/2']
+    best_loc_path = Path(best_loc_rv['path'])
+    best_loc_auroc = best_loc_rv['white_box_auroc/input_x_gradient/2']
     best_attack_inputxgrad = np.load(best_attack_path / 'input_x_gradient.npy')[2, :]
-    best_loc_idx = sweep['white_box_auroc/input_x_gradient'].idxmax()
-    best_loc_path = Path(sweep.loc[best_loc_idx]['path'])
-    best_loc_auroc = sweep.loc[best_loc_idx]['white_box_auroc/input_x_gradient/2']
     best_loc_inputxgrad = np.load(best_loc_path / 'input_x_gradient.npy')[2, :]
     title_pad = 3
     h_pad = 1/72  # inches; default is 4/72
@@ -350,6 +469,9 @@ def run_plot_oracle_agreement(dest: Path, dataset_id: Literal['ascadv1-fixed', '
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument(
+        '--plot-everything', default=False, action='store_true'
+    )
+    parser.add_argument(
         '--plot-training-curves', default=False, action='store_true'
     )
     parser.add_argument(
@@ -365,10 +487,21 @@ def main():
         '--plot-oracle-agreement', default=False, action='store_true'
     )
     parser.add_argument(
+        '--plot-dnn-occlusion', default=False, action='store_true'
+    )
+    parser.add_argument(
+        '--plot-ta-mtd', default=False, action='store_true'
+    )
+    parser.add_argument(
+        '--plot-sweep', default=False, action='store_true'
+    )
+    parser.add_argument(
         '--dest', default=None, type=Path
     )
     args = parser.parse_args()
 
+    plot_everything: bool = args.plot_everything
+    assert isinstance(plot_everything, bool)
     plot_training_curves: bool = args.plot_training_curves
     assert isinstance(plot_training_curves, bool)
     plot_mtd_curves: bool = args.plot_mtd_curves
@@ -379,20 +512,32 @@ def main():
     assert isinstance(plot_cost_scaling, bool)
     plot_oracle_agreement: bool = args.plot_oracle_agreement
     assert isinstance(plot_oracle_agreement, bool)
+    plot_dnn_occlusion: bool = args.plot_dnn_occlusion
+    assert isinstance(plot_dnn_occlusion, bool)
+    plot_ta_mtd: bool = args.plot_ta_mtd
+    assert isinstance(plot_ta_mtd, bool)
+    plot_sweep: bool = args.plot_sweep
+    assert isinstance(plot_sweep, bool)
     dest: Optional[Path] = args.dest
     if dest is None:
         dest = OUTPUTS_ROOT / 'plots_for_paper'
     assert isinstance(dest, Path)
     dest.mkdir(exist_ok=True, parents=True)
 
-    if plot_training_curves:
+    if plot_training_curves or plot_everything:
         run_plot_training_curves(dest / 'training_curves.pdf')
-    if plot_mtd_curves:
+    if plot_mtd_curves or plot_everything:
         run_plot_mtd_curves(dest / 'mtd_curves.pdf')
-    if plot_cost_scaling:
+    if plot_cost_scaling or plot_everything:
         run_plot_cost_scaling(dest / 'cost_scaling.pdf')
-    if plot_oracle_agreement:
+    if plot_oracle_agreement or plot_everything:
         run_plot_oracle_agreement(dest / 'oracle_agreement.pdf')
+    if plot_dnn_occlusion or plot_everything:
+        run_plot_dnn_occlusion(dest / 'dnn_occlusion.pdf')
+    if plot_ta_mtd or plot_everything:
+        run_plot_ta_mtd(dest / 'ta_mtd.pdf')
+    if plot_sweep or plot_everything:
+        run_plot_sweep(dest / 'sweep.pdf')
 
 if __name__ == '__main__':
     main()

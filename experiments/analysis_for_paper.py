@@ -367,7 +367,7 @@ def run_plot_dnn_occlusion(dest: Path):
     fig.savefig(dest, dpi=DPI)
     plt.close(fig)
 
-def run_plot_oracle_agreement(dest: Path, dataset_id: Literal['ascadv1-fixed', 'ascadv1-variable'] = 'ascadv1-fixed'):
+def run_plot_oracle_agreement(dest: Path, dataset_id: Literal['ascadv1-fixed', 'ascadv1-variable'] = 'ascadv1-variable'):
     best_attack_rv, best_loc_rv = get_best_runs(dataset_id)
     best_attack_path = Path(best_attack_rv['path'])
     best_attack_auroc = best_attack_rv['white_box_auroc/input_x_gradient/2']

@@ -36,8 +36,8 @@ class GaussianTemplateAttack:
         targets = np.full((datapoint_count,), -1, dtype=np.int64)
         collected_metadata = defaultdict(list)
         start_idx = 0
-        for _ in range(ceil(len(dataset)/chunk_size)):
-            end_idx = min(start_idx + chunk_size, len(dataset))
+        for _ in range(ceil(datapoint_count/chunk_size)):
+            end_idx = min(start_idx + chunk_size, datapoint_count)
             trace, _, metadata = dataset[start_idx:end_idx]
             if len(trace.shape) > 2:
                 assert trace.shape[1] == 1

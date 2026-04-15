@@ -38,7 +38,7 @@ def plot_ascadv1_oracle_leakiness(
     int_var_kwargs = dict(
         prin = dict(color = 'red', linestyle='--', label=ascadv1_repr_target('p__xor__k__xor__r_in', byte=byte)),
         pr = dict(color = 'green', linestyle='--', label=ascadv1_repr_target('p__xor__k__xor__r', byte=byte)),
-        rin = dict(color='red', linestyle='-', label=ascadv1_repr_target('r_in', byte=byte)),
+        rin = dict(color='purple', linestyle='-', label=ascadv1_repr_target('r_in', byte=byte)),
         rout = dict(color='teal', linestyle='-', label=ascadv1_repr_target('r_out', byte=byte)),
         r = dict(color='orange', linestyle='-', label=ascadv1_repr_target('r', byte=byte)),
         yrout = dict(color = 'blue', linestyle='-', label=ascadv1_repr_target('subbytes__xor__r_out', byte=byte)),

@@ -3,12 +3,15 @@ from pathlib import Path
 from typing import Optional, Literal, List, Tuple, get_args
 from collections import defaultdict
 from tqdm import tqdm
+import yaml
 
 import pandas
 import numpy as np
 from scipy.stats import gaussian_kde
 from matplotlib import pyplot as plt
 from matplotlib.ticker import FuncFormatter, MultipleLocator
+from matplotlib.lines import Line2D
+import re
 from leakage_localization.datasets import DATASET, PARTITION
 from leakage_localization.training.parse_metrics import parse_metrics
 from leakage_localization.evaluation import OracleAgreement
@@ -45,7 +48,7 @@ def fmt_metric_name(metric_id: Literal['acc', 'rank']) -> str:
     if metric_id == 'acc':
         return r'Accuracy (full key) $\uparrow$'
     elif metric_id == 'rank':
-        return r'Rank (full key) $\downarrow$'
+        return r'Rank (avg. per-byte) $\downarrow$'
     else:
         assert False
 
@@ -168,18 +171,24 @@ def load_sweep(sweep_dir: Path, dataset_id: DATASET) -> pandas.DataFrame:
                     data[f'ta_mtd/{attr_method}'].append(float('nan'))
                     for byte_idx in range(16):
                         data[f'ta_mtd/{attr_method}/{byte_idx}'].append(float('nan'))
-                # white-box agreement
-                oracle_agreement = OracleAgreement(
-                    get_output_dir(dataset_id) / 'snr', dataset_id
-                )
-                leakiness_estimates = np.load(trial_dir / f'{attr_method}.npy')
-                data[f'white_box_spearman/{attr_method}'].append(oracle_agreement.get_full_spearman(leakiness_estimates))
-                data[f'white_box_auroc/{attr_method}'].append(oracle_agreement.get_full_auroc(leakiness_estimates))
-                per_byte_spearman = oracle_agreement(leakiness_estimates)
-                per_byte_auroc = oracle_agreement.get_auroc(leakiness_estimates)
-                for byte_idx in range(16):
-                    data[f'white_box_spearman/{attr_method}/{byte_idx}'].append(per_byte_spearman[byte_idx])
-                    data[f'white_box_auroc/{attr_method}/{byte_idx}'].append(per_byte_auroc[byte_idx])
+                # white-box agreement (not available for all datasets)
+                snr_dir = get_output_dir(dataset_id) / 'snr'
+                if snr_dir.exists():
+                    oracle_agreement = OracleAgreement(snr_dir, dataset_id)
+                    leakiness_estimates = np.load(trial_dir / f'{attr_method}.npy')
+                    data[f'white_box_spearman/{attr_method}'].append(oracle_agreement.get_full_spearman(leakiness_estimates))
+                    data[f'white_box_auroc/{attr_method}'].append(oracle_agreement.get_full_auroc(leakiness_estimates))
+                    per_byte_spearman = oracle_agreement(leakiness_estimates)
+                    per_byte_auroc = oracle_agreement.get_auroc(leakiness_estimates)
+                    for byte_idx in range(16):
+                        data[f'white_box_spearman/{attr_method}/{byte_idx}'].append(per_byte_spearman[byte_idx])
+                        data[f'white_box_auroc/{attr_method}/{byte_idx}'].append(per_byte_auroc[byte_idx])
+                else:
+                    data[f'white_box_spearman/{attr_method}'].append(float('nan'))
+                    data[f'white_box_auroc/{attr_method}'].append(float('nan'))
+                    for byte_idx in range(16):
+                        data[f'white_box_spearman/{attr_method}/{byte_idx}'].append(float('nan'))
+                        data[f'white_box_auroc/{attr_method}/{byte_idx}'].append(float('nan'))
         data = pandas.DataFrame(data)
         data['mean_acc'] = data[[f'acc/{byte_idx}' for byte_idx in range(16)]].mean(axis=1)
         for attr_method in ['gradvis', 'input_x_gradient']:
@@ -188,20 +197,35 @@ def load_sweep(sweep_dir: Path, dataset_id: DATASET) -> pandas.DataFrame:
     data = pandas.read_csv(sweep_dir / 'sweep_summary.csv')
     return data
 
+def get_best_loc_ches(sweep: pandas.DataFrame) -> pandas.Series:
+    """Pick best localizer for CHES-CTF-2018 by average rank across 3 metrics.
+    fwd_dnno and ta_mtd: lower is better. rev_dnno: higher is better."""
+    fwd = sweep['fwd_dnno/input_x_gradient']
+    rev = sweep['rev_dnno/input_x_gradient']
+    ta  = sweep[[f'ta_mtd/input_x_gradient/{b}' for b in range(16)]].mean(axis=1)
+    rank_fwd = fwd.rank(ascending=True)
+    rank_rev = rev.rank(ascending=False)
+    rank_ta  = ta.rank(ascending=True)
+    avg_rank = (rank_fwd + rank_rev + rank_ta) / 3
+    return sweep.loc[avg_rank.idxmin()]
+
 def get_best_runs(dataset_id: DATASET) -> Tuple[pandas.Series, ...]:
     sweep_path = get_output_dir(dataset_id) / 'htune_highdropout'
     sweep = load_sweep(sweep_path, dataset_id)
-    acc = sweep['mean_acc']
-    loc_metric = sweep[[f'white_box_auroc/input_x_gradient/{byte_idx}' for byte_idx in range(16)]].mean(axis=1)
-    best_attack_idx = acc.idxmax()
-    best_attack = sweep.loc[best_attack_idx]
-    best_loc_idx = loc_metric.idxmax()
-    best_loc = sweep.loc[best_loc_idx]
+    if dataset_id == 'ches-ctf-2018':
+        mean_mtd = sweep[[f'mtd/{b}' for b in range(16)]].mean(axis=1)
+        best_attack = sweep.loc[mean_mtd.idxmin()]
+        best_loc = get_best_loc_ches(sweep)
+    else:
+        acc = sweep['mean_acc']
+        best_attack = sweep.loc[acc.idxmax()]
+        loc_metric = sweep[[f'white_box_auroc/input_x_gradient/{byte_idx}' for byte_idx in range(16)]].mean(axis=1)
+        best_loc = sweep.loc[loc_metric.idxmax()]
     return best_attack, best_loc
 
 def run_plot_training_curves(dest: Path):
     fig, axes = plt.subplots(1, 3, figsize=(WIDTH, WIDTH/3), layout='constrained')
-    for ax, dataset_id, metric_id in zip(axes, ['ascadv1-fixed', 'ascadv1-variable'], ['acc', 'acc']):
+    for ax, dataset_id, metric_id in zip(axes, ['ascadv1-fixed', 'ascadv1-variable', 'ches-ctf-2018'], ['acc', 'acc', 'rank']):
         best_attack_rv, best_loc_rv = get_best_runs(dataset_id)
         best_attack_path = Path(best_attack_rv['path'])
         best_loc_path = Path(best_loc_rv['path'])
@@ -214,27 +238,49 @@ def run_plot_training_curves(dest: Path):
         ax.set_xlabel('Training step')
         ax.set_ylabel(f'{fmt_metric_name(metric_id)}')
         ax.set_title(f'{fmt_dataset_name(dataset_id)}')
-        ax.legend(framealpha=0)
         ax.ticklabel_format(style='sci', axis='x', scilimits=(-2, 2), useMathText=True)
-    fig.savefig(dest, dpi=DPI)
+    handles, labels = axes[0].get_legend_handles_labels()
+    fig.legend(handles, labels, loc='lower center', ncols=4, framealpha=0, bbox_to_anchor=(0.5, 0))
+    fig.get_layout_engine().set(rect=(0, 0.15, 1, 1))
+    fig.savefig(dest, dpi=DPI, bbox_inches='tight')
     plt.close(fig)
 
 def run_plot_mtd_curves(dest: Path):
     fig, axes = plt.subplots(1, 3, figsize=(WIDTH, WIDTH/3), layout='constrained')
-    for ax, dataset_id in zip(axes, ['ascadv1-fixed', 'ascadv1-variable']):
+    lw = 0.75
+    for ax, dataset_id in zip(axes, ['ascadv1-fixed', 'ascadv1-variable', 'ches-ctf-2018']):
         best_attack_rv, best_loc_rv = get_best_runs(dataset_id)
         best_attack_path = Path(best_attack_rv['path'])
         best_loc_path = Path(best_loc_rv['path'])
-        attack_mtd = np.load(best_attack_path / 'attack_metrics.npz', allow_pickle=True)['rank_over_time']
-        loc_mtd = np.load(best_loc_path / 'attack_metrics.npz', allow_pickle=True)['rank_over_time']
-        traces_seen = np.arange(1, 1001)
-        ax.fill_between(traces_seen, attack_mtd.min(axis=0), attack_mtd.max(axis=0), color='red', alpha=0.25)
-        ax.plot(traces_seen, np.median(attack_mtd, axis=0), color='red')
-        ax.fill_between(traces_seen, loc_mtd.min(axis=0), loc_mtd.max(axis=0), color='blue', alpha=0.25)
-        ax.plot(traces_seen, np.median(loc_mtd, axis=0), color='blue')
+        attack_mtd = np.load(best_attack_path / 'attack_metrics.npz', allow_pickle=True)['rank_over_time']  # (16, T)
+        loc_mtd = np.load(best_loc_path / 'attack_metrics.npz', allow_pickle=True)['rank_over_time']        # (16, T)
+        traces_seen = np.arange(1, attack_mtd.shape[1] + 1)
+        ax.plot(traces_seen, attack_mtd.max(axis=0), color='red', linewidth=lw, rasterized=True)
+        ax.plot(traces_seen, loc_mtd.max(axis=0), color='blue', linewidth=lw, rasterized=True)
         ax.set_xlabel('Traces seen')
-        ax.set_ylabel('Rank (per-byte) $\downarrow$')
+        ax.set_ylabel(r'Rank (worst byte) $\downarrow$')
+        ax.set_title(fmt_dataset_name(dataset_id))
         ax.set_xscale('log')
+    legend_handles = [
+        Line2D([0], [0], color='red',  linewidth=lw, label='Best attacker (worst byte)'),
+        Line2D([0], [0], color='blue', linewidth=lw, label='Best localizer (worst byte)'),
+    ]
+    fig.legend(handles=legend_handles, loc='lower center', ncols=4, framealpha=0, bbox_to_anchor=(0.5, 0))
+    fig.get_layout_engine().set(rect=(0, 0.15, 1, 1))
+    fig.savefig(dest, dpi=DPI, bbox_inches='tight')
+    plt.close(fig)
+
+def run_plot_teaser_sweep(dest: Path):
+    fig, ax = plt.subplots(1, 1, figsize=(0.4*WIDTH, 0.4*WIDTH), layout='constrained')
+    sweep = load_sweep(get_output_dir('ascadv1-variable') / 'htune_highdropout', 'ascadv1-variable')
+    acc = sweep['mean_acc']
+    error = 1 - acc
+    #auroc = sweep[[f'white_box_auroc/input_x_gradient/{byte_idx}' for byte_idx in range(16)]].mean(axis=1)
+    auroc = sweep['white_box_auroc/input_x_gradient']
+    ax.plot(error, auroc, marker='.', linestyle='none', markersize=3, color='blue', alpha=0.8)
+    ax.set_xlabel(r'Attack performance $\downarrow$')
+    ax.set_ylabel(r'Localization performance $\uparrow$')
+    ax.set_xscale('log')
     fig.savefig(dest, dpi=DPI)
     plt.close(fig)
 
@@ -244,11 +290,12 @@ def run_plot_sweep(dest: Path):
     for dataset_id, axes_r in zip(['ascadv1-fixed', 'ascadv1-variable'], axes):
         sweep = load_sweep(get_output_dir(dataset_id) / 'htune_highdropout', dataset_id)
         best_attack_rv, best_loc_rv = get_best_runs(dataset_id)
+        axes_r[0].set_xscale('log')
         for metric, ax in zip([
             'white_box_spearman/input_x_gradient', 'white_box_auroc/input_x_gradient', 'fwd_dnno/input_x_gradient',
             'rev_dnno/input_x_gradient', 'ta_mtd/input_x_gradient'
         ], axes_r):
-            acc = sweep['mean_acc']
+            error = 1 - sweep['mean_acc']
             if not('dnno' in metric):
                 loc_metric = sweep[[f'{metric}/{byte_idx}' for byte_idx in range(16)]].mean(axis=1)
                 best_attack_loc_metric = best_attack_rv[[f'{metric}/{byte_idx}' for byte_idx in range(16)]].mean()
@@ -257,7 +304,7 @@ def run_plot_sweep(dest: Path):
                 loc_metric = sweep[metric]
                 best_attack_loc_metric = best_attack_rv[metric]
                 best_loc_loc_metric = best_loc_rv[metric]
-            ax.plot(acc, loc_metric, marker='.', linestyle='none', markersize=markersize/2, color='purple', alpha=0.8)
+            ax.plot(error, loc_metric, marker='.', linestyle='none', markersize=markersize/2, color='purple', alpha=0.8)
             #if not('dnno' in metric):
             #    acc_0 = sweep['acc/0']
             #    acc_2 = sweep['acc/2']
@@ -266,15 +313,46 @@ def run_plot_sweep(dest: Path):
             #    ax.plot(acc_0, loc_0, marker='.', linestyle='none', markersize=markersize, color='green', alpha=0.8)
             #    ax.plot(acc_2, loc_2, marker='.', linestyle='none', markersize=markersize, color='orange', alpha=0.8)
             ax.plot(
-                [best_attack_rv['mean_acc']],
+                [1 - best_attack_rv['mean_acc']],
                 [best_attack_loc_metric],
                 color='red', marker='*', markersize=3
             )
             ax.plot(
-                [best_loc_rv['mean_acc']],
+                [1 - best_loc_rv['mean_acc']],
                 [best_loc_loc_metric],
                 color='blue', marker='*', markersize=3
             )
+
+    # CHES-CTF-2018: no white-box metrics; use mean MTD as performance axis
+    ches_sweep = load_sweep(get_output_dir('ches-ctf-2018') / 'htune_highdropout', 'ches-ctf-2018')
+    mean_mtd = ches_sweep[[f'mtd/{byte_idx}' for byte_idx in range(16)]].mean(axis=1)
+    best_attack_ches_rv, best_loc_ches_rv = get_best_runs('ches-ctf-2018')
+    axes[2][0].set_visible(False)
+    axes[2][1].set_visible(False)
+    axes[2][2].set_xscale('log')
+    for metric, ax in zip([
+        'fwd_dnno/input_x_gradient', 'rev_dnno/input_x_gradient', 'ta_mtd/input_x_gradient'
+    ], axes[2][2:]):
+        if 'dnno' in metric:
+            loc_metric = ches_sweep[metric]
+            best_attack_loc_metric = best_attack_ches_rv[metric]
+            best_loc_loc_metric = best_loc_ches_rv[metric]
+        else:
+            loc_metric = ches_sweep[[f'{metric}/{byte_idx}' for byte_idx in range(16)]].mean(axis=1)
+            best_attack_loc_metric = best_attack_ches_rv[[f'{metric}/{byte_idx}' for byte_idx in range(16)]].mean()
+            best_loc_loc_metric = best_loc_ches_rv[[f'{metric}/{byte_idx}' for byte_idx in range(16)]].mean()
+        ax.plot(mean_mtd, loc_metric, marker='.', linestyle='none', markersize=markersize/2, color='purple', alpha=0.8)
+        ax.plot(
+            [mean_mtd[best_attack_ches_rv.name]],
+            [best_attack_loc_metric],
+            color='red', marker='*', markersize=3
+        )
+        ax.plot(
+            [mean_mtd[best_loc_ches_rv.name]],
+            [best_loc_loc_metric],
+            color='blue', marker='*', markersize=3
+        )
+
     fig.savefig(dest, dpi=DPI)
     plt.close(fig)
 
@@ -466,6 +544,55 @@ def run_plot_oracle_agreement(dest: Path, dataset_id: Literal['ascadv1-fixed', '
     fig.savefig(dest, dpi=DPI)
     plt.close(fig)
 
+def _load_swept_hparams(trial_path: Path) -> dict:
+    with open(trial_path / 'config.yaml') as f:
+        cfg = yaml.safe_load(f)
+    with open(trial_path / 'hparams.yaml') as f:
+        raw = re.sub(r'!!python/\S+', '', f.read())
+    hparams = yaml.safe_load(raw)
+    search_space = cfg.get('search_space', {})
+    result = {}
+    for section, params in search_space.items():
+        for param_name in params:
+            if section == 'model':
+                value = hparams['model_kwargs'][param_name]
+            else:  # training and other top-level sections are flattened
+                value = hparams[param_name]
+            result[f'{section}/{param_name}'] = value
+    return result
+
+def _print_perf_rows(label: str, rv: pandas.Series, include_acc: bool = True):
+    mtd_vals  = [rv['mtd']]  + [rv[f'mtd/{b}']  for b in range(16)]
+    mtd_str   = ' & '.join(f'{v:.3f}' for v in mtd_vals)
+    print(f'  MTD  | {label} & {mtd_str}')
+    if include_acc:
+        acc_vals = [rv['acc']] + [rv[f'acc/{b}'] for b in range(16)]
+        acc_str  = ' & '.join(f'{v:.3f}' for v in acc_vals)
+        print(f'  Acc  | {label} & {acc_str}')
+
+def run_print_best_hparams():
+    for dataset_id in ['ascadv1-fixed', 'ascadv1-variable', 'ches-ctf-2018']:
+        print(f'\n=== {fmt_dataset_name(dataset_id)} ===')
+        best_attack_rv, best_loc_rv = get_best_runs(dataset_id)
+        best_attack_path = Path(best_attack_rv['path'])
+        best_loc_path = Path(best_loc_rv['path'])
+
+        if dataset_id == 'ches-ctf-2018':
+            print(f'  Best attacker (mean MTD = {best_attack_rv["mtd"]:.3f}):')
+        else:
+            print(f'  Best attacker (mean_acc = {best_attack_rv["mean_acc"]:.4f}):')
+        for k, v in _load_swept_hparams(best_attack_path).items():
+            print(f'    {k}: {v}')
+        _print_perf_rows('Best attacker', best_attack_rv)
+
+        if dataset_id == 'ches-ctf-2018':
+            print(f'  Best localizer (avg rank across fwd_dnno, rev_dnno, ta_mtd):')
+        else:
+            print(f'  Best localizer (mean white-box AUROC = {best_loc_rv["white_box_auroc/input_x_gradient"]:.4f}):')
+        for k, v in _load_swept_hparams(best_loc_path).items():
+            print(f'    {k}: {v}')
+        _print_perf_rows('Best localizer', best_loc_rv)
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument(
@@ -496,6 +623,12 @@ def main():
         '--plot-sweep', default=False, action='store_true'
     )
     parser.add_argument(
+        '--plot-teaser', default=False, action='store_true'
+    )
+    parser.add_argument(
+        '--print-best-hparams', default=False, action='store_true'
+    )
+    parser.add_argument(
         '--dest', default=None, type=Path
     )
     args = parser.parse_args()
@@ -518,6 +651,10 @@ def main():
     assert isinstance(plot_ta_mtd, bool)
     plot_sweep: bool = args.plot_sweep
     assert isinstance(plot_sweep, bool)
+    plot_teaser: bool = args.plot_teaser
+    assert isinstance(plot_teaser, bool)
+    print_best_hparams: bool = args.print_best_hparams
+    assert isinstance(print_best_hparams, bool)
     dest: Optional[Path] = args.dest
     if dest is None:
         dest = OUTPUTS_ROOT / 'plots_for_paper'
@@ -538,6 +675,10 @@ def main():
         run_plot_ta_mtd(dest / 'ta_mtd.pdf')
     if plot_sweep or plot_everything:
         run_plot_sweep(dest / 'sweep.pdf')
+    if plot_teaser or plot_everything:
+        run_plot_teaser_sweep(dest / 'teaser_sweep.pdf')
+    if print_best_hparams or plot_everything:
+        run_print_best_hparams()
 
 if __name__ == '__main__':
     main()

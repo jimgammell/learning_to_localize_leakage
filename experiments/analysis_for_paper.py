@@ -285,6 +285,64 @@ def run_plot_teaser_sweep(dest: Path):
     fig.savefig(dest, dpi=DPI)
     plt.close(fig)
 
+def _try(fn):
+    """Call fn(), return None on any exception."""
+    try:
+        return fn()
+    except Exception:
+        return None
+
+
+def _wb_agreement_val(dataset_id: DATASET, leakiness: np.ndarray, key: str) -> Optional[float]:
+    snr_dir = get_output_dir(dataset_id) / 'snr'
+    if not snr_dir.exists():
+        return None
+    oracle = OracleAgreement(snr_dir, dataset_id)
+    if key == 'spearman':
+        return float(np.mean(oracle(leakiness)))
+    else:
+        return float(np.mean(oracle.get_auroc(leakiness)))
+
+
+def _ta_mtd_mean(path: Path) -> float:
+    d = np.load(path, allow_pickle=True)
+    if 'ta-mtd/0' in d:
+        return float(np.mean([float(d[f'ta-mtd/{b}']) for b in range(16)]))
+    else:
+        return float(d['mtd'].mean())
+
+
+def _load_baseline_loc_metric(dataset_id: DATASET, metric: str) -> Tuple[Optional[float], Optional[float]]:
+    """Return (oracle_val, random_val) for a given sweep column metric.
+    Each value is None if its baseline file is missing."""
+    baselines_dir = get_output_dir(dataset_id) / 'baselines'
+    oracle_npy = baselines_dir / 'oracle.npy'
+    random_npy = baselines_dir / 'random.npy'
+
+    if metric.startswith('white_box_spearman'):
+        key = 'spearman'
+        o = _try(lambda: _wb_agreement_val(dataset_id, np.load(oracle_npy), key)) if oracle_npy.exists() else None
+        r = _try(lambda: _wb_agreement_val(dataset_id, np.load(random_npy), key)) if random_npy.exists() else None
+    elif metric.startswith('white_box_auroc'):
+        key = 'auroc'
+        o = _try(lambda: _wb_agreement_val(dataset_id, np.load(oracle_npy), key)) if oracle_npy.exists() else None
+        r = _try(lambda: _wb_agreement_val(dataset_id, np.load(random_npy), key)) if random_npy.exists() else None
+    elif metric.startswith('fwd_dnno'):
+        o = _try(lambda: _load_occl(baselines_dir, 'fwd_dnno_occl.oracle', 'fwd-dnno-occl').mean())
+        r = _try(lambda: _load_occl(baselines_dir, 'fwd_dnno_occl.random', 'fwd-dnno-occl').mean())
+    elif metric.startswith('rev_dnno'):
+        o = _try(lambda: _load_occl(baselines_dir, 'rev_dnno_occl.oracle', 'rev-dnno-occl').mean())
+        r = _try(lambda: _load_occl(baselines_dir, 'rev_dnno_occl.random', 'rev-dnno-occl').mean())
+    elif metric.startswith('ta_mtd'):
+        oracle_path = baselines_dir / 'ta_mtd.oracle.npz'
+        random_path = baselines_dir / 'ta_mtd.random.npz'
+        o = _try(lambda: _ta_mtd_mean(oracle_path)) if oracle_path.exists() else None
+        r = _try(lambda: _ta_mtd_mean(random_path)) if random_path.exists() else None
+    else:
+        return None, None
+    return o, r
+
+
 def run_plot_sweep(dest: Path):
     col_ylabels = [
         r'WB/Spearman $\uparrow$', r'WB/AUROC $\uparrow$', r'Fwd DNN occl. $\downarrow$',
@@ -312,9 +370,18 @@ def run_plot_sweep(dest: Path):
                 loc_metric = sweep[metric]
                 best_attack_loc_metric = best_attack_rv[metric]
                 best_loc_loc_metric = best_loc_rv[metric]
+            if 'ta_mtd' in metric:
+                loc_metric = loc_metric.clip(upper=10_000)
+                best_attack_loc_metric = min(best_attack_loc_metric, 10_000)
+                best_loc_loc_metric = min(best_loc_loc_metric, 10_000)
             ax.plot(error, loc_metric, marker='.', linestyle='none', markersize=markersize/2, color='purple', alpha=0.8)
             ax.plot([1 - best_attack_rv['mean_acc']], [best_attack_loc_metric], color='red',  marker='*', markersize=3, label='Best attacker', zorder=5)
             ax.plot([1 - best_loc_rv['mean_acc']],    [best_loc_loc_metric],    color='blue', marker='*', markersize=3, label='Best localizer', zorder=5)
+            oracle_val, random_val = _load_baseline_loc_metric(dataset_id, metric)
+            if oracle_val is not None:
+                ax.axhline(oracle_val, color='green', linestyle=':', linewidth=0.75, label='`Oracle\' (WB prof. set)')
+            if random_val is not None:
+                ax.axhline(random_val, color='grey',  linestyle=':', linewidth=0.75, label='Random baseline')
             ax.set_ylabel(ylabel, fontsize=5)
         for ax in axes_r:
             ax.set_xlabel(r'Error rate $\downarrow$', fontsize=5)
@@ -339,9 +406,18 @@ def run_plot_sweep(dest: Path):
             loc_metric = ches_sweep[[f'{metric}/{byte_idx}' for byte_idx in range(16)]].mean(axis=1)
             best_attack_loc_metric = best_attack_ches_rv[[f'{metric}/{byte_idx}' for byte_idx in range(16)]].mean()
             best_loc_loc_metric = best_loc_ches_rv[[f'{metric}/{byte_idx}' for byte_idx in range(16)]].mean()
+        if 'ta_mtd' in metric:
+            loc_metric = loc_metric.clip(upper=10_000)
+            best_attack_loc_metric = min(best_attack_loc_metric, 10_000)
+            best_loc_loc_metric = min(best_loc_loc_metric, 10_000)
         ax.plot(mean_mtd, loc_metric, marker='.', linestyle='none', markersize=markersize/2, color='purple', alpha=0.8)
         ax.plot([mean_mtd[best_attack_ches_rv.name]], [best_attack_loc_metric], color='red',  marker='*', markersize=3, label='Best attacker', zorder=5)
         ax.plot([mean_mtd[best_loc_ches_rv.name]],    [best_loc_loc_metric],    color='blue', marker='*', markersize=3, label='Best localizer', zorder=5)
+        oracle_val, random_val = _load_baseline_loc_metric('ches-ctf-2018', metric)
+        if oracle_val is not None:
+            ax.axhline(oracle_val, color='green', linestyle=':', linewidth=0.75, label='Oracle')
+        if random_val is not None:
+            ax.axhline(random_val, color='grey',  linestyle=':', linewidth=0.75, label='Random')
         ax.set_ylabel(ylabel, fontsize=5)
         ax.set_xlabel(r'Mean MTD $\downarrow$', fontsize=5)
 
@@ -350,8 +426,10 @@ def run_plot_sweep(dest: Path):
         Line2D([0], [0], color='purple', marker='.', linestyle='none', markersize=3, label='Tuning run'),
         Line2D([0], [0], color='red',    marker='*', linestyle='none', markersize=4, label='Best attacker'),
         Line2D([0], [0], color='blue',   marker='*', linestyle='none', markersize=4, label='Best localizer'),
+        Line2D([0], [0], color='green',  linestyle=':', linewidth=0.75, label='`Oracle\' (WB on prof. set)'),
+        Line2D([0], [0], color='grey',   linestyle=':', linewidth=0.75, label='Random guessing'),
     ]
-    axes[2][1].legend(handles=legend_handles, loc='upper center', ncol=1, framealpha=0., fontsize=5)
+    axes[2][1].legend(handles=legend_handles, loc='upper center', ncol=1, framealpha=0., fontsize=4)
     for row in axes:
         for ax in row[2:]:
             if ax.get_visible():

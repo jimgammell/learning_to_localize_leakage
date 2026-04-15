@@ -24,8 +24,20 @@ def add_dline(
 def plot_ascadv1_oracle_leakiness(
         snr_dir: Path,
         ax: Axes,
-        byte: int = 2
+        byte: int = 2,
+        markers: bool = True,
+        arb_byte: bool = False,
 ):
+    marker_kwargs = dict(marker='.', markersize=1) if markers else {}
+    byte_label = 'i' if arb_byte else f'{byte}'
+
+    # Bytes 0 and 1 have no masking — use subbytes SNR directly as a single curve.
+    if byte in (0, 1):
+        snr = np.load(snr_dir / 'subbytes.attack.npy')[byte, :]
+        kwargs = dict(color='grey', linestyle='-', label=ascadv1_repr_target('subbytes', byte=byte_label))
+        ax.plot(snr, rasterized=True, linewidth=0.3, **marker_kwargs, **kwargs)
+        return dict(composite=snr, subbytes=snr)
+
     int_var_snrs = dict(
         prin = np.load(snr_dir / 'p__xor__k__xor__r_in.attack.npy')[byte, :],
         pr = np.load(snr_dir / 'p__xor__k__xor__r.profile.npy')[byte, :],
@@ -36,20 +48,20 @@ def plot_ascadv1_oracle_leakiness(
         yr = np.load(snr_dir / 'subbytes__xor__r.attack.npy')[byte, :],
     )
     int_var_kwargs = dict(
-        prin = dict(color = 'red', linestyle='--', label=ascadv1_repr_target('p__xor__k__xor__r_in', byte=byte)),
-        pr = dict(color = 'green', linestyle='--', label=ascadv1_repr_target('p__xor__k__xor__r', byte=byte)),
-        rin = dict(color='purple', linestyle='-', label=ascadv1_repr_target('r_in', byte=byte)),
-        rout = dict(color='teal', linestyle='-', label=ascadv1_repr_target('r_out', byte=byte)),
-        r = dict(color='orange', linestyle='-', label=ascadv1_repr_target('r', byte=byte)),
-        yrout = dict(color = 'blue', linestyle='-', label=ascadv1_repr_target('subbytes__xor__r_out', byte=byte)),
-        yr = dict(color = 'black', linestyle='-', label=ascadv1_repr_target('subbytes__xor__r', byte=byte))
+        prin = dict(color = 'red', linestyle='--', label=ascadv1_repr_target('p__xor__k__xor__r_in', byte=byte_label)),
+        pr = dict(color = 'green', linestyle='--', label=ascadv1_repr_target('p__xor__k__xor__r', byte=byte_label)),
+        rin = dict(color='purple', linestyle='-', label=ascadv1_repr_target('r_in', byte=byte_label)),
+        rout = dict(color='teal', linestyle='-', label=ascadv1_repr_target('r_out', byte=byte_label)),
+        r = dict(color='orange', linestyle='-', label=ascadv1_repr_target('r', byte=byte_label)),
+        yrout = dict(color = 'magenta', linestyle='-', label=ascadv1_repr_target('subbytes__xor__r_out', byte=byte_label)),
+        yr = dict(color = 'black', linestyle='-', label=ascadv1_repr_target('subbytes__xor__r', byte=byte_label))
     )
     for int_var_name in int_var_snrs.keys():
         int_var_snr = int_var_snrs[int_var_name]
         if int_var_snr is None:
             continue
         kwargs = int_var_kwargs[int_var_name]
-        ax.plot(int_var_snr, rasterized=True, linewidth=0.1, marker='.', markersize=1, **kwargs)
+        ax.plot(int_var_snr, rasterized=True, linewidth=0.3, **marker_kwargs, **kwargs)
     white_box_composite = np.stack(list(int_var_snrs.values())).mean(axis=0)
     return dict(composite=white_box_composite, **int_var_snrs)
 

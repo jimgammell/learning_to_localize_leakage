@@ -32,14 +32,12 @@ TARGET_VARIABLE = Literal[
     'plaintext'
 ]
 
-def repr_target(variable: TARGET_VARIABLE, byte: Optional[TARGET_BYTE] = None) -> str:
+def repr_target(variable: TARGET_VARIABLE, byte: Optional[str] = None) -> str:
     assert variable in get_args(TARGET_VARIABLE)
-    if byte is not None:
-        assert byte in get_args(TARGET_BYTE)
     sbox_repr = r'\operatorname{Sbox}'
-    k_repr = f'k_{byte}' if byte is not None else 'k'
-    w_repr = f'w_{byte}' if byte is not None else 'w'
-    r_repr = f'r_{byte}' if byte is not None else 'r'
+    k_repr = f'k[{byte}]' if byte is not None else 'k'
+    w_repr = f'w[{byte}]' if byte is not None else 'w'
+    r_repr = f'r[{byte}]' if byte is not None else 'r'
     r_in_repr = r'r_{\mathrm{in}}'
     r_out_repr = r'r_{\mathrm{out}}'
     if variable == 'subbytes':

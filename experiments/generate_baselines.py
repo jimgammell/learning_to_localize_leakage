@@ -48,10 +48,7 @@ def main():
 
     dest: Path = args.dest or (get_output_dir(dataset_id) / 'baselines')
     dest.mkdir(exist_ok=True, parents=True)
-
     snr_dir = get_output_dir(dataset_id) / 'snr'
-    assert snr_dir.exists(), f'SNR directory not found: {snr_dir}. Run compute_snr.py first.'
-    oracle = OracleAgreement(snr_dir, dataset_id)
 
     # Random baseline
     random_path = dest / 'random.npy'
@@ -64,11 +61,13 @@ def main():
         logging.info(f'Skipping random baseline (already exists): {random_path}')
 
     # Oracle baseline: profiling-set SNR (independent data from the attack set)
-    oracle_path = dest / 'oracle.npy'
-    if not oracle_path.exists() or args.overwrite:
-        oracle_heatmap = oracle.get_oracle_leakiness('profile').astype(np.float32)
-        np.save(oracle_path, oracle_heatmap)
-        logging.info(f'Saved oracle baseline: {oracle_path}')
+    if snr_dir.exists():
+        oracle = OracleAgreement(snr_dir, dataset_id)
+        oracle_path = dest / 'oracle.npy'
+        if not oracle_path.exists() or args.overwrite:
+            oracle_heatmap = oracle.get_oracle_leakiness('profile').astype(np.float32)
+            np.save(oracle_path, oracle_heatmap)
+            logging.info(f'Saved oracle baseline: {oracle_path}')
     else:
         logging.info(f'Skipping oracle baseline (already exists): {oracle_path}')
 

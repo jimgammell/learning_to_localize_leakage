@@ -4,6 +4,7 @@ from typing import Optional, Literal, List, Tuple, get_args
 from collections import defaultdict
 from tqdm import tqdm
 import yaml
+from math import ceil
 
 import pandas
 import numpy as np
@@ -389,56 +390,66 @@ def run_plot_ta_mtd(dest: Path):
     fig.savefig(dest, dpi=DPI)
     plt.close(fig)
 
+def _load_occl(base: Path, stem: str, npz_key: str) -> np.ndarray:
+    """Load a 1-D occlusion curve from .npz (new) or .npy (old) format.
+
+    .npz files store two arrays: npz_key (mean over all bytes) and npz_key+'/2'
+    (byte-2 only). .npy files store only the mean as a plain array.
+    """
+    npz = base / f'{stem}.npz'
+    npy = base / f'{stem}.npy'
+    if npz.exists():
+        return np.load(npz, allow_pickle=True)[npz_key]
+    elif npy.exists():
+        return np.load(npy)
+    else:
+        raise FileNotFoundError(f'Neither {npz} nor {npy} exists')
+
+
 def run_plot_dnn_occlusion(dest: Path):
     fig, axes = plt.subplots(1, 3, figsize=(WIDTH, WIDTH/2.5))
+    linewidth = 0.75
     for dataset_id, ax in zip(['ascadv1-fixed', 'ascadv1-variable', 'ches-ctf-2018'], axes):
-        try:
-            best_attack_rv, best_loc_rv = get_best_runs(dataset_id)
-            best_attack_path = Path(best_attack_rv['path'])
-            best_loc_path = Path(best_loc_rv['path'])
-            feature_count = FEATURE_COUNTS[dataset_id]
-            random_fwd = np.load(get_output_dir(dataset_id) / 'baselines' / 'fwd_dnno_occl.random.npy')
-            random_rev = np.load(get_output_dir(dataset_id) / 'baselines' / 'rev_dnno_occl.random.npy')
-            oracle_fwd = np.load(get_output_dir(dataset_id) / 'baselines' / 'fwd_dnno_occl.oracle.npy')
-            oracle_rev = np.load(get_output_dir(dataset_id) / 'baselines' / 'rev_dnno_occl.oracle.npy')
-            best_attack_fwd = np.load(best_attack_path / 'fwd_dnno_occl.input_x_gradient.npy')
-            best_attack_rev = np.load(best_attack_path / 'rev_dnno_occl.input_x_gradient.npy')
-            best_loc_fwd = np.load(best_loc_path / 'fwd_dnno_occl.input_x_gradient.npy')
-            best_loc_rev = np.load(best_loc_path / 'rev_dnno_occl.input_x_gradient.npy')
-            present_features = np.linspace(0, feature_count, 101)[:-1]
-            linewidth = 0.75
-            ax.plot(present_features, random_fwd, color='grey', linestyle=':', linewidth=linewidth, label='Random (forward)')
-            ax.plot(present_features, random_rev, color='grey', linestyle='--', linewidth=linewidth, label='Random (reverse)')
-            ax.plot(present_features, best_attack_fwd, color='red', linestyle=':', linewidth=linewidth, label='Best attacker (forward)')
-            ax.plot(present_features, best_attack_rev, color='red', linestyle='--', linewidth=linewidth, label='Best attacker (reverse)')
-            ax.plot(present_features, best_loc_fwd, color='blue', linestyle=':', linewidth=linewidth, label='Best localizer (forward)')
-            ax.plot(present_features, best_loc_rev, color='blue', linestyle='--', linewidth=linewidth, label='Best localizer (reverse)')
-            ax.plot(present_features, oracle_fwd, color='green', linestyle=':', linewidth=linewidth, label='White-box SNR (forward)')
-            ax.plot(present_features, oracle_rev, color='green', linestyle='--', linewidth=linewidth, label='White-box SNR (reverse)')
-            #ax.text(
-            #    0.01, 0.95, rf'Fwd AUC $\downarrow$: {int(best_attack_fwd.mean())}, Rev AUC $\uparrow$: {int(best_attack_rev.mean())}',
-            #    transform=ax.transAxes, ha='left', va='top', fontsize=4, color='red'
-            #)
-            #ax.text(
-            #    0.01, 0.85, rf'Fwd AUC $\downarrow$: {int(best_loc_fwd.mean())}, Rev AUC $\uparrow$: {int(best_loc_rev.mean())}',
-            #    transform=ax.transAxes, ha='left', va='top', fontsize=4, color='blue'
-            #)
-        except:
-            ax.plot([], [], color='grey', linestyle=':', linewidth=linewidth, label='Random (forward)')
-            ax.plot([], [], color='grey', linestyle='--', linewidth=linewidth, label='Random (reverse)')
-            ax.plot([], [], color='red', linestyle=':', linewidth=linewidth, label='Best attacker (forward)')
-            ax.plot([], [], color='red', linestyle='--', linewidth=linewidth, label='Best attacker (reverse)')
-            ax.plot([], [], color='blue', linestyle=':', linewidth=linewidth, label='Best localizer (forward)')
-            ax.plot([], [], color='blue', linestyle='--', linewidth=linewidth, label='Best localizer (reverse)')
-            ax.plot([], [], color='green', linestyle=':', linewidth=linewidth, label='White-box SNR (forward)')
-            ax.plot([], [], color='green', linestyle='--', linewidth=linewidth, label='White-box SNR (reverse)')
+        best_attack_rv, best_loc_rv = get_best_runs(dataset_id)
+        best_attack_path = Path(best_attack_rv['path'])
+        best_loc_path = Path(best_loc_rv['path'])
+        feature_count = FEATURE_COUNTS[dataset_id]
+        present_features = np.linspace(0, feature_count, 101)[:-1]
+
+        baselines_dir = get_output_dir(dataset_id) / 'baselines'
+        fwd_random_path = baselines_dir / 'fwd_dnno_occl.random.npz'
+        rev_random_path = baselines_dir / 'rev_dnno_occl.random.npz'
+        fwd_oracle_path = baselines_dir / 'fwd_dnno_occl.oracle.npz'
+        rev_oracle_path = baselines_dir / 'rev_dnno_occl.oracle.npz'
+        if fwd_random_path.exists() and rev_random_path.exists():
+            ax.plot(present_features, np.load(fwd_random_path)['fwd-dnno-occl'], color='grey', linestyle=':', linewidth=linewidth, label='Random (forward)')
+            ax.plot(present_features, np.load(rev_random_path)['rev-dnno-occl'], color='grey', linestyle='--', linewidth=linewidth, label='Random (reverse)')
+        if fwd_oracle_path.exists() and rev_oracle_path.exists():
+            ax.plot(present_features, np.load(fwd_oracle_path)['fwd-dnno-occl'], color='green', linestyle=':', linewidth=linewidth, label='White-box SNR (forward)')
+            ax.plot(present_features, np.load(rev_oracle_path)['rev-dnno-occl'], color='green', linestyle='--', linewidth=linewidth, label='White-box SNR (reverse)')
+
+        best_attack_fwd = _load_occl(best_attack_path, 'fwd_dnno_occl.input_x_gradient', 'fwd-dnno-occl')
+        best_attack_rev = _load_occl(best_attack_path, 'rev_dnno_occl.input_x_gradient', 'rev-dnno-occl')
+        best_loc_fwd    = _load_occl(best_loc_path,    'fwd_dnno_occl.input_x_gradient', 'fwd-dnno-occl')
+        best_loc_rev    = _load_occl(best_loc_path,    'rev_dnno_occl.input_x_gradient', 'rev-dnno-occl')
+        ax.plot(present_features, best_attack_fwd, color='red',  linestyle=':', linewidth=linewidth, label='Best attacker (forward)')
+        ax.plot(present_features, best_attack_rev, color='red',  linestyle='--', linewidth=linewidth, label='Best attacker (reverse)')
+        ax.plot(present_features, best_loc_fwd,    color='blue', linestyle=':', linewidth=linewidth, label='Best localizer (forward)')
+        ax.plot(present_features, best_loc_rev,    color='blue', linestyle='--', linewidth=linewidth, label='Best localizer (reverse)')
+
         ax.set_xlabel('Included features')
         ax.set_ylabel('MTD of attacker')
         ax.set_title(fmt_dataset_name(dataset_id))
         ax.ticklabel_format(style='sci', axis='x', scilimits=(-2, 2), useMathText=True)
-        #ax.ticklabel_format(style='sci', axis='y', scilimits=(-2, 2), useMathText=True)
         ax.set_yscale('log')
-    handles, labels = axes[1].get_legend_handles_labels()
+    # Gather all unique legend entries across axes
+    seen, handles, labels = set(), [], []
+    for ax in axes:
+        for h, l in zip(*ax.get_legend_handles_labels()):
+            if l not in seen:
+                seen.add(l)
+                handles.append(h)
+                labels.append(l)
     fig.legend(handles, labels, loc='lower center', ncols=4, framealpha=0, bbox_to_anchor=(0.5, 0))
     fig.tight_layout()
     fig.subplots_adjust(bottom=0.3)
@@ -456,7 +467,7 @@ def run_plot_oracle_agreement(dest: Path, dataset_id: Literal['ascadv1-fixed', '
     title_pad = 3
     h_pad = 1/72  # inches; default is 4/72
     fig = plt.figure(figsize=(WIDTH, WIDTH/2), constrained_layout=True)
-    fig.get_layout_engine().set(h_pad=h_pad)
+    fig.get_layout_engine().set(h_pad=h_pad, w_pad=1/72, hspace=0.05, wspace=0.05)
     time_fig, scatter_fig = fig.subfigures(1, 2, wspace=0.05)
     time_axes = time_fig.subplots(3, 1, sharex=True)
     scatter_axes = scatter_fig.subplot_mosaic(
@@ -493,15 +504,16 @@ def run_plot_oracle_agreement(dest: Path, dataset_id: Literal['ascadv1-fixed', '
     )
     white_box_snrs['pr'] -= white_box_snrs['pr'].min()
     white_box_snrs['pr'] += white_box_snrs['prin'].min()
-    time_axes[2].legend(loc='upper right', ncol=3, framealpha=0, fontsize=4, labelspacing=0.2, columnspacing=2.0, handlelength=1.0)
+    time_axes[2].legend(loc='upper right', ncol=3, framealpha=0, fontsize=3.9, labelspacing=0.2, columnspacing=1.0, handlelength=1.0)
     for ax in time_axes:
         ax.ticklabel_format(style='sci', axis='x', scilimits=(-2, 2), useMathText=True)
         ax.ticklabel_format(style='sci', axis='y', scilimits=(-2, 2), useMathText=True)
     for ax in scatter_axes.values():
         ax.set_xscale('log')
         ax.set_yscale('log')
+        ax.tick_params(axis='both', which='both', labelsize=4)
     scatter_axes['k2w2r2'].set_xlabel(r'White box SNR')
-    scatter_axes['r_out'].set_ylabel(r'Input $*$ Grad (best localizer)')
+    scatter_axes['r_out'].set_ylabel(r'Input $*$ Grad')
     scatter_axes['comp'].set_title(r'Avg. of all', fontsize=7, pad=title_pad)
     scatter_axes['r_in'].set_title(r'$r_{\mathrm{in}}$', fontsize=7, pad=title_pad)
     scatter_axes['r2'].set_title(r'$r_2$', fontsize=7, pad=title_pad)
@@ -510,38 +522,154 @@ def run_plot_oracle_agreement(dest: Path, dataset_id: Literal['ascadv1-fixed', '
     scatter_axes['Srout'].set_title(r'$S_r \oplus r_{\mathrm{out}}$', fontsize=7, pad=title_pad)
     scatter_axes['k2w2rin'].set_title(r'$k_2 \oplus w_2 \oplus r_{\mathrm{in}}$', fontsize=7, pad=title_pad)
     scatter_axes['k2w2r2'].set_title(r'$k_2 \oplus w_2 \oplus r_2$', fontsize=7, pad=title_pad)
-    scatter_kwargs = dict(color='blue', linestyle='none', marker='.', markersize=1, alpha=0.2, rasterized=True)
-    scatter_axes['comp'].plot(white_box_snrs['composite'], best_loc_inputxgrad, **scatter_kwargs)
-    scatter_axes['r_in'].plot(white_box_snrs['rin'], best_loc_inputxgrad, **scatter_kwargs)
-    scatter_axes['r2'].plot(white_box_snrs['r'], best_loc_inputxgrad, **scatter_kwargs)
-    scatter_axes['r_out'].plot(white_box_snrs['rout'], best_loc_inputxgrad, **scatter_kwargs)
-    scatter_axes['S2xr2'].plot(white_box_snrs['yr'], best_loc_inputxgrad, **scatter_kwargs)
-    scatter_axes['Srout'].plot(white_box_snrs['yrout'], best_loc_inputxgrad, **scatter_kwargs)
-    scatter_axes['k2w2rin'].plot(white_box_snrs['prin'], best_loc_inputxgrad, **scatter_kwargs)
-    scatter_axes['k2w2r2'].plot(white_box_snrs['pr'], best_loc_inputxgrad, **scatter_kwargs)
+    loc_scatter_kwargs    = dict(color='blue', linestyle='none', marker='.', markersize=0.5, alpha=0.2, rasterized=True)
+    attack_scatter_kwargs = dict(color='red',  linestyle='none', marker='+', markersize=0.5, alpha=0.2, rasterized=True)
+    snr_ixg_pairs = [
+        ('comp',    'composite'),
+        ('r_in',    'rin'),
+        ('r2',      'r'),
+        ('r_out',   'rout'),
+        ('S2xr2',   'yr'),
+        ('Srout',   'yrout'),
+        ('k2w2rin', 'prin'),
+        ('k2w2r2',  'pr'),
+    ]
+    for ax_key, snr_key in snr_ixg_pairs:
+        scatter_axes[ax_key].plot(white_box_snrs[snr_key], best_attack_inputxgrad, **attack_scatter_kwargs)
+        scatter_axes[ax_key].plot(white_box_snrs[snr_key], best_loc_inputxgrad,    **loc_scatter_kwargs)
     snr_color = 'green'
-    ixg_color = 'orange'
     marg_ax = scatter_axes['marginals']
-    marg_ax.spines['left'].set_color(ixg_color)
-    marg_ax.spines['bottom'].set_color(snr_color)
-    marg_ax.tick_params(axis='y', colors=ixg_color)
-    marg_ax.tick_params(axis='x', which='both', color=snr_color, labelcolor='black')
-    snr_vals = white_box_snrs['composite']
-    ixg_vals = best_loc_inputxgrad
-    snr_log = np.log10(snr_vals[snr_vals > 0])
-    ixg_log = np.log10(ixg_vals[ixg_vals > 0])
-    snr_grid = np.linspace(snr_log.min(), snr_log.max(), 300)
-    ixg_grid = np.linspace(ixg_log.min(), ixg_log.max(), 300)
-    snr_density = gaussian_kde(snr_log)(snr_grid)
-    ixg_density = gaussian_kde(ixg_log)(ixg_grid)
-    # Scale density to the range of the other axis so shared limits are not expanded
-    snr_density_scaled = 10 ** (ixg_log.min() + (snr_density / snr_density.max()) * (ixg_log.max() - ixg_log.min()))
-    ixg_density_scaled = 10 ** (snr_log.min() + (ixg_density / ixg_density.max()) * (snr_log.max() - snr_log.min()))
-    marg_ax.plot(10**snr_grid, snr_density_scaled, color=snr_color, linewidth=0.5, label=r'White-box SNR')
-    marg_ax.plot(ixg_density_scaled, 10**ixg_grid, color=ixg_color, linewidth=0.5, label=r'Input $*$ Grad')
-    marg_ax.legend(loc='upper right', fontsize=4, labelspacing=0.2, columnspacing=2.0, handlelength=1.0, framealpha=0)
     marg_ax.set_title(r'Densities', fontsize=7, pad=title_pad)
+    snr_vals    = white_box_snrs['composite']
+    snr_log     = np.log10(snr_vals[snr_vals > 0])
+    snr_grid    = np.linspace(snr_log.min(), snr_log.max(), 300)
+    snr_density = gaussian_kde(snr_log)(snr_grid)
+    # Use union of both IxG ranges for consistent vertical scaling
+    all_ixg_log = np.log10(np.concatenate([
+        best_attack_inputxgrad[best_attack_inputxgrad > 0],
+        best_loc_inputxgrad[best_loc_inputxgrad > 0],
+    ]))
+    ixg_min, ixg_max = all_ixg_log.min(), all_ixg_log.max()
+    snr_density_scaled = 10 ** (ixg_min + (snr_density / snr_density.max()) * (ixg_max - ixg_min))
+    marg_ax.plot(10**snr_grid, snr_density_scaled, color=snr_color, linewidth=0.5, label=r'White-box SNR')
+    for ixg_vals, color, label in [
+        (best_attack_inputxgrad, 'red',  r'Best attacker'),
+        (best_loc_inputxgrad,    'blue', r'Best localizer'),
+    ]:
+        ixg_log     = np.log10(ixg_vals[ixg_vals > 0])
+        ixg_grid    = np.linspace(ixg_log.min(), ixg_log.max(), 300)
+        ixg_density = gaussian_kde(ixg_log)(ixg_grid)
+        ixg_density_scaled = 10 ** (snr_log.min() + (ixg_density / ixg_density.max()) * (snr_log.max() - snr_log.min()))
+        marg_ax.plot(ixg_density_scaled, 10**ixg_grid, color=color, linewidth=0.5, label=label)
+    marg_ax.tick_params(axis='y', which='both', labelleft=False)
+    marg_ax.legend(loc='upper right', fontsize=4, labelspacing=0.2, handlelength=1.0, framealpha=0)
     fig.savefig(dest, dpi=DPI)
+    plt.close(fig)
+
+def run_plot_per_byte_leakiness(dest: Path):
+    """5-row x 16-col grid of per-byte leakiness curves.
+
+    Rows 0/1: ASCADv1-fixed  black-box / white-box
+    Rows 2/3: ASCADv1-variable black-box / white-box
+    Row  4:   CHES-CTF-2018 black-box only
+    """
+    row_specs = [
+        ('ascadv1-fixed',    'black_box'),
+        ('ascadv1-fixed',    'white_box'),
+        ('ascadv1-variable', 'black_box'),
+        ('ascadv1-variable', 'white_box'),
+        ('ches-ctf-2018',    'black_box'),
+    ]
+    # one label per group of rows; rows listed top-to-bottom
+    group_specs = [
+        ([0, 1], 'ASCADv1 (fixed)'),
+        ([2, 3], 'ASCADv1 (variable)'),
+        ([4],    'CC18'),
+    ]
+    n_rows, n_cols = len(row_specs), 16
+    lw = 0.3
+    spine_lw = 0.3
+    gap_after = {1, 3}
+    gap_size = WIDTH / n_cols * 0.15  # narrow gap between dataset groups
+
+    ax_size = WIDTH / n_cols  # square axes, in inches
+    fig_height = n_rows * ax_size + len(gap_after) * gap_size
+    fig = plt.figure(figsize=(WIDTH, fig_height))
+
+    ax_w = 1.0 / n_cols
+    ax_h = ax_size / fig_height
+    gap_h = gap_size / fig_height
+
+    # Compute top/bottom of each row in figure coordinates
+    row_tops    = []
+    row_bottoms = []
+    cumulative_gap = 0.0
+    for row_idx in range(n_rows):
+        top    = 1.0 - row_idx * ax_h - cumulative_gap
+        bottom = top - ax_h
+        row_tops.append(top)
+        row_bottoms.append(bottom)
+        if row_idx in gap_after:
+            cumulative_gap += gap_h
+
+    axes = np.empty((n_rows, n_cols), dtype=object)
+    for row_idx in range(n_rows):
+        for byte_idx in range(n_cols):
+            ax = fig.add_axes([byte_idx * ax_w, row_bottoms[row_idx], ax_w, ax_h])
+            axes[row_idx, byte_idx] = ax
+
+    loc_ixg = {}
+    for dataset_id in ['ascadv1-fixed', 'ascadv1-variable', 'ches-ctf-2018']:
+        _, best_loc_rv = get_best_runs(dataset_id)
+        loc_ixg[dataset_id] = np.load(Path(best_loc_rv['path']) / 'input_x_gradient.npy')
+
+    for row_idx, (dataset_id, kind) in enumerate(row_specs):
+        for byte_idx in range(n_cols):
+            ax = axes[row_idx, byte_idx]
+            if kind == 'black_box':
+                ax.plot(loc_ixg[dataset_id][byte_idx], linewidth=lw, color='blue', rasterized=True)
+            else:
+                plot_ascadv1_oracle_leakiness(get_output_dir(dataset_id) / 'snr', ax, byte=byte_idx, markers=False)
+            ax.set_xticks([])
+            ax.set_yticks([])
+            for spine in ax.spines.values():
+                spine.set_linewidth(spine_lw)
+            if row_idx == 0:
+                ax.set_title(f'Byte {byte_idx}', fontsize=6, pad=2)
+
+    # x-label only on bottom row, centered
+    fig.text(0.5, row_bottoms[-1] - 0.01, r'$\xleftarrow{\hspace{4em}}$ Time $t$ $\xrightarrow{\hspace{4em}}$', ha='center', va='top', fontsize=6)
+
+    # Shared "Estimated leakiness" label centered over all rows
+    all_center_y = (row_tops[0] + row_bottoms[-1]) / 2
+    fig.text(-0.03, all_center_y, r'$\xleftarrow{\hspace{4em}}$ Estimated leakiness of $X_t$ $\xrightarrow{\hspace{4em}}$',
+             rotation=90, va='center', ha='center', fontsize=6)
+
+    # Per-group dataset name labels, just to the right of "Estimated leakiness"
+    for group_rows, dataset_label in group_specs:
+        center_y = (row_tops[group_rows[0]] + row_bottoms[group_rows[-1]]) / 2
+        fig.text(-0.01, center_y, dataset_label,
+                 rotation=90, va='center', ha='center', fontsize=5)
+
+    # Legend: blue = black-box, then oracle intermediate variable colors from a typical byte
+    legend_lw = lw * 3
+    bb_handle = Line2D([0], [0], color='blue', linewidth=legend_lw, label=r'\textbf{Ours}: Input $*$ Grad (best localizer)')
+    # Get white-box handles from a masked byte (byte 2) and the unmasked case (byte 0)
+    dummy_fig, dummy_ax = plt.subplots()
+    plot_ascadv1_oracle_leakiness(get_output_dir('ascadv1-fixed') / 'snr', dummy_ax, byte=2, markers=False, arb_byte=True)
+    wb_handles, wb_labels = dummy_ax.get_legend_handles_labels()
+    grey_ax = dummy_fig.add_subplot()
+    plot_ascadv1_oracle_leakiness(get_output_dir('ascadv1-fixed') / 'snr', grey_ax, byte=0, markers=False, arb_byte=True)
+    grey_handles, grey_labels = grey_ax.get_legend_handles_labels()
+    plt.close(dummy_fig)
+    for h in grey_handles + wb_handles:
+        h.set_linewidth(legend_lw)
+    all_handles = [bb_handle] + grey_handles + wb_handles
+    fig.legend(handles=all_handles, loc='lower center', ncols=ceil(len(all_handles)/2),
+               framealpha=0, fontsize=5, bbox_to_anchor=(0.5, -.225),
+               handlelength=1.5, columnspacing=2)
+
+    fig.savefig(dest, dpi=DPI, bbox_inches='tight')
     plt.close(fig)
 
 def _load_swept_hparams(trial_path: Path) -> dict:
@@ -623,6 +751,9 @@ def main():
         '--plot-sweep', default=False, action='store_true'
     )
     parser.add_argument(
+        '--plot-per-byte-leakiness', default=False, action='store_true'
+    )
+    parser.add_argument(
         '--plot-teaser', default=False, action='store_true'
     )
     parser.add_argument(
@@ -653,6 +784,8 @@ def main():
     assert isinstance(plot_sweep, bool)
     plot_teaser: bool = args.plot_teaser
     assert isinstance(plot_teaser, bool)
+    plot_per_byte_leakiness: bool = args.plot_per_byte_leakiness
+    assert isinstance(plot_per_byte_leakiness, bool)
     print_best_hparams: bool = args.print_best_hparams
     assert isinstance(print_best_hparams, bool)
     dest: Optional[Path] = args.dest
@@ -668,7 +801,8 @@ def main():
     if plot_cost_scaling or plot_everything:
         run_plot_cost_scaling(dest / 'cost_scaling.pdf')
     if plot_oracle_agreement or plot_everything:
-        run_plot_oracle_agreement(dest / 'oracle_agreement.pdf')
+        for _dataset_id in ['ascadv1-fixed', 'ascadv1-variable']:
+            run_plot_oracle_agreement(dest / f'oracle_agreement_{_dataset_id}.pdf', dataset_id=_dataset_id)
     if plot_dnn_occlusion or plot_everything:
         run_plot_dnn_occlusion(dest / 'dnn_occlusion.pdf')
     if plot_ta_mtd or plot_everything:
@@ -677,6 +811,8 @@ def main():
         run_plot_sweep(dest / 'sweep.pdf')
     if plot_teaser or plot_everything:
         run_plot_teaser_sweep(dest / 'teaser_sweep.pdf')
+    if plot_per_byte_leakiness or plot_everything:
+        run_plot_per_byte_leakiness(dest / 'per_byte_leakiness.pdf')
     if print_best_hparams or plot_everything:
         run_print_best_hparams()
 

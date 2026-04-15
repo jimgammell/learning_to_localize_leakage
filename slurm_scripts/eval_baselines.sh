@@ -20,24 +20,24 @@
 
 case $SLURM_ARRAY_TASK_ID in
   0)
-    DATASET=ascadv1_variable
+    DATASET=ascadv1-variable
     PATH_TO_EVAL=./outputs/ascadv1_variable/baselines/oracle.npy
     STRONG_ATTACKER_CKPT=./outputs/ascadv1_variable/strong_attacker/seed_0/best_val_rank.ckpt
     ;;
   1)
-    DATASET=ascadv1_variable
+    DATASET=ascadv1-variable
     PATH_TO_EVAL=./outputs/ascadv1_variable/baselines/random.npy
     STRONG_ATTACKER_CKPT=./outputs/ascadv1_variable/strong_attacker/seed_0/best_val_rank.ckpt
     ;;
   2)
-    DATASET=ches_ctf_2018
+    DATASET=ches-ctf-2018
     PATH_TO_EVAL=./outputs/ches_ctf_2018/baselines/random.npy
     STRONG_ATTACKER_CKPT=./outputs/ches_ctf_2018/strong_attacker/seed_0/best_val_rank.ckpt
     ;;
 esac
 
 # ASCADv1-variable jobs: copy non-h5 dataset files to RAM for faster I/O
-if [ "$DATASET" = "ascadv1_variable" ]; then
+if [ "$DATASET" = "ascadv1-variable" ]; then
     RAMFS_ROOT=/dev/shm/ascadv1_variable_${SLURM_ARRAY_JOB_ID}
     LOCK=/dev/shm/ascadv1_variable_${SLURM_ARRAY_JOB_ID}.lock
     REFCOUNT=/dev/shm/ascadv1_variable_${SLURM_ARRAY_JOB_ID}.refcount

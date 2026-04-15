@@ -360,30 +360,38 @@ def run_plot_sweep(dest: Path):
 def run_plot_ta_mtd(dest: Path):
     fig, axes = plt.subplots(1, 3, figsize=(WIDTH, WIDTH/2.5))
     linewidth = 0.75
+    traces_seen = np.arange(1, 10001)
     for dataset_id, ax in zip(['ascadv1-fixed', 'ascadv1-variable', 'ches-ctf-2018'], axes):
-        try:
-            best_attack_rv, best_loc_rv = get_best_runs(dataset_id)
-            best_attack_path = Path(best_attack_rv['path'])
-            best_loc_path = Path(best_loc_rv['path'])
-            traces_seen = np.arange(1, 10001)
-            best_attack_ta_mtd = np.load(best_attack_path / 'ta_mtd.input_x_gradient.npz', allow_pickle=True)['rank_over_time']
-            best_loc_ta_mtd = np.load(best_loc_path / 'ta_mtd.input_x_gradient.npz', allow_pickle=True)['rank_over_time']
-            random_ta_mtd = np.load(get_output_dir(dataset_id) / 'baselines' / 'ta_mtd.random.npz', allow_pickle=True)['rank_over_time']
-            oracle_ta_mtd = np.load(get_output_dir(dataset_id) / 'baselines' / 'ta_mtd.oracle.npz', allow_pickle=True)['rank_over_time']
-            ax.plot(traces_seen, np.mean(random_ta_mtd, axis=0), color='grey', linestyle='-', linewidth=linewidth, label='Random')
-            ax.plot(traces_seen, np.mean(oracle_ta_mtd, axis=0), color='green', linestyle='-', linewidth=linewidth, label='White-box SNR')
-            ax.plot(traces_seen, np.mean(best_attack_ta_mtd, axis=0), color='red', linestyle='-', linewidth=linewidth, label='Best attacker')
-            ax.plot(traces_seen, np.mean(best_loc_ta_mtd, axis=0), color='blue', linestyle='-', linewidth=linewidth, label='Best localizer')
-        except:
-            ax.plot([], [], color='grey', linestyle='-', linewidth=linewidth, label='Random')
-            ax.plot([], [], color='green', linestyle='-', linewidth=linewidth, label='White-box SNR')
-            ax.plot([], [], color='red', linestyle='-', linewidth=linewidth, label='Best attacker')
-            ax.plot([], [], color='blue', linestyle='-', linewidth=linewidth, label='Best localizer')
+        best_attack_rv, best_loc_rv = get_best_runs(dataset_id)
+        best_attack_path = Path(best_attack_rv['path'])
+        best_loc_path = Path(best_loc_rv['path'])
+
+        baselines_dir = get_output_dir(dataset_id) / 'baselines'
+        random_path = baselines_dir / 'ta_mtd.random.npz'
+        oracle_path = baselines_dir / 'ta_mtd.oracle.npz'
+        if random_path.exists():
+            random_rot = np.load(random_path, allow_pickle=True)['rank_over_time']
+            ax.plot(traces_seen, np.mean(random_rot, axis=0), color='grey', linestyle='-', linewidth=linewidth, label='Random')
+        if oracle_path.exists():
+            oracle_rot = np.load(oracle_path, allow_pickle=True)['rank_over_time']
+            ax.plot(traces_seen, np.mean(oracle_rot, axis=0), color='green', linestyle='-', linewidth=linewidth, label='White-box SNR')
+
+        best_attack_rot = np.load(best_attack_path / 'ta_mtd.input_x_gradient.npz', allow_pickle=True)['rank_over_time']
+        best_loc_rot    = np.load(best_loc_path    / 'ta_mtd.input_x_gradient.npz', allow_pickle=True)['rank_over_time']
+        ax.plot(traces_seen, np.mean(best_attack_rot, axis=0), color='red',  linestyle='-', linewidth=linewidth, label='Best attacker')
+        ax.plot(traces_seen, np.mean(best_loc_rot,    axis=0), color='blue', linestyle='-', linewidth=linewidth, label='Best localizer')
+
         ax.set_xlabel('Traces seen')
         ax.set_ylabel('Rank (mean over bytes)')
         ax.set_title(fmt_dataset_name(dataset_id))
         ax.set_xscale('log')
-    handles, labels = axes[1].get_legend_handles_labels()
+    seen, handles, labels = set(), [], []
+    for ax in axes:
+        for h, l in zip(*ax.get_legend_handles_labels()):
+            if l not in seen:
+                seen.add(l)
+                handles.append(h)
+                labels.append(l)
     fig.legend(handles, labels, loc='lower center', ncols=4, framealpha=0, bbox_to_anchor=(0.5, 0))
     fig.tight_layout()
     fig.subplots_adjust(bottom=0.3)
@@ -417,16 +425,14 @@ def run_plot_dnn_occlusion(dest: Path):
         present_features = np.linspace(0, feature_count, 101)[:-1]
 
         baselines_dir = get_output_dir(dataset_id) / 'baselines'
-        fwd_random_path = baselines_dir / 'fwd_dnno_occl.random.npz'
-        rev_random_path = baselines_dir / 'rev_dnno_occl.random.npz'
-        fwd_oracle_path = baselines_dir / 'fwd_dnno_occl.oracle.npz'
-        rev_oracle_path = baselines_dir / 'rev_dnno_occl.oracle.npz'
-        if fwd_random_path.exists() and rev_random_path.exists():
-            ax.plot(present_features, np.load(fwd_random_path)['fwd-dnno-occl'], color='grey', linestyle=':', linewidth=linewidth, label='Random (forward)')
-            ax.plot(present_features, np.load(rev_random_path)['rev-dnno-occl'], color='grey', linestyle='--', linewidth=linewidth, label='Random (reverse)')
-        if fwd_oracle_path.exists() and rev_oracle_path.exists():
-            ax.plot(present_features, np.load(fwd_oracle_path)['fwd-dnno-occl'], color='green', linestyle=':', linewidth=linewidth, label='White-box SNR (forward)')
-            ax.plot(present_features, np.load(rev_oracle_path)['rev-dnno-occl'], color='green', linestyle='--', linewidth=linewidth, label='White-box SNR (reverse)')
+        has_random = (baselines_dir / 'fwd_dnno_occl.random.npz').exists() or (baselines_dir / 'fwd_dnno_occl.random.npy').exists()
+        has_oracle = (baselines_dir / 'fwd_dnno_occl.oracle.npz').exists() or (baselines_dir / 'fwd_dnno_occl.oracle.npy').exists()
+        if has_random:
+            ax.plot(present_features, _load_occl(baselines_dir, 'fwd_dnno_occl.random', 'fwd-dnno-occl'), color='grey', linestyle=':', linewidth=linewidth, label='Random (forward)')
+            ax.plot(present_features, _load_occl(baselines_dir, 'rev_dnno_occl.random', 'rev-dnno-occl'), color='grey', linestyle='--', linewidth=linewidth, label='Random (reverse)')
+        if has_oracle:
+            ax.plot(present_features, _load_occl(baselines_dir, 'fwd_dnno_occl.oracle', 'fwd-dnno-occl'), color='green', linestyle=':', linewidth=linewidth, label='White-box SNR (forward)')
+            ax.plot(present_features, _load_occl(baselines_dir, 'rev_dnno_occl.oracle', 'rev-dnno-occl'), color='green', linestyle='--', linewidth=linewidth, label='White-box SNR (reverse)')
 
         best_attack_fwd = _load_occl(best_attack_path, 'fwd_dnno_occl.input_x_gradient', 'fwd-dnno-occl')
         best_attack_rev = _load_occl(best_attack_path, 'rev_dnno_occl.input_x_gradient', 'rev-dnno-occl')
@@ -438,7 +444,7 @@ def run_plot_dnn_occlusion(dest: Path):
         ax.plot(present_features, best_loc_rev,    color='blue', linestyle='--', linewidth=linewidth, label='Best localizer (reverse)')
 
         ax.set_xlabel('Included features')
-        ax.set_ylabel('MTD of attacker')
+        ax.set_ylabel('MTD of attacker (avg. per byte)')
         ax.set_title(fmt_dataset_name(dataset_id))
         ax.ticklabel_format(style='sci', axis='x', scilimits=(-2, 2), useMathText=True)
         ax.set_yscale('log')

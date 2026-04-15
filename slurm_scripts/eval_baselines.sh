@@ -81,5 +81,5 @@ python experiments/evaluate_trained_model.py \
     --path-to-eval "$PATH_TO_EVAL" \
     --dataset "$DATASET" \
     --strong-attacker-ckpt-path "$STRONG_ATTACKER_CKPT" \
-    --metrics fwd-dnno-occl rev-dnno-occl \
+    --metrics fwd-dnno-occl rev-dnno-occl ta-mtd \
     $EXTRA_ARGS

@@ -286,18 +286,25 @@ def run_plot_teaser_sweep(dest: Path):
     plt.close(fig)
 
 def run_plot_sweep(dest: Path):
+    col_ylabels = [
+        r'WB/Spearman $\uparrow$', r'WB/AUROC $\uparrow$', r'Fwd DNN occl. $\downarrow$',
+        r'Rev DNN occl. $\uparrow$', r'TA MTD $\downarrow$',
+    ]
+    title_pad = 3
     fig, axes = plt.subplots(3, 5, sharex='row', layout='constrained', figsize=(WIDTH, 3*WIDTH/5))
     markersize = 2
+
     for dataset_id, axes_r in zip(['ascadv1-fixed', 'ascadv1-variable'], axes):
         sweep = load_sweep(get_output_dir(dataset_id) / 'htune_highdropout', dataset_id)
         best_attack_rv, best_loc_rv = get_best_runs(dataset_id)
+        error = 1 - sweep['mean_acc']
         axes_r[0].set_xscale('log')
-        for metric, ax in zip([
+        axes_r[2].set_title(r'$\xleftarrow{\hspace{4em}}$ ' + fmt_dataset_name(dataset_id) + r' $\xrightarrow{\hspace{4em}}$', fontsize=6, pad=title_pad)
+        for metric, ax, ylabel in zip([
             'white_box_spearman/input_x_gradient', 'white_box_auroc/input_x_gradient', 'fwd_dnno/input_x_gradient',
             'rev_dnno/input_x_gradient', 'ta_mtd/input_x_gradient'
-        ], axes_r):
-            error = 1 - sweep['mean_acc']
-            if not('dnno' in metric):
+        ], axes_r, col_ylabels):
+            if 'dnno' not in metric:
                 loc_metric = sweep[[f'{metric}/{byte_idx}' for byte_idx in range(16)]].mean(axis=1)
                 best_attack_loc_metric = best_attack_rv[[f'{metric}/{byte_idx}' for byte_idx in range(16)]].mean()
                 best_loc_loc_metric = best_loc_rv[[f'{metric}/{byte_idx}' for byte_idx in range(16)]].mean()
@@ -306,34 +313,24 @@ def run_plot_sweep(dest: Path):
                 best_attack_loc_metric = best_attack_rv[metric]
                 best_loc_loc_metric = best_loc_rv[metric]
             ax.plot(error, loc_metric, marker='.', linestyle='none', markersize=markersize/2, color='purple', alpha=0.8)
-            #if not('dnno' in metric):
-            #    acc_0 = sweep['acc/0']
-            #    acc_2 = sweep['acc/2']
-            #    loc_0 = sweep[f'{metric}/0']
-            #    loc_2 = sweep[f'{metric}/2']
-            #    ax.plot(acc_0, loc_0, marker='.', linestyle='none', markersize=markersize, color='green', alpha=0.8)
-            #    ax.plot(acc_2, loc_2, marker='.', linestyle='none', markersize=markersize, color='orange', alpha=0.8)
-            ax.plot(
-                [1 - best_attack_rv['mean_acc']],
-                [best_attack_loc_metric],
-                color='red', marker='*', markersize=3
-            )
-            ax.plot(
-                [1 - best_loc_rv['mean_acc']],
-                [best_loc_loc_metric],
-                color='blue', marker='*', markersize=3
-            )
+            ax.plot([1 - best_attack_rv['mean_acc']], [best_attack_loc_metric], color='red',  marker='*', markersize=3, label='Best attacker', zorder=5)
+            ax.plot([1 - best_loc_rv['mean_acc']],    [best_loc_loc_metric],    color='blue', marker='*', markersize=3, label='Best localizer', zorder=5)
+            ax.set_ylabel(ylabel, fontsize=5)
+        for ax in axes_r:
+            ax.set_xlabel(r'Error rate $\downarrow$', fontsize=5)
 
-    # CHES-CTF-2018: no white-box metrics; use mean MTD as performance axis
+    # CHES-CTF-2018: no white-box metrics; use mean MTD as x-axis
     ches_sweep = load_sweep(get_output_dir('ches-ctf-2018') / 'htune_highdropout', 'ches-ctf-2018')
     mean_mtd = ches_sweep[[f'mtd/{byte_idx}' for byte_idx in range(16)]].mean(axis=1)
     best_attack_ches_rv, best_loc_ches_rv = get_best_runs('ches-ctf-2018')
-    axes[2][0].set_visible(False)
-    axes[2][1].set_visible(False)
+    # Use axes[2][0] for legend; hide axes[2][1]
+    axes[2][0].axis('off')
+    axes[2][1].axis('off')
     axes[2][2].set_xscale('log')
-    for metric, ax in zip([
+    axes[2][2].set_title(fmt_dataset_name('ches-ctf-2018') + r' $\xrightarrow{\hspace{4em}}$', x=.85, fontsize=6, pad=title_pad)
+    for metric, ax, ylabel in zip([
         'fwd_dnno/input_x_gradient', 'rev_dnno/input_x_gradient', 'ta_mtd/input_x_gradient'
-    ], axes[2][2:]):
+    ], axes[2][2:], col_ylabels[2:]):
         if 'dnno' in metric:
             loc_metric = ches_sweep[metric]
             best_attack_loc_metric = best_attack_ches_rv[metric]
@@ -343,19 +340,110 @@ def run_plot_sweep(dest: Path):
             best_attack_loc_metric = best_attack_ches_rv[[f'{metric}/{byte_idx}' for byte_idx in range(16)]].mean()
             best_loc_loc_metric = best_loc_ches_rv[[f'{metric}/{byte_idx}' for byte_idx in range(16)]].mean()
         ax.plot(mean_mtd, loc_metric, marker='.', linestyle='none', markersize=markersize/2, color='purple', alpha=0.8)
-        ax.plot(
-            [mean_mtd[best_attack_ches_rv.name]],
-            [best_attack_loc_metric],
-            color='red', marker='*', markersize=3
-        )
-        ax.plot(
-            [mean_mtd[best_loc_ches_rv.name]],
-            [best_loc_loc_metric],
-            color='blue', marker='*', markersize=3
-        )
+        ax.plot([mean_mtd[best_attack_ches_rv.name]], [best_attack_loc_metric], color='red',  marker='*', markersize=3, label='Best attacker', zorder=5)
+        ax.plot([mean_mtd[best_loc_ches_rv.name]],    [best_loc_loc_metric],    color='blue', marker='*', markersize=3, label='Best localizer', zorder=5)
+        ax.set_ylabel(ylabel, fontsize=5)
+        ax.set_xlabel(r'Mean MTD $\downarrow$', fontsize=5)
 
+    # Legend in the blank axes[2][0]
+    legend_handles = [
+        Line2D([0], [0], color='purple', marker='.', linestyle='none', markersize=3, label='Tuning run'),
+        Line2D([0], [0], color='red',    marker='*', linestyle='none', markersize=4, label='Best attacker'),
+        Line2D([0], [0], color='blue',   marker='*', linestyle='none', markersize=4, label='Best localizer'),
+    ]
+    axes[2][1].legend(handles=legend_handles, loc='upper center', ncol=1, framealpha=0., fontsize=5)
+    for row in axes:
+        for ax in row[2:]:
+            if ax.get_visible():
+                ax.yaxis.set_major_formatter(plt.FuncFormatter(format_k))
     fig.savefig(dest, dpi=DPI)
     plt.close(fig)
+
+def run_plot_dropout_sweep(dest: Path):
+    """For each dataset, box-plot attack vs. localization performance
+    binned by input dropout rate, using two y-axes."""
+    # (dataset_id, atk_col, atk_label, atk_higher_better, loc_col, loc_label, loc_higher_better)
+    configs = [
+        ('ascadv1-fixed',
+         'error_rate',                        r'Best attack error $\downarrow$',   False,
+         'white_box_auroc/input_x_gradient',  r'Best WB AUROC $\uparrow$',         True),
+        ('ascadv1-variable',
+         'error_rate',                        r'Best attack error $\downarrow$',   False,
+         'white_box_auroc/input_x_gradient',  r'Best WB AUROC $\uparrow$',         True),
+        ('ches-ctf-2018',
+         'per_byte_mtd',                     r'Best mean per-byte MTD $\downarrow$', False,
+         'fwd_dnno/input_x_gradient',        r'Best fwd DNN occl. $\downarrow$',    False),
+    ]
+    bin_edges   = np.arange(0, 1.01, 0.1)
+    bin_centers = (bin_edges[:-1] + bin_edges[1:]) / 2
+    n_bins = len(bin_centers)
+
+    fig, axes = plt.subplots(1, 3, figsize=(WIDTH, WIDTH/3), layout='constrained')
+    twin_axes = []
+    for ax, (dataset_id, atk_col, atk_label, atk_hi, loc_col, loc_label, loc_hi) in zip(axes, configs):
+        sweep = load_sweep(get_output_dir(dataset_id) / 'htune_highdropout', dataset_id)
+
+        dropout_rates = []
+        for trial_path_str in sweep['path']:
+            try:
+                hparams = _load_swept_hparams(Path(trial_path_str))
+                dropout_rates.append(hparams.get('model/input_dropout_rate', float('nan')))
+            except Exception:
+                dropout_rates.append(float('nan'))
+        dropout = np.array(dropout_rates)
+
+        if atk_col == 'per_byte_mtd':
+            atk_vals = sweep[[f'mtd/{b}' for b in range(16)]].mean(axis=1).values
+        elif atk_col == 'error_rate':
+            atk_vals = 1 - sweep['mean_acc'].values
+        else:
+            atk_vals = sweep[atk_col].values
+
+        if 'dnno' in loc_col:
+            loc_vals = sweep[loc_col].values
+        else:
+            loc_vals = sweep[[f'{loc_col}/{b}' for b in range(16)]].mean(axis=1).values
+
+        bin_idx = np.clip(np.digitize(dropout, bin_edges) - 1, 0, n_bins - 1)
+        def _agg(vals, hi, fn):
+            return np.array([fn(vals[bin_idx == i]) if (bin_idx == i).any() else np.nan for i in range(n_bins)])
+        atk_bests = _agg(atk_vals, atk_hi, np.max if atk_hi else np.min)
+        loc_bests = _agg(loc_vals, loc_hi, np.max if loc_hi else np.min)
+
+        ax_loc = ax.twinx()
+        twin_axes.append((ax, ax_loc, dataset_id))
+        ax.plot(bin_centers, atk_bests, color='red',  marker='o', markersize=2, linestyle=':', linewidth=0.2)
+        ax_loc.plot(bin_centers, loc_bests, color='blue', marker='x', markersize=2, linestyle=':', linewidth=0.2)
+
+        ax.set_yscale('log')
+        if dataset_id == 'ches-ctf-2018':
+            ax_loc.set_yscale('log')
+        ax.set_xlabel(r'Input dropout rate', fontsize=6)
+        ax.set_ylabel(atk_label, fontsize=6, color='red')
+        ax_loc.set_ylabel(loc_label, fontsize=6, color='blue')
+        ax.set_xticks(bin_centers)
+        ax.set_xticklabels([f'{c:.2f}' if i % 2 == 0 else '' for i, c in enumerate(bin_centers)], fontsize=5, rotation=45)
+        ax.set_xlim(bin_edges[0] - 0.05, bin_edges[-1] + 0.05)
+        ax.set_title(fmt_dataset_name(dataset_id), fontsize=7)
+
+    legend_handles = [
+        Line2D([0], [0], color='red',  linestyle='-', linewidth=0.75, marker='o', markersize=2, label='Best attack'),
+        Line2D([0], [0], color='blue', linestyle='-', linewidth=0.75, marker='o', markersize=2, label='Best localization'),
+    ]
+    # Force render so tick labels are created, then apply colors/sizes/rotation
+    fig.canvas.draw()
+    for ax, ax_loc, dataset_id in twin_axes:
+        for lbl in ax.get_yticklabels(which='both'):
+            lbl.set_color('red')
+            lbl.set_fontsize(3)
+            lbl.set_rotation(45)
+        for lbl in ax_loc.get_yticklabels(which='both'):
+            lbl.set_color('blue')
+            lbl.set_fontsize(3)
+            lbl.set_rotation(45)
+    fig.savefig(dest, dpi=DPI)
+    plt.close(fig)
+
 
 def run_plot_ta_mtd(dest: Path):
     fig, axes = plt.subplots(1, 3, figsize=(WIDTH, WIDTH/2.5))
@@ -382,7 +470,7 @@ def run_plot_ta_mtd(dest: Path):
         ax.plot(traces_seen, np.mean(best_loc_rot,    axis=0), color='blue', linestyle='-', linewidth=linewidth, label='Best localizer')
 
         ax.set_xlabel('Traces seen')
-        ax.set_ylabel('Rank (mean over bytes)')
+        ax.set_ylabel('Rank (avg. per byte)')
         ax.set_title(fmt_dataset_name(dataset_id))
         ax.set_xscale('log')
     seen, handles, labels = set(), [], []
@@ -757,6 +845,9 @@ def main():
         '--plot-sweep', default=False, action='store_true'
     )
     parser.add_argument(
+        '--plot-dropout-sweep', default=False, action='store_true'
+    )
+    parser.add_argument(
         '--plot-per-byte-leakiness', default=False, action='store_true'
     )
     parser.add_argument(
@@ -788,6 +879,8 @@ def main():
     assert isinstance(plot_ta_mtd, bool)
     plot_sweep: bool = args.plot_sweep
     assert isinstance(plot_sweep, bool)
+    plot_dropout_sweep: bool = args.plot_dropout_sweep
+    assert isinstance(plot_dropout_sweep, bool)
     plot_teaser: bool = args.plot_teaser
     assert isinstance(plot_teaser, bool)
     plot_per_byte_leakiness: bool = args.plot_per_byte_leakiness
@@ -815,6 +908,8 @@ def main():
         run_plot_ta_mtd(dest / 'ta_mtd.pdf')
     if plot_sweep or plot_everything:
         run_plot_sweep(dest / 'sweep.pdf')
+    if plot_dropout_sweep or plot_everything:
+        run_plot_dropout_sweep(dest / 'dropout_sweep.pdf')
     if plot_teaser or plot_everything:
         run_plot_teaser_sweep(dest / 'teaser_sweep.pdf')
     if plot_per_byte_leakiness or plot_everything:

@@ -273,15 +273,21 @@ def run_plot_mtd_curves(dest: Path):
 
 def run_plot_teaser_sweep(dest: Path):
     fig, ax = plt.subplots(1, 1, figsize=(0.4*WIDTH, 0.4*WIDTH), layout='constrained')
-    sweep = load_sweep(get_output_dir('ascadv1-variable') / 'htune_highdropout', 'ascadv1-variable')
+    sweep = load_sweep(get_output_dir('ascadv1-fixed') / 'htune_highdropout', 'ascadv1-fixed')
     acc = sweep['mean_acc']
     error = 1 - acc
-    #auroc = sweep[[f'white_box_auroc/input_x_gradient/{byte_idx}' for byte_idx in range(16)]].mean(axis=1)
-    auroc = sweep['white_box_auroc/input_x_gradient']
-    ax.plot(error, auroc, marker='.', linestyle='none', markersize=3, color='blue', alpha=0.8)
-    ax.set_xlabel(r'Attack performance $\downarrow$')
-    ax.set_ylabel(r'Localization performance $\uparrow$')
+    auroc = sweep[[f'white_box_auroc/input_x_gradient/{byte_idx}' for byte_idx in range(16)]].mean(axis=1)
+    #auroc = sweep['white_box_auroc/input_x_gradient']
+    ax.plot(error, auroc, marker='.', linestyle='none', markersize=3, color='purple', alpha=0.8, label='Single training run')
+    oracle_val, random_val = _load_baseline_loc_metric('ascadv1-fixed', 'white_box_auroc/input_x_gradient')
+    if oracle_val is not None:
+        ax.axhline(oracle_val, color='green', linestyle=':', linewidth=1, label='Oracle performance')
+    if random_val is not None:
+        ax.axhline(random_val, color='grey',  linestyle=':', linewidth=1, label='Random guessing')
+    ax.set_xlabel(r'Attack performance (avg. per-byte error) $\downarrow$', fontsize=6)
+    ax.set_ylabel(r'Localization performance (AUROC w/ white-box) $\uparrow$', fontsize=6)
     ax.set_xscale('log')
+    ax.legend(loc='lower left', framealpha=0, bbox_to_anchor=(0, 0.05))
     fig.savefig(dest, dpi=DPI)
     plt.close(fig)
 
@@ -443,18 +449,20 @@ def run_plot_dropout_sweep(dest: Path):
     # (dataset_id, atk_col, atk_label, atk_higher_better, loc_col, loc_label, loc_higher_better)
     configs = [
         ('ascadv1-fixed',
-         'error_rate',                        r'Best attack error $\downarrow$',   False,
-         'white_box_auroc/input_x_gradient',  r'Best WB AUROC $\uparrow$',         True),
+         'error_rate',                        r'Best attack perf. (avg. per-byte error) $\downarrow$',   False,
+         'white_box_auroc/input_x_gradient',  r'Best loc. perf. (white-box AUROC) $\uparrow$',         True),
         ('ascadv1-variable',
-         'error_rate',                        r'Best attack error $\downarrow$',   False,
-         'white_box_auroc/input_x_gradient',  r'Best WB AUROC $\uparrow$',         True),
+         'error_rate',                        r'Best attack perf. (avg. per-byte error) $\downarrow$',   False,
+         'white_box_auroc/input_x_gradient',  r'Best loc. perf. (white-box AUROC) $\uparrow$',         True),
         ('ches-ctf-2018',
-         'per_byte_mtd',                     r'Best mean per-byte MTD $\downarrow$', False,
-         'fwd_dnno/input_x_gradient',        r'Best fwd DNN occl. $\downarrow$',    False),
+         'per_byte_mtd',                     r'Best attack perf. (avg. per-byte MTD) $\downarrow$', False,
+         'fwd_dnno/input_x_gradient',        r'Best loc. perf. (fwd DNN occl.) $\downarrow$',    False),
     ]
     bin_edges   = np.arange(0, 1.01, 0.1)
     bin_centers = (bin_edges[:-1] + bin_edges[1:]) / 2
     n_bins = len(bin_centers)
+    atk_color = 'red'
+    loc_color = 'blue'
 
     fig, axes = plt.subplots(1, 3, figsize=(WIDTH, WIDTH/3), layout='constrained')
     twin_axes = []
@@ -490,33 +498,33 @@ def run_plot_dropout_sweep(dest: Path):
 
         ax_loc = ax.twinx()
         twin_axes.append((ax, ax_loc, dataset_id))
-        ax.plot(bin_centers, atk_bests, color='red',  marker='o', markersize=2, linestyle=':', linewidth=0.2)
-        ax_loc.plot(bin_centers, loc_bests, color='blue', marker='x', markersize=2, linestyle=':', linewidth=0.2)
+        ax.plot(bin_centers, atk_bests, color=atk_color,  marker='o', markersize=2, linestyle=':', linewidth=0.2)
+        ax_loc.plot(bin_centers, loc_bests, color=loc_color, marker='x', markersize=2, linestyle=':', linewidth=0.2)
 
         ax.set_yscale('log')
         if dataset_id == 'ches-ctf-2018':
             ax_loc.set_yscale('log')
         ax.set_xlabel(r'Input dropout rate', fontsize=6)
-        ax.set_ylabel(atk_label, fontsize=6, color='red')
-        ax_loc.set_ylabel(loc_label, fontsize=6, color='blue')
+        ax.set_ylabel(atk_label, fontsize=6, color=atk_color)
+        ax_loc.set_ylabel(loc_label, fontsize=6, color=loc_color)
         ax.set_xticks(bin_centers)
         ax.set_xticklabels([f'{c:.2f}' if i % 2 == 0 else '' for i, c in enumerate(bin_centers)], fontsize=5, rotation=45)
         ax.set_xlim(bin_edges[0] - 0.05, bin_edges[-1] + 0.05)
         ax.set_title(fmt_dataset_name(dataset_id), fontsize=7)
 
     legend_handles = [
-        Line2D([0], [0], color='red',  linestyle='-', linewidth=0.75, marker='o', markersize=2, label='Best attack'),
-        Line2D([0], [0], color='blue', linestyle='-', linewidth=0.75, marker='o', markersize=2, label='Best localization'),
+        Line2D([0], [0], color=atk_color,  linestyle='-', linewidth=0.75, marker='o', markersize=2, label='Best attack'),
+        Line2D([0], [0], color=loc_color, linestyle='-', linewidth=0.75, marker='o', markersize=2, label='Best localization'),
     ]
     # Force render so tick labels are created, then apply colors/sizes/rotation
     fig.canvas.draw()
     for ax, ax_loc, dataset_id in twin_axes:
         for lbl in ax.get_yticklabels(which='both'):
-            lbl.set_color('red')
+            lbl.set_color(atk_color)
             lbl.set_fontsize(3)
             lbl.set_rotation(45)
         for lbl in ax_loc.get_yticklabels(which='both'):
-            lbl.set_color('blue')
+            lbl.set_color(loc_color)
             lbl.set_fontsize(3)
             lbl.set_rotation(45)
     fig.savefig(dest, dpi=DPI)
@@ -709,21 +717,23 @@ def run_plot_oracle_agreement(dest: Path, dataset_id: Literal['ascadv1-fixed', '
     for ax_key, snr_key in snr_ixg_pairs:
         scatter_axes[ax_key].plot(white_box_snrs[snr_key], best_attack_inputxgrad, **attack_scatter_kwargs)
         scatter_axes[ax_key].plot(white_box_snrs[snr_key], best_loc_inputxgrad,    **loc_scatter_kwargs)
-    snr_color = 'green'
+
+    # Draw a horizontal dotted line at the KDE mode of each model's IxG distribution.
+    _ixg_modes = {}
+    for _ixg_vals, _color in [(best_attack_inputxgrad, 'red'), (best_loc_inputxgrad, 'blue')]:
+        _ixg_pos = _ixg_vals[_ixg_vals > 0]
+        _ixg_log = np.log10(_ixg_pos)
+        _eval_grid = np.linspace(_ixg_log.min(), _ixg_log.max(), 1000)
+        _kde_vals = gaussian_kde(_ixg_log)(_eval_grid)
+        _mode = 10 ** _eval_grid[np.argmax(_kde_vals)]
+        _ixg_modes[_color] = _mode
+        for ax_key, _ in snr_ixg_pairs:
+            scatter_axes[ax_key].axhline(_mode, color=_color, linestyle=':', linewidth=0.4, alpha=0.9, zorder=4)
+
     marg_ax = scatter_axes['marginals']
     marg_ax.set_title(r'Densities', fontsize=7, pad=title_pad)
-    snr_vals    = white_box_snrs['composite']
-    snr_log     = np.log10(snr_vals[snr_vals > 0])
-    snr_grid    = np.linspace(snr_log.min(), snr_log.max(), 300)
-    snr_density = gaussian_kde(snr_log)(snr_grid)
-    # Use union of both IxG ranges for consistent vertical scaling
-    all_ixg_log = np.log10(np.concatenate([
-        best_attack_inputxgrad[best_attack_inputxgrad > 0],
-        best_loc_inputxgrad[best_loc_inputxgrad > 0],
-    ]))
-    ixg_min, ixg_max = all_ixg_log.min(), all_ixg_log.max()
-    snr_density_scaled = 10 ** (ixg_min + (snr_density / snr_density.max()) * (ixg_max - ixg_min))
-    marg_ax.plot(10**snr_grid, snr_density_scaled, color=snr_color, linewidth=0.5, label=r'White-box SNR')
+    snr_vals = white_box_snrs['composite']
+    snr_log  = np.log10(snr_vals[snr_vals > 0])
     for ixg_vals, color, label in [
         (best_attack_inputxgrad, 'red',  r'Best attacker'),
         (best_loc_inputxgrad,    'blue', r'Best localizer'),
@@ -733,8 +743,10 @@ def run_plot_oracle_agreement(dest: Path, dataset_id: Literal['ascadv1-fixed', '
         ixg_density = gaussian_kde(ixg_log)(ixg_grid)
         ixg_density_scaled = 10 ** (snr_log.min() + (ixg_density / ixg_density.max()) * (snr_log.max() - snr_log.min()))
         marg_ax.plot(ixg_density_scaled, 10**ixg_grid, color=color, linewidth=0.5, label=label)
+    for _color, _mode in _ixg_modes.items():
+        marg_ax.axhline(_mode, color=_color, linestyle=':', linewidth=0.4, alpha=0.9, zorder=4)
     marg_ax.tick_params(axis='y', which='both', labelleft=False)
-    marg_ax.legend(loc='upper right', fontsize=4, labelspacing=0.2, handlelength=1.0, framealpha=0)
+    #marg_ax.legend(loc='upper right', fontsize=4, labelspacing=0.2, handlelength=1.0, framealpha=0)
     fig.savefig(dest, dpi=DPI)
     plt.close(fig)
 

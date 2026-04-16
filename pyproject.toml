@@ -26,7 +26,7 @@ dependencies = [
 ]
 requires-python = ">=3.11"
 authors = [
-    {name = "Jim Gammell", email = "jgammell.purdue@gmail.com"}
+    {name = "anonymous", email = "anonymous@gmail.com"}
 ]
 description = "Methods for localizing side-channel leakage of cryptographic sensitive variables."
 readme = "README.md"

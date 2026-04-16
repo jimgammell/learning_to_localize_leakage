@@ -3,4 +3,5 @@
   - `train_supervised_model.py` -- entrypoint for training models
   - `attribute_trained_model.py` -- entrypoint for doing feature attribution on trained models
   - `evaluate_trained_model.py` -- entrypoint for computing attack + localization performance of trained models or arbitrary attribution maps
+  - `analysis_for_paper.py` -- entrypoint to generate figures in paper
 - `src/leakage_localization` directory contains code designed to be reused
